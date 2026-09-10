@@ -1,12 +1,15 @@
 /**
- * The screen. Clauses 32 to 36, 54, 58 and 59, and specification §10.
+ * The screen. Clauses 33, 35, 36, 54, 58 and 59, and specification §10.
  *
- * It renders what `GET /offers/{id}/approval` returns and nothing the
- * presenter could have drawn: text from data fields, in the hub's own type,
- * in the order the engine gave. A candidate is kept or returned by the
- * person's own tap, the set is confirmed once, and the confirmation is the
- * passkey's assertion over the set (§10.5), made by the browser's own
- * authenticator. This page never sees a private key.
+ * It renders what `GET /offers/{id}/approval` returns, and the presenter and
+ * giver of each waiting offer from `GET /offers`, and nothing the presenter
+ * could have drawn: text from data fields, in the hub's own type. The order
+ * of the candidates, of the alternatives and of the exclusions is the order
+ * the presenter's agent sent, which is the one thing on this screen a
+ * presenter chooses; it is a list of text either way. A candidate is kept or
+ * returned by the person's own tap, the set is confirmed once, and the
+ * confirmation is the passkey's assertion over the set (§10.5), made by the
+ * browser's own authenticator. This page never sees a private key.
  */
 import { challengeFor, type Decision } from "../shared/canonical.js";
 import { fromBase64, spkiToPem, toBase64, toBase64Url } from "../shared/encoding.js";
@@ -91,13 +94,15 @@ const yen = (n: number) => `¥${n.toLocaleString()}`;
 async function setup() {
   const input = el("input", { placeholder: "a name for this household", value: `household-${Math.random().toString(36).slice(2, 8)}` }) as HTMLInputElement;
   const button = el("button", { class: "primary" }, "Create a passkey") as HTMLButtonElement;
-  const note = el("p", { class: "muted" }, "The passkey stays on this device. Its public half is registered as the key that confirms your decisions (clause 35).");
+  // Not "stays on this device": a platform authenticator may sync the key
+  // through the person's own account (iCloud Keychain, Google Password
+  // Manager), and telling them otherwise on the screen would be false.
+  const note = el("p", { class: "muted" }, "The passkey is held by this browser's authenticator and never leaves it for us. Its public half is registered as the key that confirms your decisions (clause 35).");
   const status = el("p", {});
   button.onclick = async () => {
     button.disabled = true;
     const household = input.value.trim();
     if (!household) { status.textContent = "The household needs a name."; button.disabled = false; return; }
-    const mandate = `mandate-${household}`;
     try {
       const credential = (await navigator.credentials.create({
         publicKey: {
@@ -119,13 +124,18 @@ async function setup() {
       const response = credential.response as AuthenticatorAttestationResponse;
       const spki = response.getPublicKey();
       if (!spki) throw new Error("this browser does not hand out the public key of a new passkey");
+      const credentialId = toBase64Url(credential.rawId);
+      // The mandate's name is the credential's, so that nobody can register a
+      // key under it first. The engine keeps the first key registered for a
+      // name and refuses a later, different one (clause 22), which turns a
+      // guessable name into a name somebody else can take.
+      const mandate = `mandate-${credentialId}`;
       const registered = await api<{ error?: string; message?: string }>("POST", "/_identities", {
         key: mandate,
         public_key: spkiToPem(spki),
-        attested: false,
       });
       if (registered.status !== 201) throw new Error(registered.body.message ?? `registration answered ${registered.status}`);
-      const member: Member = { household, mandate, credential_id: toBase64Url(credential.rawId) };
+      const member: Member = { household, mandate, credential_id: credentialId };
       localStorage.setItem(STORAGE, JSON.stringify(member));
       await offers(member);
     } catch (e) {
@@ -170,7 +180,11 @@ async function offers(member: Member) {
   forget.onclick = () => { localStorage.removeItem(STORAGE); setup(); };
   show(
     el("h1", {}, "Atarasy"),
-    el("p", { class: "muted" }, `${member.household}. Decisions are confirmed with the passkey on this device.`),
+    el("p", { class: "muted" }, `${member.household}. Decisions are confirmed with this browser's passkey.`),
+    // An offer names the mandate it is made under, and how a presenter comes
+    // to know that reference is between the household and the presenter. So
+    // the person is shown it rather than left to find it.
+    el("p", { class: "muted" }, "Your mandate reference, which a shop needs before it can offer you anything: ", el("code", {}, member.mandate)),
     ...(cards.length ? cards : [el("p", {}, "Nothing is waiting for you.")]),
     ...problems.map((p) => failure(p)),
     el("p", {}, forget)
@@ -207,8 +221,8 @@ async function approval(member: Member, offerId: string) {
       el("div", { class: "row" },
         el("strong", { class: "grow" }, `${c.product} × ${c.quantity}`),
         el("span", {}, yen(c.unit_price * c.quantity))),
-      // Clauses 11 and 12. The maker and the carrier are on the screen the
-      // person signs from.
+      // Clause 12. The maker and the carrier are on the screen the person
+      // signs from.
       el("p", { class: "muted" }, `Made by ${c.merchant}. Carried by ${c.ships}.`),
       ...(c.is_exploration ? [el("p", { class: "exploration" }, "Something you have not been offered before (§5).")] : []),
       el("p", {}, el("span", { class: "muted" }, "Against taking it: "), c.argument_against),

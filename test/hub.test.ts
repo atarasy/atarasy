@@ -23,6 +23,25 @@ const HUB = `http://localhost:${HUB_PORT}`;
 const RP = "localhost";
 const PRESENTER = "reference-merchant";
 const HOUSEHOLD = `household-${Math.random().toString(36).slice(2, 8)}`;
+/**
+ * The name the screen derives from a credential id, in the shape the hub
+ * requires. A guessable one is a name somebody else can register first.
+ */
+const MANDATE = `mandate-${Buffer.from(crypto.getRandomValues(new Uint8Array(16))).toString("base64url")}`;
+
+/**
+ * A child process inherits PATH and what this test sets, and nothing of the
+ * operator's shell: a stray VALENCE_ROLES, VALENCE_DB or METER_BASE_URL would
+ * quietly change what is being measured.
+ */
+function childEnv(extra: Record<string, string>): Record<string, string> {
+  const base: Record<string, string> = {};
+  for (const key of ["PATH", "HOME", "TMPDIR", "LANG"]) {
+    const value = process.env[key];
+    if (value) base[key] = value;
+  }
+  return { ...base, ...extra };
+}
 
 if (!existsSync(join(ENGINE_DIR, "src", "server.ts"))) {
   throw new Error(`no engine at ${ENGINE_DIR}. Set VALENCE_ENGINE_DIR to a checkout of atarasy/valence's engine/.`);
@@ -69,7 +88,7 @@ let candidateIds: string[] = [];
 beforeAll(async () => {
   engineProc = Bun.spawn(["bun", "src/server.ts"], {
     cwd: ENGINE_DIR,
-    env: { ...process.env, PORT: String(ENGINE_PORT), VALENCE_EXPLORATION_RATE: "0.2", VALENCE_RECOVERY_GRACE_DAYS: "0", VALENCE_RP_ID: RP },
+    env: childEnv({ PORT: String(ENGINE_PORT), VALENCE_EXPLORATION_RATE: "0.2", VALENCE_RECOVERY_GRACE_DAYS: "0", VALENCE_RP_ID: RP }),
     stdout: "ignore",
     stderr: "inherit",
   });
@@ -98,7 +117,7 @@ beforeAll(async () => {
 
   hubProc = Bun.spawn(["bun", "src/server.ts"], {
     cwd: join(import.meta.dir, ".."),
-    env: { ...process.env, PORT: String(HUB_PORT), VALENCE_ENGINE_URL: ENGINE, VALENCE_PRESENTERS: PRESENTER },
+    env: childEnv({ PORT: String(HUB_PORT), VALENCE_ENGINE_URL: ENGINE, VALENCE_PRESENTERS: PRESENTER }),
     stdout: "ignore",
     stderr: "inherit",
   });
@@ -127,7 +146,7 @@ describe("the hub in front of an engine", () => {
     // key arrives as SPKI DER, and it is registered under the mandate's name.
     const pair = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
     const der = pair.publicKey.export({ type: "spki", format: "der" });
-    const registered = await post(HUB, "/api/_identities", { key: `mandate-${HOUSEHOLD}`, public_key: spkiToPem(der), attested: false });
+    const registered = await post(HUB, "/api/_identities", { key: MANDATE, public_key: spkiToPem(der) });
     expect(registered.status).toBe(201);
     memberKey = pair;
   });
@@ -139,7 +158,7 @@ describe("the hub in front of an engine", () => {
       purpose: "replenish",
       config_version: "cfg-hub-test",
       expires_at: Date.now() + 3_600_000,
-      mandate: `mandate-${HOUSEHOLD}`,
+      mandate: MANDATE,
       price_band: null,
       giver: null,
       candidates: [
@@ -208,10 +227,69 @@ describe("the hub in front of an engine", () => {
     expect(kept?.valence).toBe("kept");
   });
 
+  test("it carries the screen's calls and refuses the rest of the engine", async () => {
+    // A hub that forwarded whatever it was handed would put the engine's whole
+    // surface behind a page anyone can open. The reference engine
+    // authenticates nobody by design, so the narrowing is the hub's.
+    const refused: [string, string][] = [
+      ["GET", `/api/households/${HOUSEHOLD}/export`],
+      ["POST", "/api/_presenter/configs"],
+      ["POST", "/api/offers"],
+      ["POST", `/api/offers/${offerId}/settle`],
+      ["DELETE", `/api/offers/${offerId}/decisions`],
+      ["GET", `/api/offers/${offerId}`],
+      ["GET", "/api/registry"],
+    ];
+    for (const [method, path] of refused) {
+      const r = await fetch(`${HUB}${path}`, { method, headers: { "content-type": "application/json" }, body: method === "GET" ? undefined : "{}" });
+      expect([method, path, r.status]).toEqual([method, path, 404]);
+      expect([method, path, ((await r.json()) as { error: string }).error]).toEqual([method, path, "not_carried"]);
+    }
+  });
+
+  test("a key can only be registered under a mandate name this hub issues", async () => {
+    // Clause 2. `attested` is an identity root speaking, not a browser, and a
+    // presenter's name is not a member's to take. Both were reachable from any
+    // browser until 2026-09-11.
+    const pair = generateKeyPairSync("ed25519");
+    const pem = pair.publicKey.export({ type: "spki", format: "pem" }).toString();
+    const squat = await post(HUB, "/api/_identities", { key: "some-other-presenter", public_key: pem });
+    expect(squat.status).toBe(400);
+    expect(squat.body.error).toBe("not_this_name");
+    // Registered all the same, and never as endorsed: the hub drops the flag.
+    // What makes that observable is §5.2, where an offer says whether an
+    // identity root endorsed the key of the presenter it names. So the key is
+    // asked to be a presenter, and the offer answers.
+    const name = `mandate-${Buffer.from(crypto.getRandomValues(new Uint8Array(16))).toString("base64url")}`;
+    expect((await post(HUB, "/api/_identities", { key: name, public_key: pem, attested: true })).status).toBe(201);
+    const config = {
+      version: `cfg-${name}`,
+      presenter: name,
+      products: { "tea-a": { merchant: "maker-a", ships: "carrier-a", price: 1200 } },
+    };
+    expect((await post(ENGINE, "/_presenter/configs", {
+      ...config,
+      signature: sign(null, canonicalConfig(config), pair.privateKey).toString("base64"),
+    })).status).toBe(201);
+    const offer = await post(ENGINE, "/offers", {
+      binding: "digital",
+      household: `${HOUSEHOLD}-attested`,
+      purpose: "replenish",
+      config_version: config.version,
+      expires_at: Date.now() + 3_600_000,
+      mandate: name,
+      price_band: null,
+      giver: null,
+      candidates: [{ product: "tea-a", quantity: 1, predicted_conversion: 0.5, is_exploration: true, given_by: null }],
+    });
+    expect(offer.status).toBe(201);
+    expect(offer.body.presenter_attested).toBe(false);
+  });
+
   test("an unreachable engine is reported as such, not as an empty answer", async () => {
     const dead = Bun.spawn(["bun", "src/server.ts"], {
       cwd: join(import.meta.dir, ".."),
-      env: { ...process.env, PORT: String(HUB_PORT + 1), VALENCE_ENGINE_URL: "http://localhost:1", VALENCE_PRESENTERS: PRESENTER },
+      env: childEnv({ PORT: String(HUB_PORT + 1), VALENCE_ENGINE_URL: "http://localhost:1", VALENCE_PRESENTERS: PRESENTER }),
       stdout: "ignore",
       stderr: "inherit",
     });

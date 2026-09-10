@@ -10,6 +10,14 @@
  * The calls are proxied rather than made across origins because the engine
  * sets no CORS headers, and should not: which origins may call an engine is
  * a deployment's decision and not the specification's.
+ *
+ * **The proxy carries the four calls the screen makes and refuses everything
+ * else.** A hub that forwarded whatever it was handed would put the engine's
+ * whole surface behind a page anyone can open: the catalogue routes, another
+ * household's export (clauses 43, 49), a settlement, a withdrawal of somebody
+ * else's decided set. The reference engine authenticates nobody by design, so
+ * the narrowing has to be here. Found by an adversarial pass on the day this
+ * was written, before it was pointed at anything but a scratch engine.
  */
 import { join } from "node:path";
 
@@ -50,6 +58,26 @@ const page = await Bun.file(join(here, "client", "index.html")).text();
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
+/**
+ * §10.5. The name a member's key is registered under. It is derived from the
+ * credential id, so it is unguessable: the engine keeps the first key
+ * registered for a name and refuses a later, different one (clause 22), so a
+ * guessable name is a name somebody else can take first, and the person whose
+ * offers it confirms could then never register their own. Measured as a real
+ * path on 2026-09-11, when the name was `mandate-<household>`.
+ */
+const MANDATE_NAME = /^mandate-[A-Za-z0-9_-]{16,}$/;
+
+/** The calls the screen makes. Anything else is not this hub's to carry. */
+function carries(method: string, path: string): boolean {
+  const parts = path.split("/").filter(Boolean);
+  if (method === "POST" && parts.length === 1 && parts[0] === "_identities") return true;
+  if (method === "GET" && parts.length === 1 && parts[0] === "offers") return true;
+  if (method === "GET" && parts.length === 3 && parts[0] === "offers" && parts[2] === "approval") return true;
+  if (method === "POST" && parts.length === 3 && parts[0] === "offers" && parts[2] === "decisions") return true;
+  return false;
+}
+
 export async function handle(request: Request): Promise<Response> {
   const url = new URL(request.url);
   if (url.pathname === "/" || url.pathname === "/index.html") {
@@ -65,11 +93,37 @@ export async function handle(request: Request): Promise<Response> {
     return json({ presenters });
   }
   if (url.pathname.startsWith("/api/")) {
-    const target = `${engine}${url.pathname.slice(4)}${url.search}`;
+    const path = url.pathname.slice(4);
+    if (!carries(request.method, path)) {
+      return json({ error: "not_carried", message: "this hub carries the screen's own calls and no others" }, 404);
+    }
+    let body: ArrayBuffer | string | undefined;
+    if (request.method !== "GET" && request.method !== "HEAD") {
+      body = await request.arrayBuffer();
+    }
+    // A key is registered under a name this hub issues, and never as one an
+    // identity root endorsed: `attested` is clause 2's root speaking, not a
+    // browser's. Without this the page could take a presenter's name.
+    if (path === "/_identities") {
+      let raw: { key?: unknown; public_key?: unknown };
+      try {
+        raw = JSON.parse(new TextDecoder().decode(body as ArrayBuffer)) as typeof raw;
+      } catch {
+        return json({ error: "malformed", message: "an identity is a JSON object" }, 400);
+      }
+      if (typeof raw.key !== "string" || !MANDATE_NAME.test(raw.key)) {
+        return json({ error: "not_this_name", message: "this hub registers a key under a mandate name it issued" }, 400);
+      }
+      if (typeof raw.public_key !== "string") {
+        return json({ error: "malformed", message: "public_key must be a PEM" }, 400);
+      }
+      body = JSON.stringify({ key: raw.key, public_key: raw.public_key, attested: false });
+    }
+    const target = `${engine}${path}${url.search}`;
     const headers: Record<string, string> = { "user-agent": "atarasy/0.0.0" };
     const contentType = request.headers.get("content-type");
     if (contentType) headers["content-type"] = contentType;
-    const body = request.method === "GET" || request.method === "HEAD" ? undefined : await request.arrayBuffer();
+    if (typeof body === "string") headers["content-type"] = "application/json";
     let upstream: Response;
     try {
       upstream = await fetch(target, { method: request.method, headers, body });

@@ -30,19 +30,21 @@ It has its own repository so that the hub is not filed under the specification's
 - **The hub holds no private key and signs nothing** (clause 35). A confirmation is the browser authenticator's assertion, and the challenge is the decided set (§10.5). Do not add a server-side signing path, however convenient a test would find it.
 - **The canonical form in `src/shared/canonical.ts` must equal the engine's byte for byte**, and it must not import the engine's. A hub that agreed by importing would agree by accident, and a second implementation would have nothing to check against. `test/canonical.test.ts` pins the shape.
 - **Returned is a decision, not silence.** The screen sends every candidate with a valence. Clause 8 puts what a person declined in their own node.
-- **Add a probe with a surface.** The valence engine's recurring failure is a field or a route without a test that fails when it breaks. The same rule here: `test/hub.test.ts` exercises the path the screen takes, and a new screen action gets a step there in the same change.
+- **Add a probe with a surface.** The valence engine's recurring failure is a field or a route without a test that fails when it breaks. The same rule here: `test/hub.test.ts` exercises the path the screen takes, and a new screen action gets a step there in the same change. **Measured, not asserted**: on 2026-09-11 the two probes for the proxy's narrowing were run against a copy of this server with the narrowing removed, and both failed.
+- **The proxy carries the screen's calls and nothing else** (`carries` in `src/server.ts`). A new screen action adds its route there, and a route added there is a route any browser that can open the page can reach on the engine. The engine authenticates nobody by design, so this list is the whole of the boundary.
+- **The mandate's name is the credential's.** The engine keeps the first key registered for a name and refuses a later, different one, so a guessable name is a name somebody else can take first: `mandate-<household>` let anyone hold the key that confirms a named household's offers, and that household could then never register its own. Do not derive the name from anything a stranger can guess.
 
 ## Running
 
 ```
-VALENCE_ENGINE_URL=http://localhost:8788 VALENCE_PRESENTERS=reference-merchant bun run src/server.ts
+VALENCE_ENGINE_URL=http://localhost:8787 VALENCE_PRESENTERS=reference-merchant bun run src/server.ts
 ```
 
-The engine needs `VALENCE_RP_ID` set to the hostname the page is opened at, because that is what a passkey signs for (§14b). `bun test` starts an engine from `../valence/engine` (or `VALENCE_ENGINE_DIR`) on port 9700 and the hub on 9701; both are chosen not to collide with the conformance harness's 8788, 8888, 8988 and 9088, so the test can run while a sweep is running there. **It runs the engine from that checkout's working tree**, so a mutation left applied there is what this test would measure against.
+The engine needs `VALENCE_RP_ID` set to the hostname the page is opened at, because that is what a passkey signs for, and it refuses to start without one (§14b). `bun test` starts an engine from `../valence/engine` (or `VALENCE_ENGINE_DIR`) on port 9700 and the hub on 9701; both are chosen not to collide with the conformance harness's 8788, 8888, 8988 and 9088, so the test can run while a sweep is running there. **It runs the engine from that checkout's working tree**, so a mutation left applied there is what this test would measure against.
 
 ## What is not built
 
-- **Telling the hub an offer was presented.** The specification's §13.2 sends the hub the decided copy and not the presented one, so this hub asks each presenter it is configured with. Recorded as an open point in `SPEC.md`; a change there comes first.
+- **Telling the hub an offer was presented.** The specification's §13.2 sends the hub the decided copy and not the presented one, so this hub asks each presenter it is configured with. It is an open question in `SPEC.md` §15; a change there comes first.
 - **Gifts onward.** `kept_as: "gift"` needs a lineage edge, and the screen keeps for the household only (`self`).
 - **The second signature a mandate's categories need** (§16.4) and the cooling window (§16.5): the engine refuses correctly and the screen shows the refusal, and there is no co-signer flow.
 - **Anything of the physical binding.** This is the digital binding's screen.
