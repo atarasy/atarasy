@@ -58,6 +58,9 @@ export async function handle(request: Request): Promise<Response> {
   if (url.pathname === "/app.js") {
     return new Response(script, { headers: { "content-type": "text/javascript; charset=utf-8" } });
   }
+  if (url.pathname === "/favicon.ico") {
+    return new Response(null, { status: 204 });
+  }
   if (url.pathname === "/config") {
     return json({ presenters });
   }

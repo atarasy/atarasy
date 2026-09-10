@@ -46,6 +46,7 @@ bun test            # needs the engine: a checkout of atarasy/valence beside thi
 
 - **It does not draft.** Candidates, alternatives and the argument against come from the agent that composed the offer, through the engine. The hub refuses to render a screen that does not carry them, and this page shows that refusal rather than filling the gap.
 - **It does not know about an offer until a presenter it asks has presented one.** Nothing in the specification tells a hub that an offer was presented; the decided copy arrives (§13.2), the presented one does not. This is an open point in the specification, recorded there, and the reference asks its presenters rather than pretending to be told.
+- **It does not tell a presenter the mandate's name.** An offer names its `mandate`, and the key this hub registers is under `mandate-<household>`; how a presenter learns that reference is between the household and the presenter, outside the specification. The test and the demo seed use the same convention.
 - **It holds nothing of the member's but a name and a credential id**, in the browser's local storage. The node is the engine's hub side (§13.2); this is the screen in front of it.
 
 ## Licence
