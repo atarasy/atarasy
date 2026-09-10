@@ -14,7 +14,20 @@
 import { challengeFor, type Decision } from "../shared/canonical.js";
 import { fromBase64, spkiToPem, toBase64, toBase64Url } from "../shared/encoding.js";
 
-type Member = { household: string; mandate: string; credential_id: string };
+type Member = {
+  /** What the person typed. This browser's own label, and nobody else's business. */
+  label: string;
+  /**
+   * §16.1. The identifier a shop is given, derived from the credential like
+   * the mandate reference and for the same reason: a mandate record is signed
+   * by the key registered under the household's name, so a guessable name is
+   * a name a stranger can register first, and the household's protections
+   * would then be theirs to write.
+   */
+  household: string;
+  mandate: string;
+  credential_id: string;
+};
 
 type Approval = {
   offer: string;
@@ -101,14 +114,14 @@ async function setup() {
   const status = el("p", {});
   button.onclick = async () => {
     button.disabled = true;
-    const household = input.value.trim();
-    if (!household) { status.textContent = "The household needs a name."; button.disabled = false; return; }
+    const label = input.value.trim();
+    if (!label) { status.textContent = "The household needs a name."; button.disabled = false; return; }
     try {
       const credential = (await navigator.credentials.create({
         publicKey: {
           challenge: crypto.getRandomValues(new Uint8Array(32)),
           rp: { name: "Atarasy", id: location.hostname },
-          user: { id: new TextEncoder().encode(household), name: household, displayName: household },
+          user: { id: new TextEncoder().encode(label), name: label, displayName: label },
           // ES256 first, because that is what most phones and laptops carry;
           // EdDSA and RS256 after it. The engine checks by the registered key's type.
           pubKeyCredParams: [
@@ -125,17 +138,20 @@ async function setup() {
       const spki = response.getPublicKey();
       if (!spki) throw new Error("this browser does not hand out the public key of a new passkey");
       const credentialId = toBase64Url(credential.rawId);
-      // The mandate's name is the credential's, so that nobody can register a
-      // key under it first. The engine keeps the first key registered for a
+      // Both names are the credential's, so that nobody can register a key
+      // under either first. The engine keeps the first key registered for a
       // name and refuses a later, different one (clause 22), which turns a
-      // guessable name into a name somebody else can take.
+      // guessable name into a name somebody else can take: the mandate
+      // reference confirms this household's decisions (§10.5) and the
+      // household's own name signs its protections (§16.1).
       const mandate = `mandate-${credentialId}`;
-      const registered = await api<{ error?: string; message?: string }>("POST", "/_identities", {
-        key: mandate,
-        public_key: spkiToPem(spki),
-      });
-      if (registered.status !== 201) throw new Error(registered.body.message ?? `registration answered ${registered.status}`);
-      const member: Member = { household, mandate, credential_id: credentialId };
+      const household = `household-${credentialId}`;
+      const pem = spkiToPem(spki);
+      for (const key of [mandate, household]) {
+        const registered = await api<{ error?: string; message?: string }>("POST", "/_identities", { key, public_key: pem });
+        if (registered.status !== 201) throw new Error(registered.body.message ?? `registering ${key} answered ${registered.status}`);
+      }
+      const member: Member = { label, household, mandate, credential_id: credentialId };
       localStorage.setItem(STORAGE, JSON.stringify(member));
       await offers(member);
     } catch (e) {
@@ -180,11 +196,15 @@ async function offers(member: Member) {
   forget.onclick = () => { localStorage.removeItem(STORAGE); setup(); };
   show(
     el("h1", {}, "Atarasy"),
-    el("p", { class: "muted" }, `${member.household}. Decisions are confirmed with this browser's passkey.`),
-    // An offer names the mandate it is made under, and how a presenter comes
-    // to know that reference is between the household and the presenter. So
-    // the person is shown it rather than left to find it.
-    el("p", { class: "muted" }, "Your mandate reference, which a shop needs before it can offer you anything: ", el("code", {}, member.mandate)),
+    el("p", { class: "muted" }, `${member.label}. Decisions are confirmed with this browser's passkey.`),
+    // An offer names the household it is placed with and the mandate it is
+    // made under, and how a presenter comes to know either is between the
+    // household and the presenter. So the person is shown both rather than
+    // left to find them. Neither is a secret and neither is guessable.
+    el("p", { class: "muted" }, "What a shop needs before it can offer you anything."),
+    el("ul", {},
+      el("li", {}, "household ", el("code", {}, member.household)),
+      el("li", {}, "mandate ", el("code", {}, member.mandate))),
     ...(cards.length ? cards : [el("p", {}, "Nothing is waiting for you.")]),
     ...problems.map((p) => failure(p)),
     el("p", {}, forget)

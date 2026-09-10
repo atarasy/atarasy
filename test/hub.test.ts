@@ -22,12 +22,14 @@ const ENGINE = `http://localhost:${ENGINE_PORT}`;
 const HUB = `http://localhost:${HUB_PORT}`;
 const RP = "localhost";
 const PRESENTER = "reference-merchant";
-const HOUSEHOLD = `household-${Math.random().toString(36).slice(2, 8)}`;
 /**
- * The name the screen derives from a credential id, in the shape the hub
- * requires. A guessable one is a name somebody else can register first.
+ * The two names the screen derives from a credential id, in the shape the hub
+ * requires. A guessable one is a name somebody else can register first, and
+ * the household's own name is the one that signs its protections (§16.1).
  */
-const MANDATE = `mandate-${Buffer.from(crypto.getRandomValues(new Uint8Array(16))).toString("base64url")}`;
+const CREDENTIAL = Buffer.from(crypto.getRandomValues(new Uint8Array(16))).toString("base64url");
+const HOUSEHOLD = `household-${CREDENTIAL}`;
+const MANDATE = `mandate-${CREDENTIAL}`;
 
 /**
  * A child process inherits PATH and what this test sets, and nothing of the
@@ -146,8 +148,10 @@ describe("the hub in front of an engine", () => {
     // key arrives as SPKI DER, and it is registered under the mandate's name.
     const pair = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
     const der = pair.publicKey.export({ type: "spki", format: "der" });
-    const registered = await post(HUB, "/api/_identities", { key: MANDATE, public_key: spkiToPem(der) });
-    expect(registered.status).toBe(201);
+    for (const key of [MANDATE, HOUSEHOLD]) {
+      const registered = await post(HUB, "/api/_identities", { key, public_key: spkiToPem(der) });
+      expect([key, registered.status]).toEqual([key, 201]);
+    }
     memberKey = pair;
   });
 
@@ -253,9 +257,11 @@ describe("the hub in front of an engine", () => {
     // browser until 2026-09-11.
     const pair = generateKeyPairSync("ed25519");
     const pem = pair.publicKey.export({ type: "spki", format: "pem" }).toString();
-    const squat = await post(HUB, "/api/_identities", { key: "some-other-presenter", public_key: pem });
-    expect(squat.status).toBe(400);
-    expect(squat.body.error).toBe("not_this_name");
+    for (const key of ["some-other-presenter", "household-short", "mandate-short"]) {
+      const squat = await post(HUB, "/api/_identities", { key, public_key: pem });
+      expect([key, squat.status]).toEqual([key, 400]);
+      expect([key, squat.body.error]).toEqual([key, "not_this_name"]);
+    }
     // Registered all the same, and never as endorsed: the hub drops the flag.
     // What makes that observable is §5.2, where an offer says whether an
     // identity root endorsed the key of the presenter it names. So the key is
@@ -284,6 +290,46 @@ describe("the hub in front of an engine", () => {
     });
     expect(offer.status).toBe(201);
     expect(offer.body.presenter_attested).toBe(false);
+  });
+
+  test("a member can record the protections a mandate carries (§16)", async () => {
+    // A mandate record is signed by the key registered under the household's
+    // name, not the mandate's. A second adversarial round found that a hub
+    // deriving only the mandate reference left every member unable to record
+    // any protection at all: no ceiling, no co-signer, no cooling window, and
+    // so no way to take a decided set back. Worse, the household's plain name
+    // was still free, so the first stranger to register it owned that
+    // member's protections. Both names are the credential's now.
+    const mandate = {
+      id: MANDATE,
+      household: HOUSEHOLD,
+      ceiling_out_of_network: 100000,
+      ceiling_daily: null,
+      co_sign_categories: [] as string[],
+      cooling_seconds: 3600,
+      co_signers: [] as string[],
+      lapses_at: Date.now() + 365 * 86_400_000,
+      version: 1,
+    };
+    const bytes = Buffer.from(
+      [
+        mandate.id,
+        mandate.household,
+        String(mandate.ceiling_out_of_network),
+        mandate.ceiling_daily === null ? "" : String(mandate.ceiling_daily),
+        mandate.co_sign_categories.join(","),
+        mandate.cooling_seconds === null ? "" : String(mandate.cooling_seconds),
+        mandate.co_signers.join(","),
+        String(mandate.lapses_at),
+        String(mandate.version),
+      ].join("\n"),
+      "utf8"
+    );
+    const recorded = await post(ENGINE, "/_node/mandates", {
+      ...mandate,
+      signatures: { [HOUSEHOLD]: sign("sha256", bytes, memberKey!.privateKey).toString("base64") },
+    });
+    expect(recorded.status).toBe(201);
   });
 
   test("an unreachable engine is reported as such, not as an empty answer", async () => {

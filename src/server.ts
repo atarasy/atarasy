@@ -59,14 +59,26 @@ const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
 /**
- * §10.5. The name a member's key is registered under. It is derived from the
- * credential id, so it is unguessable: the engine keeps the first key
- * registered for a name and refuses a later, different one (clause 22), so a
- * guessable name is a name somebody else can take first, and the person whose
- * offers it confirms could then never register their own. Measured as a real
- * path on 2026-09-11, when the name was `mandate-<household>`.
+ * §10.5, §16. The two names a member's key is registered under, both derived
+ * from the credential id and so unguessable.
+ *
+ * The engine keeps the first key registered for a name and refuses a later,
+ * different one (clause 22), so a guessable name is a name somebody else can
+ * take first. The mandate reference was `mandate-<household>` for part of
+ * 2026-09-11, which let a stranger hold the key that confirms a named
+ * household's offers.
+ *
+ * **The household's own name has to be derived too, and that took a second
+ * adversarial round to see.** A mandate record is signed by the key registered
+ * under the household's name (§16.1), not under the mandate's, so a hub that
+ * derived only the mandate reference left its members unable to record any
+ * protection at all: no ceiling, no co-signer, no cooling window and therefore
+ * no way to take a decided set back. And whoever registered the household's
+ * plain name first owned those protections instead. So what the person types
+ * is a label this browser keeps, and the identifier a shop is given is the
+ * credential's.
  */
-const MANDATE_NAME = /^mandate-[A-Za-z0-9_-]{16,}$/;
+const MEMBER_NAME = /^(mandate|household)-[A-Za-z0-9_-]{16,}$/;
 
 /** The calls the screen makes. Anything else is not this hub's to carry. */
 function carries(method: string, path: string): boolean {
@@ -111,8 +123,8 @@ export async function handle(request: Request): Promise<Response> {
       } catch {
         return json({ error: "malformed", message: "an identity is a JSON object" }, 400);
       }
-      if (typeof raw.key !== "string" || !MANDATE_NAME.test(raw.key)) {
-        return json({ error: "not_this_name", message: "this hub registers a key under a mandate name it issued" }, 400);
+      if (typeof raw.key !== "string" || !MEMBER_NAME.test(raw.key)) {
+        return json({ error: "not_this_name", message: "this hub registers a key under a name it issued" }, 400);
       }
       if (typeof raw.public_key !== "string") {
         return json({ error: "malformed", message: "public_key must be a PEM" }, 400);
