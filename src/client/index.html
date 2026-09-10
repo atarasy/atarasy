@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Atarasy</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --ink: #1a1a1a; --paper: #fbfaf7; --line: #d8d4cc; --muted: #6b665e; --mark: #2b5d3a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --ink: #ece9e2; --paper: #17171a; --line: #3a3a40; --muted: #a29d94; --mark: #8fc9a0; }
+  }
+  html { background: var(--paper); color: var(--ink); }
+  body { margin: 0; padding: 1.5rem 1rem 4rem; font: 16px/1.5 -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif; max-width: 42rem; margin-inline: auto; }
+  h1 { font-size: 1.25rem; font-weight: 600; margin: 0 0 1rem; }
+  h2 { font-size: 1rem; font-weight: 600; margin: 1.5rem 0 .5rem; }
+  p { margin: .5rem 0; }
+  .muted { color: var(--muted); }
+  .card { border: 1px solid var(--line); border-radius: 6px; padding: 1rem; margin: .75rem 0; }
+  .row { display: flex; gap: .75rem; align-items: baseline; flex-wrap: wrap; }
+  .grow { flex: 1 1 auto; }
+  button { font: inherit; padding: .5rem .9rem; border: 1px solid var(--ink); border-radius: 6px; background: transparent; color: var(--ink); cursor: pointer; }
+  button.primary { background: var(--ink); color: var(--paper); }
+  button[disabled] { opacity: .45; cursor: default; }
+  button.chosen { background: var(--mark); border-color: var(--mark); color: #fff; }
+  input { font: inherit; padding: .4rem .6rem; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: var(--ink); }
+  ul { margin: .25rem 0 .5rem; padding-left: 1.2rem; }
+  .error { border-color: #b3362a; }
+  .exploration { font-size: .85rem; color: var(--muted); }
+  code { font-size: .9em; }
+</style>
+</head>
+<body>
+<main id="app"><p class="muted">Loading.</p></main>
+<script type="module" src="/app.js"></script>
+</body>
+</html>
