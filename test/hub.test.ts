@@ -13,6 +13,7 @@ import { createHash, generateKeyPairSync, sign, type KeyPairKeyObjectResult } fr
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { canonicalDecisions, challengeFor, type Decision } from "../src/shared/canonical.js";
+import { canonicalMandate } from "../src/shared/mandate.js";
 import { spkiToPem, toBase64 } from "../src/shared/encoding.js";
 
 const ENGINE_DIR = resolve(process.env.VALENCE_ENGINE_DIR ?? join(import.meta.dir, "..", "..", "valence", "engine"));
@@ -86,6 +87,56 @@ function canonicalConfig(c: { version: string; presenter: string; products: Reco
 
 let offerId = "";
 let candidateIds: string[] = [];
+
+/**
+ * What the browser's authenticator produces, in the shape §10.5 and §16.1 both
+ * take: it signs its own data and the SHA-256 of the client's, and the client
+ * data carries the challenge, which is the canonical bytes' hash.
+ */
+function assertOver(canonical: string) {
+  const challenge = createHash("sha256").update(canonical, "utf8").digest("base64url");
+  const authenticatorData = Buffer.concat([
+    createHash("sha256").update(RP).digest(),
+    Buffer.from([0x05]),
+    Buffer.from([0, 0, 0, 1]),
+  ]);
+  const clientDataJson = Buffer.from(
+    JSON.stringify({ type: "webauthn.get", challenge, origin: `http://${RP}:${HUB_PORT}` }),
+    "utf8"
+  );
+  const signed = Buffer.concat([authenticatorData, createHash("sha256").update(clientDataJson).digest()]);
+  return {
+    authenticator_data: toBase64(authenticatorData),
+    client_data_json: toBase64(clientDataJson),
+    signature: toBase64(sign("sha256", signed, memberKey!.privateKey)),
+  };
+}
+
+/** An offer this household can decide on: created, deliberated, presented. */
+async function placed(): Promise<{ id: string; candidates: { id: string }[] }> {
+  const created = await post(ENGINE, "/offers", {
+    binding: "digital",
+    household: HOUSEHOLD,
+    purpose: "replenish",
+    config_version: "cfg-hub-test",
+    expires_at: Date.now() + 3_600_000,
+    mandate: MANDATE,
+    price_band: null,
+    giver: null,
+    candidates: [{ product: "tea-b", quantity: 1, predicted_conversion: 0.5, is_exploration: true, given_by: null }],
+  });
+  expect(created.status).toBe(201);
+  const offer = created.body as unknown as { id: string; candidates: { id: string }[] };
+  const per: Record<string, unknown> = {};
+  for (const c of offer.candidates) per[c.id] = { alternatives: ["a smaller tin"], argument_against: "you have some already" };
+  expect((await post(ENGINE, `/offers/${offer.id}/deliberation`, {
+    per_candidate: per,
+    excluded: [],
+    mandate: { kind: "standing", scope: "tea", lapses_at: Date.now() + 90 * 86_400_000 },
+  })).status).toBe(201);
+  expect((await post(ENGINE, `/offers/${offer.id}/present`, {})).status).toBe(200);
+  return offer;
+}
 
 beforeAll(async () => {
   engineProc = Bun.spawn(["bun", "src/server.ts"], {
@@ -240,7 +291,6 @@ describe("the hub in front of an engine", () => {
       ["POST", "/api/_presenter/configs"],
       ["POST", "/api/offers"],
       ["POST", `/api/offers/${offerId}/settle`],
-      ["DELETE", `/api/offers/${offerId}/decisions`],
       ["GET", `/api/offers/${offerId}`],
       ["GET", "/api/registry"],
     ];
@@ -292,14 +342,13 @@ describe("the hub in front of an engine", () => {
     expect(offer.body.presenter_attested).toBe(false);
   });
 
-  test("a member can record the protections a mandate carries (§16)", async () => {
-    // A mandate record is signed by the key registered under the household's
-    // name, not the mandate's. A second adversarial round found that a hub
-    // deriving only the mandate reference left every member unable to record
-    // any protection at all: no ceiling, no co-signer, no cooling window, and
-    // so no way to take a decided set back. Worse, the household's plain name
-    // was still free, so the first stranger to register it owned that
-    // member's protections. Both names are the credential's now.
+  test("a passkey records a cooling window, and takes a decided set back (§16)", async () => {
+    // What the screen does, in the order it does it. The protections are the
+    // half of §16 a member of this hub could not reach at all until the
+    // specification took an assertion for a mandate change: an authenticator
+    // signs its own data and the hash of the client's, never bytes a caller
+    // hands it, so a person holding a passkey could record no cooling window
+    // and therefore had nothing to take a decided set back into.
     const mandate = {
       id: MANDATE,
       household: HOUSEHOLD,
@@ -311,25 +360,30 @@ describe("the hub in front of an engine", () => {
       lapses_at: Date.now() + 365 * 86_400_000,
       version: 1,
     };
-    const bytes = Buffer.from(
-      [
-        mandate.id,
-        mandate.household,
-        String(mandate.ceiling_out_of_network),
-        mandate.ceiling_daily === null ? "" : String(mandate.ceiling_daily),
-        mandate.co_sign_categories.join(","),
-        mandate.cooling_seconds === null ? "" : String(mandate.cooling_seconds),
-        mandate.co_signers.join(","),
-        String(mandate.lapses_at),
-        String(mandate.version),
-      ].join("\n"),
-      "utf8"
-    );
-    const recorded = await post(ENGINE, "/_node/mandates", {
+    const recorded = await post(HUB, "/api/_node/mandates", {
       ...mandate,
-      signatures: { [HOUSEHOLD]: sign("sha256", bytes, memberKey!.privateKey).toString("base64") },
+      assertions: { [HOUSEHOLD]: assertOver(canonicalMandate(mandate)) },
     });
     expect(recorded.status).toBe(201);
+    const read = await (await fetch(`${HUB}/api/_node/mandates/${encodeURIComponent(MANDATE)}`)).json();
+    expect((read as { cooling_seconds: number }).cooling_seconds).toBe(3600);
+
+    const offer = await placed();
+    const decisions = offer.candidates.map((c) => ({ candidate: c.id, valence: "kept" as const, kept_as: "self" as const }));
+    const decided = await post(HUB, `/api/offers/${offer.id}/decisions`, {
+      decisions,
+      assertion: assertOver(canonicalDecisions(offer.id, decisions)),
+    });
+    expect(decided.status).toBe(200);
+
+    // §16.5. It waits, and while it waits the person can take it back.
+    const early = await post(ENGINE, `/offers/${offer.id}/settle`, {});
+    expect([early.status, early.body.error]).toEqual([422, "mandate_cooling"]);
+    const taken = await fetch(`${HUB}/api/offers/${offer.id}/decisions`, { method: "DELETE" });
+    expect(taken.status).toBe(200);
+    const back = (await (await fetch(`${ENGINE}/offers/${offer.id}`)).json()) as { state: string; candidates: { valence: string }[] };
+    expect(back.state).toBe("presented");
+    expect(back.candidates.every((c) => c.valence === "offered")).toBe(true);
   });
 
   test("an unreachable engine is reported as such, not as an empty answer", async () => {

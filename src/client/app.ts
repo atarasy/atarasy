@@ -12,6 +12,7 @@
  * browser's own authenticator. This page never sees a private key.
  */
 import { challengeFor, type Decision } from "../shared/canonical.js";
+import { canonicalMandate, type Mandate } from "../shared/mandate.js";
 import { fromBase64, spkiToPem, toBase64, toBase64Url } from "../shared/encoding.js";
 
 type Member = {
@@ -171,6 +172,7 @@ async function setup() {
 async function offers(member: Member) {
   const config = await (await fetch("/config")).json() as { presenters: string[] };
   const waiting: OfferSummary[] = [];
+  const decided: OfferSummary[] = [];
   const problems: string[] = [];
   // Clause 8. Each presenter answers for its own offers to this household and
   // never for another's. The union is made here, on the person's side.
@@ -180,7 +182,10 @@ async function offers(member: Member) {
       `/offers?household=${encodeURIComponent(member.household)}&presenter=${encodeURIComponent(presenter)}`
     );
     if (list.status !== 200) { problems.push(`${presenter}: ${list.body.message ?? list.status}`); continue; }
-    for (const o of list.body.offers ?? []) if (o.state === "presented") waiting.push(o);
+    for (const o of list.body.offers ?? []) {
+      if (o.state === "presented") waiting.push(o);
+      if (o.state === "decided") decided.push(o);
+    }
   }
   const cards = waiting.map((o) => {
     const open = el("button", { class: "primary" }, "Open") as HTMLButtonElement;
@@ -192,6 +197,32 @@ async function offers(member: Member) {
       el("p", { class: "muted" }, `Waiting until ${when(o.expires_at)}. Nothing is ordered if you do nothing.`)
     );
   });
+
+  // §16.5. A decided set waits out its cooling window before it can settle,
+  // and the person can take it back while it does. Without a cooling window
+  // there is no window to take it back into, which is what the protections
+  // screen is for.
+  const decidedCards = decided.map((o) => {
+    const undo = el("button", {}, "Take it back") as HTMLButtonElement;
+    const said = el("p", { class: "muted" }, "Decided. It settles when its window closes.");
+    undo.onclick = async () => {
+      undo.disabled = true;
+      const taken = await api<{ error?: string; message?: string }>("DELETE", `/offers/${encodeURIComponent(o.id)}/decisions`);
+      if (taken.status === 200) { await offers(member); return; }
+      said.textContent =
+        taken.body.error === "no_cooling"
+          ? "You have set no cooling window, so a decision is final as soon as it is signed."
+          : taken.body.error === "cooling_over"
+            ? "The window has closed and the decision is final."
+            : taken.body.message ?? `taking it back answered ${taken.status}`;
+      undo.disabled = false;
+    };
+    return el("div", { class: "card" },
+      el("div", { class: "row" }, el("span", { class: "grow" }, `From ${o.presenter}`), undo),
+      said);
+  });
+  const settings = el("button", {}, "What you have set") as HTMLButtonElement;
+  settings.onclick = () => protections(member);
   const forget = el("button", {}, "Forget this device") as HTMLButtonElement;
   forget.onclick = () => { localStorage.removeItem(STORAGE); setup(); };
   show(
@@ -206,8 +237,9 @@ async function offers(member: Member) {
       el("li", {}, "household ", el("code", {}, member.household)),
       el("li", {}, "mandate ", el("code", {}, member.mandate))),
     ...(cards.length ? cards : [el("p", {}, "Nothing is waiting for you.")]),
+    ...(decidedCards.length ? [el("h2", {}, "Decided, and not yet settled"), ...decidedCards] : []),
     ...problems.map((p) => failure(p)),
-    el("p", {}, forget)
+    el("div", { class: "row" }, settings, forget)
   );
 }
 
@@ -316,6 +348,127 @@ async function approval(member: Member, offerId: string) {
     status
   );
 }
+
+/**
+ * §10.5, §16.1. What the device sends where the specification asks the person
+ * to sign: an assertion whose challenge is the canonical bytes. A passkey
+ * cannot sign bytes a caller hands it, so this is the only shape a member of
+ * this hub can produce, and it is the one shape both routes take.
+ */
+async function assertOver(member: Member, bytes: Uint8Array<ArrayBuffer>) {
+  const challenge = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+  const credential = (await navigator.credentials.get({
+    publicKey: {
+      challenge,
+      rpId: location.hostname,
+      allowCredentials: [{ type: "public-key", id: fromBase64(member.credential_id) }],
+      userVerification: "required",
+    },
+  })) as PublicKeyCredential | null;
+  if (!credential) throw new Error("no assertion was made");
+  const r = credential.response as AuthenticatorAssertionResponse;
+  return {
+    authenticator_data: toBase64(r.authenticatorData),
+    client_data_json: toBase64(r.clientDataJSON),
+    signature: toBase64(r.signature),
+  };
+}
+
+// ---- the protections a person sets for themselves (§16) ---------------------
+
+/** §16.5. How long a decided set waits, and how long it can be taken back. */
+const COOLING = [
+  ["none", null],
+  ["an hour", 3600],
+  ["a day", 86400],
+] as const;
+
+async function protections(member: Member) {
+  const read = await api<Mandate & { error?: string }>("GET", `/_node/mandates/${encodeURIComponent(member.mandate)}`);
+  const current: Mandate | null = read.status === 200 ? read.body : null;
+  const status = el("p", {});
+  const rows: Node[] = [];
+
+  for (const [label, seconds] of COOLING) {
+    const b = el("button", { class: current?.cooling_seconds === seconds || (current === null && seconds === null) ? "chosen" : "" }, label) as HTMLButtonElement;
+    b.onclick = async () => {
+      status.textContent = "";
+      try {
+        // §16.1, clause 47. A tightening is the person's alone. Lengthening a
+        // cooling window or setting one where there was none is a tightening;
+        // this screen offers nothing else that tightens.
+        if (current && !longer(current.cooling_seconds, seconds)) {
+          throw new Error(
+            (current.co_signers.length > 0
+              ? "shortening or removing a cooling window is a loosening, and needs everyone you named: "
+              : "shortening or removing a cooling window is a loosening, and this screen does not do it: ") +
+              current.co_signers.join(", ")
+          );
+        }
+        // A renewal moves the lapse later, which is a loosening, so it needs
+        // the people the person named. With nobody named it is theirs alone.
+        const renewal =
+          current && current.co_signers.length > 0
+            ? current.lapses_at
+            : Date.now() + 365 * 86_400_000;
+        const next: Mandate = {
+          id: member.mandate,
+          household: member.household,
+          ceiling_out_of_network: current?.ceiling_out_of_network ?? 100000,
+          ceiling_daily: current?.ceiling_daily ?? null,
+          co_sign_categories: current?.co_sign_categories ?? [],
+          cooling_seconds: seconds,
+          co_signers: current?.co_signers ?? [],
+          // Clause 58. A standing mandate lapses unless renewed, and this is
+          // the renewal: every version this screen writes puts the lapse a
+          // year out. Carrying the old date forward would have stopped every
+          // offer to this household on the day it passed, with every button
+          // on this screen answering an error and none of them able to move
+          // the date. A later lapse is a loosening, so it needs everyone the
+          // person named, which is why it is refused above when there is
+          // anyone to ask.
+          lapses_at: renewal,
+          version: (current?.version ?? 0) + 1,
+        };
+        const bytes = new TextEncoder().encode(canonicalMandate(next));
+        const recorded = await api<{ error?: string; message?: string }>("POST", "/_node/mandates", {
+          ...next,
+          assertions: { [member.household]: await assertOver(member, bytes) },
+        });
+        if (recorded.status !== 201) throw new Error(recorded.body.message ?? `the record answered ${recorded.status}`);
+        await protections(member);
+      } catch (e) {
+        status.textContent = (e as Error).message;
+      }
+    };
+    rows.push(b);
+  }
+
+  show(
+    el("h1", {}, "Atarasy"),
+    el("h2", {}, "What you have set for yourself"),
+    el("p", { class: "muted" },
+      current
+        ? `Version ${current.version}. Nothing here can be loosened without the people you named (clause 47).`
+        : "Nothing yet. What you set here is yours to tighten alone, and needs the people you named to loosen."),
+    el("div", { class: "card" },
+      el("p", {}, "How long a decision waits before it can settle, and can be taken back."),
+      el("div", { class: "row" }, ...rows)),
+    // Clause 58, clause 46. What the person is signing besides the button they
+    // pressed. A screen that hides the rest of the record asks for a signature
+    // over things the person never saw.
+    ...(current
+      ? [el("p", { class: "muted" },
+          `Also in what you signed: nothing offered to you may cost more than ${yen(current.ceiling_out_of_network)} at a shop outside the network, and this lapses on ${when(current.lapses_at)} unless you change something here before then.`)]
+      : [el("p", { class: "muted" }, "Setting one of these also records a ceiling of ¥100,000 on an offer from outside the network, and a lapse a year from now that any later change renews.")]),
+    status,
+    back(member)
+  );
+}
+
+/** A longer window, or one where there was none, is a tightening. */
+const longer = (before: number | null, after: number | null) =>
+  after !== null && (before === null || after > before);
 
 function back(member: Member) {
   const b = el("button", {}, "Back") as HTMLButtonElement;

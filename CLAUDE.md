@@ -47,5 +47,13 @@ The engine needs `VALENCE_RP_ID` set to the hostname the page is opened at, beca
 
 - **Telling the hub an offer was presented.** The specification's §13.2 sends the hub the decided copy and not the presented one, so this hub asks each presenter it is configured with. It is an open question in `SPEC.md` §15; a change there comes first.
 - **Gifts onward.** `kept_as: "gift"` needs a lineage edge, and the screen keeps for the household only (`self`).
-- **The second signature a mandate's categories need** (§16.4) and the cooling window (§16.5): the engine refuses correctly and the screen shows the refusal, and there is no co-signer flow.
+- **Every protection but the cooling window** (§16): no daily ceiling, no co-signers, no categories needing a second signature, and so nothing that loosens, which is the half clause 47 says needs the people a person named.
 - **Anything of the physical binding.** This is the digital binding's screen.
+
+## What a passkey can and cannot sign, which is the shape of this whole hub
+
+An authenticator signs its own data and the SHA-256 of the client's, and never bytes a caller hands it. **So everywhere the specification asks this hub's member for a signature, the member can only send an assertion whose challenge is those bytes.** Three routes take that shape: a decided set (§10.5), a mandate change (§16.1) and a co-signer's signature on a decided set (§16.4). The last two were added on 2026-09-11, the mandate because building the protections screen ran into the wall the decided set had hit that morning, and the co-signature because a review found a family whose co-signer held a passkey could name a category needing a second signature and then have no way at all to give one.
+
+**One route still takes a bare signature and cannot be used from here**: a lineage edge (§7.1), which is what a gift is. The reason it is the exception is not effort. **An edge is verified again every time it is imported**, and an assertion names the host it was made for, so an edge signed by one could be re-verified nowhere but where it was made. The rule is therefore "wherever a person's signature is checked once and then forgotten", and a gift is out of reach from a hub until §7.1 stops re-verifying.
+
+**The trap to know**: a test that signs with a private key it holds proves the engine's side and nothing about the member's, because the browser has no such key. One test here did exactly that, claimed in its own comment to prove what a member can do, and was removed on the day it was written.

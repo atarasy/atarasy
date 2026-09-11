@@ -80,13 +80,30 @@ const json = (body: unknown, status = 200) =>
  */
 const MEMBER_NAME = /^(mandate|household)-[A-Za-z0-9_-]{16,}$/;
 
-/** The calls the screen makes. Anything else is not this hub's to carry. */
+/**
+ * The calls the screen makes. Anything else is not this hub's to carry.
+ *
+ * **Every line here is a route any browser that can open the page can reach on
+ * the engine**, which authenticates nobody by design, so this list is the whole
+ * of the boundary. Two are worth naming for what they give away. `GET /offers`
+ * answers for whatever household is asked for, and the household is unguessable
+ * only because this hub derives it from a credential. `DELETE .../decisions`
+ * takes a decided set back, and the engine asks for no signature to do it
+ * (§16.5): un-deciding removes a commitment rather than making one, which is
+ * why the specification treats it as the person's alone, and nothing checks
+ * that it is the person.
+ */
 function carries(method: string, path: string): boolean {
   const parts = path.split("/").filter(Boolean);
   if (method === "POST" && parts.length === 1 && parts[0] === "_identities") return true;
   if (method === "GET" && parts.length === 1 && parts[0] === "offers") return true;
   if (method === "GET" && parts.length === 3 && parts[0] === "offers" && parts[2] === "approval") return true;
   if (method === "POST" && parts.length === 3 && parts[0] === "offers" && parts[2] === "decisions") return true;
+  // §16.5. Taking a decided set back inside its cooling window.
+  if (method === "DELETE" && parts.length === 3 && parts[0] === "offers" && parts[2] === "decisions") return true;
+  // §16. The protections a person sets for themselves, and reads back.
+  if (method === "POST" && parts.length === 2 && parts[0] === "_node" && parts[1] === "mandates") return true;
+  if (method === "GET" && parts.length === 3 && parts[0] === "_node" && parts[1] === "mandates") return true;
   return false;
 }
 
