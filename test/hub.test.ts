@@ -113,7 +113,7 @@ function assertOver(canonical: string) {
 }
 
 /** An offer this household can decide on: created, deliberated, presented. */
-async function placed(): Promise<{ id: string; candidates: { id: string }[] }> {
+async function placed(product = "tea-b"): Promise<{ id: string; candidates: { id: string }[] }> {
   const created = await post(ENGINE, "/offers", {
     binding: "digital",
     household: HOUSEHOLD,
@@ -123,7 +123,7 @@ async function placed(): Promise<{ id: string; candidates: { id: string }[] }> {
     mandate: MANDATE,
     price_band: null,
     giver: null,
-    candidates: [{ product: "tea-b", quantity: 1, predicted_conversion: 0.5, is_exploration: true, given_by: null }],
+    candidates: [{ product, quantity: 1, predicted_conversion: 0.5, is_exploration: true, given_by: null }],
   });
   expect(created.status).toBe(201);
   const offer = created.body as unknown as { id: string; candidates: { id: string }[] };
@@ -160,6 +160,10 @@ beforeAll(async () => {
     products: {
       "tea-a": { merchant: "maker-a", ships: "carrier-a", price: 1200 },
       "tea-b": { merchant: "maker-a", ships: "carrier-a", price: 900 },
+      // A third product so that a test needing an offer of its own has one the
+      // exploration floor will accept: a candidate counts as exploration
+      // because this household has never been offered it.
+      "tea-c": { merchant: "maker-a", ships: "carrier-a", price: 700 },
       "coffee-a": { merchant: "maker-a", ships: "carrier-a", price: 1500 },
     },
   };
@@ -384,6 +388,50 @@ describe("the hub in front of an engine", () => {
     const back = (await (await fetch(`${ENGINE}/offers/${offer.id}`)).json()) as { state: string; candidates: { valence: string }[] };
     expect(back.state).toBe("presented");
     expect(back.candidates.every((c) => c.valence === "offered")).toBe(true);
+  });
+
+  test("a passkey records a daily ceiling, and a settlement above it is refused (§16.3)", async () => {
+    // The second protection this screen can set. It is written the way the
+    // screen writes it: a whole version of the record, signed by the
+    // household's own passkey, because a change to one protection is a
+    // signature over all of them.
+    const base = {
+      id: MANDATE,
+      household: HOUSEHOLD,
+      ceiling_out_of_network: 100000,
+      co_sign_categories: [] as string[],
+      cooling_seconds: null as number | null,
+      co_signers: [] as string[],
+      lapses_at: Date.now() + 365 * 86_400_000,
+    };
+    // The offer is placed before the ceiling is set. A ceiling of one yen
+    // refuses the offer at creation as well as the settlement, so setting it
+    // first would have proved that an offer can be refused and nothing about
+    // §16.3. Found by writing the test in the other order and reading the 422.
+    //
+    // It is placed with this household, which has been offered tea-b already
+    // by the tests above: the exploration floor asks for a candidate this
+    // household has never been offered, and a fourth offer of the same
+    // product is not one. The second 422 this test produced was that floor,
+    // not the ceiling, which is why the offer names a product of its own.
+    const offer = await placed("tea-c");
+
+    const read0 = await (await fetch(`${HUB}/api/_node/mandates/${encodeURIComponent(MANDATE)}`)).json();
+    const version = ((read0 as { version?: number }).version ?? 0) + 1;
+    const mandate = { ...base, ceiling_daily: 1, version };
+    const recorded = await post(HUB, "/api/_node/mandates", {
+      ...mandate,
+      assertions: { [HOUSEHOLD]: assertOver(canonicalMandate(mandate)) },
+    });
+    expect(recorded.status).toBe(201);
+    const decisions = offer.candidates.map((c) => ({ candidate: c.id, valence: "kept" as const, kept_as: "self" as const }));
+    const decided = await post(HUB, `/api/offers/${offer.id}/decisions`, {
+      decisions,
+      assertion: assertOver(canonicalDecisions(offer.id, decisions)),
+    });
+    expect(decided.status).toBe(200);
+    const settled = await post(ENGINE, `/offers/${offer.id}/settle`, {});
+    expect([settled.status, settled.body.error]).toEqual([422, "mandate_ceiling_daily"]);
   });
 
   test("an unreachable engine is reported as such, not as an empty answer", async () => {

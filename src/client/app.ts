@@ -383,65 +383,106 @@ const COOLING = [
   ["a day", 86400],
 ] as const;
 
+/** §16.3. What may settle for this household in one day, across every presenter. */
+const DAILY = [
+  ["no ceiling", null],
+  ["¥3,000", 3000],
+  ["¥10,000", 10000],
+  ["¥30,000", 30000],
+] as const;
+
 async function protections(member: Member) {
   const read = await api<Mandate & { error?: string }>("GET", `/_node/mandates/${encodeURIComponent(member.mandate)}`);
   const current: Mandate | null = read.status === 200 ? read.body : null;
   const status = el("p", {});
-  const rows: Node[] = [];
 
-  for (const [label, seconds] of COOLING) {
-    const b = el("button", { class: current?.cooling_seconds === seconds || (current === null && seconds === null) ? "chosen" : "" }, label) as HTMLButtonElement;
-    b.onclick = async () => {
-      status.textContent = "";
-      try {
-        // §16.1, clause 47. A tightening is the person's alone. Lengthening a
-        // cooling window or setting one where there was none is a tightening;
-        // this screen offers nothing else that tightens.
-        if (current && !longer(current.cooling_seconds, seconds)) {
-          throw new Error(
-            (current.co_signers.length > 0
-              ? "shortening or removing a cooling window is a loosening, and needs everyone you named: "
-              : "shortening or removing a cooling window is a loosening, and this screen does not do it: ") +
-              current.co_signers.join(", ")
-          );
-        }
-        // A renewal moves the lapse later, which is a loosening, so it needs
-        // the people the person named. With nobody named it is theirs alone.
-        const renewal =
-          current && current.co_signers.length > 0
-            ? current.lapses_at
-            : Date.now() + 365 * 86_400_000;
-        const next: Mandate = {
-          id: member.mandate,
-          household: member.household,
-          ceiling_out_of_network: current?.ceiling_out_of_network ?? 100000,
-          ceiling_daily: current?.ceiling_daily ?? null,
-          co_sign_categories: current?.co_sign_categories ?? [],
-          cooling_seconds: seconds,
-          co_signers: current?.co_signers ?? [],
-          // Clause 58. A standing mandate lapses unless renewed, and this is
-          // the renewal: every version this screen writes puts the lapse a
-          // year out. Carrying the old date forward would have stopped every
-          // offer to this household on the day it passed, with every button
-          // on this screen answering an error and none of them able to move
-          // the date. A later lapse is a loosening, so it needs everyone the
-          // person named, which is why it is refused above when there is
-          // anyone to ask.
-          lapses_at: renewal,
-          version: (current?.version ?? 0) + 1,
-        };
-        const bytes = new TextEncoder().encode(canonicalMandate(next));
-        const recorded = await api<{ error?: string; message?: string }>("POST", "/_node/mandates", {
-          ...next,
-          assertions: { [member.household]: await assertOver(member, bytes) },
-        });
-        if (recorded.status !== 201) throw new Error(recorded.body.message ?? `the record answered ${recorded.status}`);
-        await protections(member);
-      } catch (e) {
-        status.textContent = (e as Error).message;
+  /**
+   * §16.1, clause 47. Every button here writes a whole version of the record,
+   * because that is what is signed: a change to one protection is a signature
+   * over all of them, and a screen that sent a field would be asking the
+   * person to sign something it had not shown them.
+   *
+   * A tightening is the person's alone. This screen offers nothing that
+   * loosens, and says who would have to be asked rather than pretending the
+   * move does not exist.
+   */
+  async function write(patch: Partial<Mandate>, refusal: string | null) {
+    status.textContent = "";
+    try {
+      if (refusal) {
+        throw new Error(
+          refusal +
+            (current && current.co_signers.length > 0
+              ? `, and needs everyone you named: ${current.co_signers.join(", ")}`
+              : ", and this screen does not do it")
+        );
       }
-    };
-    rows.push(b);
+      // A renewal moves the lapse later, which is a loosening, so it needs the
+      // people the person named. With nobody named it is theirs alone.
+      const renewal =
+        current && current.co_signers.length > 0
+          ? current.lapses_at
+          : Date.now() + 365 * 86_400_000;
+      const next: Mandate = {
+        id: member.mandate,
+        household: member.household,
+        ceiling_out_of_network: current?.ceiling_out_of_network ?? 100000,
+        ceiling_daily: current?.ceiling_daily ?? null,
+        co_sign_categories: current?.co_sign_categories ?? [],
+        cooling_seconds: current?.cooling_seconds ?? null,
+        co_signers: current?.co_signers ?? [],
+        // Clause 58. A standing mandate lapses unless renewed, and this is the
+        // renewal: every version this screen writes puts the lapse a year out.
+        // Carrying the old date forward would have stopped every offer to this
+        // household on the day it passed, with every button on this screen
+        // answering an error and none of them able to move the date.
+        lapses_at: renewal,
+        version: (current?.version ?? 0) + 1,
+        ...patch,
+      };
+      const bytes = new TextEncoder().encode(canonicalMandate(next));
+      const recorded = await api<{ error?: string; message?: string }>("POST", "/_node/mandates", {
+        ...next,
+        assertions: { [member.household]: await assertOver(member, bytes) },
+      });
+      if (recorded.status !== 201) throw new Error(recorded.body.message ?? `the record answered ${recorded.status}`);
+      await protections(member);
+    } catch (e) {
+      status.textContent = (e as Error).message;
+    }
+  }
+
+  // §16.5. How long a decided set waits before it can settle, and can be taken
+  // back while it waits.
+  const coolingRow: Node[] = [];
+  for (const [label, seconds] of COOLING) {
+    const chosen = current?.cooling_seconds === seconds || (current === null && seconds === null);
+    const b = el("button", { class: chosen ? "chosen" : "" }, label);
+    b.onclick = () =>
+      write(
+        { cooling_seconds: seconds },
+        current && !longer(current.cooling_seconds, seconds)
+          ? "shortening or removing a cooling window is a loosening"
+          : null
+      );
+    coolingRow.push(b);
+  }
+
+  // §16.3. What may settle for this household in one day, across every
+  // presenter. Absent is not zero: no ceiling refuses nothing and a ceiling of
+  // zero refuses everything, and the signed bytes tell them apart.
+  const dailyRow: Node[] = [];
+  for (const [label, yenPerDay] of DAILY) {
+    const chosen = current?.ceiling_daily === yenPerDay || (current === null && yenPerDay === null);
+    const b = el("button", { class: chosen ? "chosen" : "" }, label);
+    b.onclick = () =>
+      write(
+        { ceiling_daily: yenPerDay },
+        current && !lower(current.ceiling_daily, yenPerDay)
+          ? "raising or removing a daily ceiling is a loosening"
+          : null
+      );
+    dailyRow.push(b);
   }
 
   show(
@@ -453,22 +494,33 @@ async function protections(member: Member) {
         : "Nothing yet. What you set here is yours to tighten alone, and needs the people you named to loosen."),
     el("div", { class: "card" },
       el("p", {}, "How long a decision waits before it can settle, and can be taken back."),
-      el("div", { class: "row" }, ...rows)),
+      el("div", { class: "row" }, ...coolingRow)),
+    el("div", { class: "card" },
+      el("p", {}, "The most that may be settled for you in one day, across every shop."),
+      el("div", { class: "row" }, ...dailyRow)),
     // Clause 58, clause 46. What the person is signing besides the button they
     // pressed. A screen that hides the rest of the record asks for a signature
     // over things the person never saw.
     ...(current
       ? [el("p", { class: "muted" },
-          `Also in what you signed: nothing offered to you may cost more than ${yen(current.ceiling_out_of_network)} at a shop outside the network, and this lapses on ${when(current.lapses_at)} unless you change something here before then.`)]
-      : [el("p", { class: "muted" }, "Setting one of these also records a ceiling of ¥100,000 on an offer from outside the network, and a lapse a year from now that any later change renews.")]),
+          `Also in what you signed: nothing offered to you may cost more than ${yen(current.ceiling_out_of_network)} at a shop outside the network, and this lapses on ${new Date(current.lapses_at).toDateString()} unless you set something again.`)]
+      : [el("p", { class: "muted" }, "Setting one of these also records a ceiling of ¥100,000 on an offer from outside the network, and a lapse a year from now.")]),
     status,
     back(member)
   );
 }
-
 /** A longer window, or one where there was none, is a tightening. */
 const longer = (before: number | null, after: number | null) =>
   after !== null && (before === null || after > before);
+
+/**
+ * A lower ceiling, or one where there was none, is a tightening. Absent is the
+ * weakest value rather than zero, which is the same rule the canonical form
+ * keeps: no daily ceiling refuses nothing, and a ceiling of zero refuses
+ * everything.
+ */
+const lower = (before: number | null, after: number | null) =>
+  after !== null && (before === null || after < before);
 
 function back(member: Member) {
   const b = el("button", {}, "Back") as HTMLButtonElement;
