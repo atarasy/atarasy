@@ -47,7 +47,7 @@ The engine needs `VALENCE_RP_ID` set to the hostname the page is opened at, beca
 
 - **Telling the hub an offer was presented.** The specification's §13.2 sends the hub the decided copy and not the presented one, so this hub asks each presenter it is configured with. It is an open question in `SPEC.md` §15; a change there comes first.
 - **Gifts onward.** `kept_as: "gift"` needs a lineage edge, and the screen keeps for the household only (`self`).
-- **Every protection but the cooling window** (§16): no daily ceiling, no co-signers, no categories needing a second signature, and so nothing that loosens, which is the half clause 47 says needs the people a person named.
+- **Every protection but the cooling window and the daily ceiling** (§16): no co-signers, and so nothing that loosens, which is the half clause 47 says needs the people a person named. The categories needing a second signature were here until 2026-09-12, when §16.4 was withdrawn.
 - **Anything of the physical binding.** This is the digital binding's screen.
 
 ## What a passkey can and cannot sign, which is the shape of this whole hub

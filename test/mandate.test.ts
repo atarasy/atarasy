@@ -6,7 +6,6 @@ const base: Mandate = {
   household: "household-x",
   ceiling_out_of_network: 100000,
   ceiling_daily: null,
-  co_sign_categories: [],
   cooling_seconds: null,
   co_signers: ["key-a"],
   lapses_at: 1_800_000_000_000,
@@ -14,9 +13,11 @@ const base: Mandate = {
 };
 
 describe("§16.1: the bytes a mandate version is signed over", () => {
-  test("the record's own order, with the three protections inside it", () => {
+  test("the record's own order, with the two protections inside it", () => {
+    // Seven lines since 2026-09-12, when §16.4 was withdrawn and the category
+    // list left the form. There were eight.
     expect(canonicalMandate(base)).toBe(
-      ["mandate-x", "household-x", "100000", "", "", "", "key-a", "1800000000000", "1"].join("\n")
+      ["mandate-x", "household-x", "100000", "", "", "key-a", "1800000000000", "1"].join("\n")
     );
   });
 
@@ -32,16 +33,17 @@ describe("§16.1: the bytes a mandate version is signed over", () => {
 
   test("an item that contains a comma cannot pass for two (§16.1)", () => {
     // Found by an adversarial pass on 2026-09-11: with a plain join the
-    // person could sign two categories and a relay post one, under the same
-    // signature, and the protection the second category carried was gone.
-    const two = canonicalMandate({ ...base, co_sign_categories: ["coffee", "tea"] });
-    const one = canonicalMandate({ ...base, co_sign_categories: ["coffee,tea"] });
+    // person could sign two co-signers and a relay post one, under the same
+    // signature, after which no loosening could ever be signed. It read the
+    // category list until §16.4 was withdrawn; the defect was on both.
+    const two = canonicalMandate({ ...base, co_signers: ["key-a", "key-b"] });
+    const one = canonicalMandate({ ...base, co_signers: ["key-a,key-b"] });
     expect(two).not.toBe(one);
   });
 
-  test("the lists are sorted, so the same mandate signs the same bytes", () => {
-    const one = canonicalMandate({ ...base, co_signers: ["b", "a"], co_sign_categories: ["tea", "coffee"] });
-    const other = canonicalMandate({ ...base, co_signers: ["a", "b"], co_sign_categories: ["coffee", "tea"] });
+  test("the list is sorted, so the same mandate signs the same bytes", () => {
+    const one = canonicalMandate({ ...base, co_signers: ["b", "a"] });
+    const other = canonicalMandate({ ...base, co_signers: ["a", "b"] });
     expect(one).toBe(other);
   });
 });
@@ -53,7 +55,6 @@ describe("§16.1, clause 47: a tightening is the person's alone", () => {
     ["a cooling window where there was none", { cooling_seconds: 3600 }],
     ["a lower out-of-network ceiling", { ceiling_out_of_network: 1000 }],
     ["an earlier lapse", { lapses_at: base.lapses_at - 1 }],
-    ["a category that needs a second signature", { co_sign_categories: ["tea"] }],
     ["another co-signer", { co_signers: ["key-a", "key-b"] }],
   ];
   for (const [what, over] of tighter) {
@@ -69,7 +70,6 @@ describe("§16.1, clause 47: a tightening is the person's alone", () => {
     ["shortening a cooling window", { ...base, cooling_seconds: 3600 }, { cooling_seconds: 60 }],
     ["raising the out-of-network ceiling", base, { ceiling_out_of_network: 200000 }],
     ["a later lapse", base, { lapses_at: base.lapses_at + 1 }],
-    ["dropping a category", { ...base, co_sign_categories: ["tea"] }, { co_sign_categories: [] }],
     ["dropping a co-signer", base, { co_signers: [] }],
   ];
   for (const [what, from, over] of looser) {

@@ -428,7 +428,6 @@ async function protections(member: Member) {
         household: member.household,
         ceiling_out_of_network: current?.ceiling_out_of_network ?? 100000,
         ceiling_daily: current?.ceiling_daily ?? null,
-        co_sign_categories: current?.co_sign_categories ?? [],
         cooling_seconds: current?.cooling_seconds ?? null,
         co_signers: current?.co_signers ?? [],
         // Clause 58. A standing mandate lapses unless renewed, and this is the

@@ -17,8 +17,6 @@ export type Mandate = {
   ceiling_out_of_network: number;
   /** §16.3. What may settle for this household in one day, across every presenter. */
   ceiling_daily: number | null;
-  /** §16.4. Feed categories whose candidates need a co-signer on the decided set. */
-  co_sign_categories: string[];
   /** §16.5. How long a decided set waits before it can settle, and can be taken back. */
   cooling_seconds: number | null;
   /** Clause 47. Keys named while the person had capacity. */
@@ -37,12 +35,11 @@ export function canonicalMandate(m: Mandate): string {
     m.household,
     String(m.ceiling_out_of_network),
     optional(m.ceiling_daily),
-    // Each item is escaped before the join (§16.1). A plain comma join is
-    // malleable: `["coffee","tea"]` and `["coffee,tea"]` are the same bytes,
-    // so whoever relays a change can drop a category, or fuse two co-signers
-    // into a name nobody holds, and the signature still verifies.
-    [...m.co_sign_categories].sort().map(encodeURIComponent).join(","),
     optional(m.cooling_seconds),
+    // Each item is escaped before the join (§16.1). A plain comma join is
+    // malleable: `["a","b"]` and `["a,b"]` are the same bytes, so whoever
+    // relays a change can fuse two co-signers into a name nobody holds, after
+    // which no loosening can ever be signed, and the signature still verifies.
     [...m.co_signers].sort().map(encodeURIComponent).join(","),
     String(m.lapses_at),
     String(m.version),
@@ -54,8 +51,8 @@ export function canonicalMandate(m: Mandate): string {
  * whose signatures it needs. A tightening is the person's alone.
  *
  * Every protection has a direction: a lower ceiling is tighter, a longer
- * cooling window is tighter, more categories needing a second signature is
- * tighter, and a later lapse is looser. Removing a protection is the loosest
+ * cooling window is tighter, another co-signer is tighter, and a later lapse
+ * is looser. Removing a protection is the loosest
  * move there is, which is why absent counts as the weakest value here rather
  * than as zero.
  */
@@ -67,9 +64,6 @@ export function loosens(before: Mandate, after: Mandate): boolean {
              after.cooling_seconds === null ? null : -after.cooling_seconds)) return true;
   if (after.ceiling_out_of_network > before.ceiling_out_of_network) return true;
   if (after.lapses_at > before.lapses_at) return true;
-  for (const c of before.co_sign_categories) {
-    if (!after.co_sign_categories.includes(c)) return true;
-  }
   for (const k of before.co_signers) {
     if (!after.co_signers.includes(k)) return true;
   }
