@@ -337,7 +337,16 @@ async function offers(member: Member) {
       "GET",
       `/offers?household=${encodeURIComponent(member.household)}&presenter=${encodeURIComponent(presenter)}`
     );
-    if (list.status !== 200) { problems.push(`${presenter}: ${refusal(list.body, list.status)}`); continue; }
+    // **A status is not a body, here too.** An unreadable `200` gave
+    // `offers: undefined`, which `?? []` turned into an empty inbox: the
+    // member read that nothing was waiting for them. Found by a fourth
+    // refutation round on 2026-09-13, which measured it on four screens.
+    if (list.status !== 200 || !Array.isArray(list.body.offers)) {
+      problems.push(`${presenter}: ${list.status === 200
+        ? "answered in a form this screen could not read, so what is waiting there is not on this list"
+        : refusal(list.body, list.status)}`);
+      continue;
+    }
     for (const o of list.body.offers ?? []) {
       // §6.5. A box whose collection found goods used waits for the
       // household's signature, and **it waits in the open**: from the
@@ -377,7 +386,7 @@ async function offers(member: Member) {
       // sentence and no date at all.
       el("p", { class: "muted" },
         o.binding === "physical"
-          ? `This box is with you. What you use is bought; what you send back is not. The route comes for it on ${when(o.expires_at)}, which is when this offer closes.`
+          ? `This box is with you. What you use is bought; what you send back is not. It was offered until ${when(o.expires_at)}, and the route comes for it around then.`
           : `Waiting until ${when(o.expires_at)}. Nothing is ordered if you do nothing.`)
     );
   };
@@ -664,6 +673,11 @@ async function approval(member: Member, offerId: string, binding?: "digital" | "
         },
       });
       if (decided.status !== 200) throw new Error(refusal(decided.body, decided.status));
+      // The count below is this screen's own, so a `200` that carried no state
+      // would have been reported as a decision the engine never recorded.
+      if (typeof decided.body.state !== "string") {
+        throw new Error("The answer came back in a form this screen could not read, so it cannot say whether this was recorded. Go back and open it again.");
+      }
       show(
         el("h1", {}, "Atarasy"),
         el("div", { class: "card" },
@@ -685,7 +699,13 @@ async function approval(member: Member, offerId: string, binding?: "digital" | "
          // merchant's stated application period is measured against it, and
          // §2.2b says a box's owner should not read it as their deadline. One
          // date, said once, carrying both.
-         el("p", { class: "muted" }, `The route comes for it on ${when(a.expires_at)}, which is when this offer closes.`)]
+         // **Not "which is when this offer closes".** Measured 2026-09-13 with
+         // a grace of one day: the box is still `presented` past the expiry
+         // and its approval still answers, and with a grace of zero it goes
+         // `lost` at once. The date is when the offer was open until and when
+         // the route is due; what happens at it is the deployment's grace, and
+         // the screen does not know that number.
+         el("p", { class: "muted" }, `It was offered until ${when(a.expires_at)}, and the route comes for it around then.`)]
       : [el("p", {}, `Offered by ${a.presenter}. Open until ${when(a.expires_at)}.`)]),
     el("p", { class: "muted" },
       a.mandate.kind === "standing"
@@ -835,7 +855,7 @@ async function statement(member: Member, offerId: string) {
             `/offers/${encodeURIComponent(st.offer)}/settlement`
           );
           if (stood.status === 200) {
-            show(el("h1", {}, "Atarasy"), receipt(stood.body, true), back(member));
+            show(el("h1", {}, "Atarasy"), receipt(stood.body, true, true), back(member));
             return;
           }
         }
@@ -851,11 +871,16 @@ async function statement(member: Member, offerId: string) {
             `/offers/${encodeURIComponent(st.offer)}/settlement`
           );
           if (stood.status === 200) {
-            show(el("h1", {}, "Atarasy"), receipt(stood.body, true), back(member));
+            show(el("h1", {}, "Atarasy"), receipt(stood.body, true, false), back(member));
             return;
           }
         }
         throw new Error(refusal(settled.body, settled.status));
+      }
+      // A `200` whose body carries no charge is not a settlement this screen
+      // can report as one: the engine always names the figure.
+      if (typeof settled.body.charged !== "number") {
+        throw new Error("The answer came back in a form this screen could not read, so it cannot say whether this settled. Open the list again before signing a second time.");
       }
       show(el("h1", {}, "Atarasy"), receipt(settled.body, false), back(member));
     } catch (e) {
@@ -913,12 +938,12 @@ type Receipt = { charged?: number; disputed_amount?: number; settled_at?: number
  * signature is what settled the box is the thing the engine's refusal exists
  * to prevent. So the sentence says what the engine said.
  */
-function receipt(r: Receipt, stood: boolean): Node {
+function receipt(r: Receipt, stood: boolean, refused = false): Node {
   const amount = typeof r.charged === "number" ? yen(r.charged) : null;
   return el("div", { class: "card" },
     el("p", {},
       stood
-        ? `This box had already settled${r.settled_at ? `, on ${when(r.settled_at)}` : ""}. What you just signed did not settle it.`
+        ? `This box has settled${r.settled_at ? `, on ${when(r.settled_at)}` : ""}.`
         : "Signed."),
     el("p", {},
       amount === null
@@ -926,8 +951,15 @@ function receipt(r: Receipt, stood: boolean): Node {
         : stood
           ? `${amount} was charged by the settlement that stands.`
           : `${amount} charged.`),
+    // **Which signature settled it is not the same question on the two paths
+    // that reach here**, and one sentence said the same thing on both. After a
+    // refusal the engine has told us this signature was not the one; after no
+    // answer at all it very probably was. Saying "what you just signed did not
+    // settle it" on the second is the opposite of the truth.
     ...(stood
-      ? [el("p", { class: "muted" }, "If you signed this a moment ago and the answer never came back, that signature is the one that stands. Nothing was charged twice.")]
+      ? [el("p", { class: "muted" }, refused
+          ? "What you just signed is not what settled it. This is the settlement that stands, and nothing was charged twice."
+          : "The answer to your signature never came back, and this is the settlement that stands. It is almost certainly yours, and nothing was charged twice.")]
       : []),
     ...(r.disputed_amount
       ? [el("p", { class: "muted" }, `${yen(r.disputed_amount)} was disputed and is not charged here. What is owed for it, if anything, is between you and the seller.`)]
@@ -983,11 +1015,15 @@ async function protections(member: Member) {
   // unreachable was shown a blank protections screen and would have set a
   // ceiling over a record it could not see, on version 1 of a mandate already
   // at version 4.
-  if (read.status !== 200 && read.status !== 404) {
-    show(el("h1", {}, "Atarasy"), failure(refusal(read.body, read.status)), back(member));
+  const readable = read.status === 200 && typeof read.body.version === "number";
+  if (read.status !== 404 && !readable) {
+    show(el("h1", {}, "Atarasy"), failure(
+      read.status === 200
+        ? "What you have set came back in a form this screen could not read. Nothing here has changed."
+        : refusal(read.body, read.status)), back(member));
     return;
   }
-  const current: Mandate | null = read.status === 200 ? read.body : null;
+  const current: Mandate | null = readable ? read.body : null;
   const status = el("p", {});
 
   /**

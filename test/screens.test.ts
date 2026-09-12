@@ -182,7 +182,7 @@ describe("the list, as a member sees it", () => {
     expect(heads).toEqual(["Waiting for your signature", "Boxes with you now", "Offered to you"]);
     // §11. A box is not a draft, and one sentence used to cover both.
     expect(text(app)).toContain("This box is with you");
-    expect(text(app)).toContain("The route comes for it on");
+    expect(text(app)).toContain("the route comes for it around then");
     expect(text(app)).toContain("Nothing is ordered if you do nothing");
   });
 
@@ -296,9 +296,12 @@ describe("the approval, as a member sees it", () => {
     const box = text(await settled());
     expect(box).toContain("This box is with you");
     // Question 44. One date, in the swap's words, carrying the expiry §10a.5
-    // needs and not reading as the person's deadline.
-    expect(box).toContain("The route comes for it on");
-    expect(box).toContain("which is when this offer closes");
+    // needs and not reading as the person's deadline. **It does not say the
+    // offer closes then**: measured with a grace of one day, the box is still
+    // `presented` past the expiry and its approval still answers.
+    expect(box).toContain("It was offered until");
+    expect(box).toContain("the route comes for it around then");
+    expect(box).not.toContain("which is when this offer closes");
     expect(box).not.toContain("Open until");
 
     const digital = await open([candidate()]);
@@ -409,8 +412,12 @@ describe("what a member is shown after signing a statement", () => {
     // body for a `200` that was truncated or was not JSON, and `charged ?? 0`
     // drew "Signed. ¥0 charged." over a settlement the engine had made at its
     // real amount. Zero is a real figure here, so the member could not tell.
+    // A `200` carrying no charge is not a settlement this screen may report as
+    // one: the engine always names the figure, so anything else is something
+    // between the browser and the engine answering.
     const shown = await sign(() => ({ status: 200, body: "<html>gateway</html>" }));
-    expect(shown).toContain("could not be read");
+    expect(shown).toContain("could not read");
+    expect(shown).not.toContain("Signed.");
     expect(shown).not.toContain("¥0");
   });
 
@@ -423,7 +430,7 @@ describe("what a member is shown after signing a statement", () => {
       () => ({ status: 409, body: { error: "already_settled" } }),
       () => ({ status: 200, body: { charged: 1200, disputed_amount: 0, settled_at: 1_700_000_000_000 } })
     );
-    expect(shown).toContain("What you just signed did not settle it");
+    expect(shown).toContain("What you just signed is not what settled it");
     expect(shown).toContain("¥1,200 was charged by the settlement that stands");
   });
 
@@ -434,7 +441,12 @@ describe("what a member is shown after signing a statement", () => {
       () => ({ status: 0, body: {} }),
       () => ({ status: 200, body: { charged: 1200, disputed_amount: 0 } })
     );
-    expect(shown).toContain("had already settled");
+    // **And it is not told that its signature failed**, which is what the
+    // other path is told. Here the engine never answered, so the settlement
+    // that stands is almost certainly this member's own.
+    expect(shown).toContain("This box has settled");
+    expect(shown).toContain("almost certainly yours");
+    expect(shown).not.toContain("is not what settled it");
     expect(shown).toContain("¥1,200");
   });
 
@@ -444,6 +456,6 @@ describe("what a member is shown after signing a statement", () => {
     // draw a receipt, which would claim a settlement that may not exist.
     expect(shown).toContain("Nothing answered");
     expect(shown).not.toContain("Signed.");
-    expect(shown).not.toContain("had already settled");
+    expect(shown).not.toContain("This box has settled");
   });
 });
