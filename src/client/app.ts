@@ -366,8 +366,15 @@ async function approval(member: Member, offerId: string) {
       // signs from.
       el("p", { class: "muted" }, `Made by ${c.merchant}. Carried by ${c.ships}.`),
       ...(c.is_exploration ? [el("p", { class: "exploration" }, "Something you have not been offered before (§5).")] : []),
-      el("p", {}, el("span", { class: "muted" }, "Against taking it: "), c.argument_against),
-      el("p", { class: "muted" }, "Also considered:"),
+      // Clauses 54 and 59. **These are the presenter's words, and the screen
+      // says so.** The alternatives and the argument against are free text the
+      // presenter's agent supplied, rendered here under headings this hub
+      // wrote, on a surface a party to no transaction draws. Without the
+      // attribution a person reads "you have two of these already" as their own
+      // agent's finding when it is the merchant's sentence, and a proposal
+      // whose maker cannot be weighed is the thing clause 59 exists against.
+      el("p", {}, el("span", { class: "muted" }, `${a.presenter} argues against taking it: `), c.argument_against),
+      el("p", { class: "muted" }, `${a.presenter} says it also considered:`),
       el("ul", {}, ...c.alternatives.map((alt) => el("li", {}, alt))),
       // §10a.5. This merchant's terms, beside this merchant's line and no
       // other. One screen carries several sellers' blocks, and each seller

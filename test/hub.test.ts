@@ -318,6 +318,17 @@ describe("the hub in front of an engine", () => {
     }
     expect(approval.excluded).toEqual([{ product: "tea-b", reason: "declined_before" }]);
     expect(approval.reminded).toBe(false);
+
+    // Clauses 54 and 59. **The deliberation is the presenter's words and the
+    // screen attributes them.** A person who reads "you have two of these
+    // already" as their own agent's finding cannot weigh who said it, and the
+    // surface a party to no transaction draws is exactly where that confusion
+    // lives. The script is checked rather than the DOM, because this suite
+    // runs no browser; what it proves is that the attribution is in the code
+    // the hub serves and not only in a comment.
+    const built = await (await fetch(`${HUB}/app.js`)).text();
+    expect(built).toContain("argues against taking it");
+    expect(built).toContain("says it also considered");
   });
 
   test("a decided set confirmed by a P-256 assertion through the hub is decided", async () => {
