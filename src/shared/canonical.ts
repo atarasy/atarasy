@@ -36,3 +36,43 @@ export async function challengeFor(offerId: string, decisions: Decision[]): Prom
   const bytes = new TextEncoder().encode(canonicalDecisions(offerId, decisions));
   return new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
 }
+
+/**
+ * Specification §6.5. The settlement statement a household signs before a
+ * physical box with goods used is charged, in the shape that is signed:
+ *
+ *   valence.statement.1
+ *   <offer id>
+ *   <candidate>:<valence>:<amount>:<"disputed" or empty>
+ *
+ * one line per kept, defaulted or consumed candidate in ascending candidate
+ * id, UTF-8, "\n" between lines.
+ *
+ * **The first line is a domain tag and it is not decoration.** A decided set
+ * is signed over the same prefix in the same four-field shape, and the two are
+ * told apart today only by the type of the third field: a future valence, or a
+ * numeric `kept_as`, would make one signature verify as the other. This file
+ * writes the tag because the engine does, and a hub that left it out would
+ * produce signatures nothing accepts.
+ */
+export type StatementLine = {
+  candidate: string;
+  valence: "kept" | "defaulted" | "consumed";
+  amount: number;
+  disputed: boolean;
+};
+
+export const STATEMENT_DOMAIN = "valence.statement.1";
+
+export function canonicalStatement(offerId: string, lines: StatementLine[]): string {
+  const body = [...lines]
+    .sort((a, b) => (a.candidate < b.candidate ? -1 : a.candidate > b.candidate ? 1 : 0))
+    .map((l) => `${l.candidate}:${l.valence}:${l.amount}:${l.disputed ? "disputed" : ""}`);
+  return [STATEMENT_DOMAIN, offerId, ...body].join("\n");
+}
+
+/** §6.5, §10.5. The challenge a passkey signs for a statement. */
+export async function challengeForStatement(offerId: string, lines: StatementLine[]): Promise<Uint8Array<ArrayBuffer>> {
+  const bytes = new TextEncoder().encode(canonicalStatement(offerId, lines));
+  return new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+}

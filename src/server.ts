@@ -11,7 +11,7 @@
  * sets no CORS headers, and should not: which origins may call an engine is
  * a deployment's decision and not the specification's.
  *
- * **The proxy carries the four calls the screen makes and refuses everything
+ * **The proxy carries the calls the screen makes and refuses everything
  * else.** A hub that forwarded whatever it was handed would put the engine's
  * whole surface behind a page anyone can open: the catalogue routes, another
  * household's export (clauses 43, 49), a settlement, a withdrawal of somebody
@@ -92,6 +92,19 @@ const MEMBER_NAME = /^(mandate|household)-[A-Za-z0-9_-]{16,}$/;
  * (§16.5): un-deciding removes a commitment rather than making one, which is
  * why the specification treats it as the person's alone, and nothing checks
  * that it is the person.
+ *
+ * **`POST .../settle` joined the list on 2026-09-12 and it is the widest thing
+ * on it.** §6.5 makes the household's signature over the settlement statement
+ * the application for a physical box's consumed lines, and the signature has
+ * to reach the engine somehow, so the screen posts it here. The cost is that
+ * whoever knows an offer id can ask this engine to settle it: for a physical
+ * box with goods used that is refused without a signature this hub cannot
+ * forge, and **for a digital offer it is not**, since a digital settlement
+ * takes an empty body and commits the ledger for what the person already
+ * signed at the decision. What that costs is the timing rather than the
+ * amount, because the charge is the decided set either way. It is named here
+ * rather than left in the list, and the narrowing that would remove it is an
+ * engine that authenticates a caller, which the reference does not do.
  */
 function carries(method: string, path: string): boolean {
   const parts = path.split("/").filter(Boolean);
@@ -101,6 +114,12 @@ function carries(method: string, path: string): boolean {
   if (method === "POST" && parts.length === 3 && parts[0] === "offers" && parts[2] === "decisions") return true;
   // §16.5. Taking a decided set back inside its cooling window.
   if (method === "DELETE" && parts.length === 3 && parts[0] === "offers" && parts[2] === "decisions") return true;
+  // §6.5. The settlement statement a household signs before a physical box
+  // with goods used is charged, and the settle that carries the signature.
+  // Both are the person's own act on their own device, which is what makes
+  // the consumed lines an application rather than a third party's record.
+  if (method === "GET" && parts.length === 3 && parts[0] === "offers" && parts[2] === "statement") return true;
+  if (method === "POST" && parts.length === 3 && parts[0] === "offers" && parts[2] === "settle") return true;
   // §16. The protections a person sets for themselves, and reads back.
   if (method === "POST" && parts.length === 2 && parts[0] === "_node" && parts[1] === "mandates") return true;
   if (method === "GET" && parts.length === 3 && parts[0] === "_node" && parts[1] === "mandates") return true;

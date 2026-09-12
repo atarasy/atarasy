@@ -75,12 +75,44 @@ async function post(base: string, path: string, body: unknown) {
 }
 
 /** §5.4. The bytes a catalogue is signed over; deployment plumbing, not the hub's. */
-function canonicalConfig(c: { version: string; presenter: string; products: Record<string, { merchant: string; ships: string; price: number; category?: string }> }) {
+/**
+ * The catalogue's canonical form, as the engine signs it.
+ *
+ * **Written out here rather than imported**, for the reason every shared form
+ * in this repository is: a hub that agreed with the engine by importing its
+ * code would agree by accident. Two things changed on 2026-09-12 and this file
+ * followed neither until the same evening, so every test here had been red
+ * since: the `maker` joined the signed bytes (question 32), and each part is
+ * percent-encoded before the join, because a merchant named "a:b" with a maker
+ * "c" produced the same bytes as a merchant "a" with a maker "b:c".
+ */
+function canonicalConfig(c: { version: string; presenter: string; products: Record<string, { merchant: string; maker: string; ships: string; price: number; category?: string }> }) {
   return Buffer.from(
     [c.version, c.presenter, ...Object.keys(c.products).sort().map((ref) => {
       const e = c.products[ref]!;
-      return [ref, e.merchant, e.ships, String(e.price), e.category ?? ""].join(":");
+      return [ref, e.merchant, e.maker, e.ships, String(e.price), e.category ?? ""]
+        .map(encodeURIComponent)
+        .join(":");
     })].join("\n"),
+    "utf8"
+  );
+}
+
+/**
+ * §10a. The bytes a merchant signs over its block, as the engine signs them.
+ * Written out here for the same reason the catalogue's form is: a hub that
+ * agreed with the engine by importing its code would agree by accident. The
+ * product is the third part, empty for the merchant's standing text, so a
+ * block signed for one product cannot be re-filed under another.
+ */
+function canonicalDisclosure(d: { merchant: string; product: string | null; version: string; items: { label: string; value: string }[] }) {
+  return Buffer.from(
+    [
+      encodeURIComponent(d.merchant),
+      encodeURIComponent(d.version),
+      encodeURIComponent(d.product ?? ""),
+      ...d.items.map((i) => `${encodeURIComponent(i.label)}=${encodeURIComponent(i.value)}`),
+    ].join("\n"),
     "utf8"
   );
 }
@@ -154,22 +186,52 @@ beforeAll(async () => {
     public_key: presenterKey.publicKey.export({ type: "spki", format: "pem" }).toString(),
     attested: true,
   })).status).toBe(201);
+  // §11.1. Ambient, long-keeping, ten to a container, unregulated: the band
+  // the physical binding can carry. It is not in the catalogue's signed bytes,
+  // so it travels beside them.
+  const PHYSICAL = { ambient: true, keeps_for_days: 365, fits_ten_per_container: true, regulated: false };
   const config = {
     version: "cfg-hub-test",
     presenter: PRESENTER,
     products: {
-      "tea-a": { merchant: "maker-a", ships: "carrier-a", price: 1200 },
-      "tea-b": { merchant: "maker-a", ships: "carrier-a", price: 900 },
+      "tea-a": { merchant: "maker-a", maker: "made-by-tea", ships: "carrier-a", price: 1200 , physical: PHYSICAL },
+      "tea-b": { merchant: "maker-a", maker: "made-by-tea", ships: "carrier-a", price: 900 , physical: PHYSICAL },
       // A third product so that a test needing an offer of its own has one the
       // exploration floor will accept: a candidate counts as exploration
       // because this household has never been offered it.
-      "tea-c": { merchant: "maker-a", ships: "carrier-a", price: 700 },
-      "coffee-a": { merchant: "maker-a", ships: "carrier-a", price: 1500 },
+      "tea-c": { merchant: "maker-a", maker: "made-by-tea", ships: "carrier-a", price: 700 , physical: PHYSICAL },
+      "coffee-a": { merchant: "maker-a", maker: "made-by-coffee", ships: "carrier-a", price: 1500 , physical: PHYSICAL },
     },
   };
   expect((await post(ENGINE, "/_presenter/configs", {
     ...config,
     signature: sign(null, canonicalConfig(config), presenterKey.privateKey).toString("base64"),
+  })).status).toBe(201);
+
+  // §10a. Every merchant named on a candidate has a block it composed and
+  // signed, and since 2026-09-12 an offer without one is refused at `present`
+  // rather than at the decision. **Nothing here is a statute's list**: the
+  // engine reads no item, and a fixture that pretended otherwise would assert
+  // something no code can check.
+  const merchantKey = generateKeyPairSync("ed25519");
+  expect((await post(ENGINE, "/_identities", {
+    key: "maker-a",
+    public_key: merchantKey.publicKey.export({ type: "spki", format: "pem" }).toString(),
+    attested: false,
+  })).status).toBe(201);
+  const block = {
+    merchant: "maker-a",
+    product: null as string | null,
+    version: "d-hub-1",
+    items: [
+      { label: "payment", value: "charged when you confirm" },
+      { label: "delivery", value: "already placed" },
+      { label: "returns", value: "as this merchant published" },
+    ],
+  };
+  expect((await post(ENGINE, "/_disclosures", {
+    ...block,
+    signature: sign(null, canonicalDisclosure(block), merchantKey.privateKey).toString("base64"),
   })).status).toBe(201);
 
   hubProc = Bun.spawn(["bun", "src/server.ts"], {
@@ -294,7 +356,6 @@ describe("the hub in front of an engine", () => {
       ["GET", `/api/households/${HOUSEHOLD}/export`],
       ["POST", "/api/_presenter/configs"],
       ["POST", "/api/offers"],
-      ["POST", `/api/offers/${offerId}/settle`],
       ["GET", `/api/offers/${offerId}`],
       ["GET", "/api/registry"],
     ];
@@ -325,7 +386,7 @@ describe("the hub in front of an engine", () => {
     const config = {
       version: `cfg-${name}`,
       presenter: name,
-      products: { "tea-a": { merchant: "maker-a", ships: "carrier-a", price: 1200 } },
+      products: { "tea-a": { merchant: "maker-a", maker: "made-by-tea", ships: "carrier-a", price: 1200 } },
     };
     expect((await post(ENGINE, "/_presenter/configs", {
       ...config,
@@ -447,6 +508,168 @@ describe("the hub in front of an engine", () => {
     } finally {
       dead.kill();
     }
+  });
+});
+
+describe("the statement a household signs (§6.5)", () => {
+  /**
+   * Question 36. The collection's record is a proposal and the household's
+   * signature over the statement is the application, so the screen has to be
+   * able to read the statement and post the signature. Both routes are on the
+   * hub's list since 2026-09-12, and this is what they carry.
+   *
+   * **The canonical form is written out in `src/shared/canonical.ts` and again
+   * here**, and the point of the test is that the engine accepts what the
+   * screen would produce. A hub that agreed with the engine by importing its
+   * code would agree by accident.
+   */
+  const STATEMENT_DOMAIN = "valence.statement.1";
+  const canonicalStatement = (
+    offer: string,
+    lines: { candidate: string; valence: string; amount: number; disputed: boolean }[]
+  ) =>
+    [
+      STATEMENT_DOMAIN,
+      offer,
+      ...[...lines]
+        .sort((a, b) => (a.candidate < b.candidate ? -1 : a.candidate > b.candidate ? 1 : 0))
+        .map((l) => `${l.candidate}:${l.valence}:${l.amount}:${l.disputed ? "disputed" : ""}`),
+    ].join("\n");
+
+  /**
+   * A physical box, delivered, collected with one line used.
+   *
+   * **A household of its own each time.** Exploration is what a household has
+   * never been offered by this presenter (§5.1), so the household the rest of
+   * this file uses has seen every product in the fixture and no candidate of
+   * its could be marked. The mandate stays the same one, because a statement
+   * is verified against the key registered for the offer's mandate.
+   */
+  /**
+   * A mandate of this group's own, carrying the member's key.
+   *
+   * **The shared mandate has a daily ceiling on it** by the time these run,
+   * written by the §16.3 test, and a settlement of 1,500 is above it. An
+   * engine leaves a mandate it has no record of alone (§16.2), so a second
+   * name registered with the same key gives these tests a settlement path
+   * without unpicking what another test proved.
+   */
+  let mandate = "";
+  async function underOwnMandate() {
+    if (mandate) return mandate;
+    mandate = `mandate-statement-${Math.random().toString(36).slice(2, 12)}`;
+    expect((await post(ENGINE, "/_identities", {
+      key: mandate,
+      public_key: memberKey!.publicKey.export({ type: "spki", format: "pem" }).toString(),
+      attested: false,
+    })).status).toBe(201);
+    return mandate;
+  }
+
+  async function collected(product: string) {
+    const household = `${HOUSEHOLD}-statement-${Math.random().toString(36).slice(2, 10)}`;
+    const own = await underOwnMandate();
+    const created = await post(ENGINE, "/offers", {
+      binding: "physical",
+      household,
+      purpose: "replenish",
+      config_version: "cfg-hub-test",
+      expires_at: Date.now() + 3_600_000,
+      mandate: own,
+      price_band: null,
+      giver: null,
+      candidates: [{ product, quantity: 1, predicted_conversion: 0.5, is_exploration: true, given_by: null }],
+    });
+    expect(created.status).toBe(201);
+    const offer = created.body as unknown as { id: string; candidates: { id: string }[] };
+    const per: Record<string, unknown> = {};
+    for (const c of offer.candidates) per[c.id] = { alternatives: ["a smaller tin"], argument_against: "you have some already" };
+    expect((await post(ENGINE, `/offers/${offer.id}/deliberation`, {
+      per_candidate: per,
+      excluded: [],
+      mandate: { kind: "standing", scope: "tea", lapses_at: Date.now() + 90 * 86_400_000 },
+    })).status).toBe(201);
+    expect((await post(ENGINE, `/offers/${offer.id}/present`, {})).status).toBe(200);
+    // §6.5, 法11条1号. The box was delivered, so there is a delivery to record
+    // and the statement renders the carriage from it.
+    expect((await post(ENGINE, `/offers/${offer.id}/delivery`, {
+      carriage: 0,
+      code: `dc-hub-${offer.id.slice(0, 6)}`,
+      status: "delivered",
+    })).status).toBe(201);
+    expect((await post(ENGINE, `/offers/${offer.id}/recovery`, {
+      returned: [],
+      consumed: offer.candidates.map((c) => c.id),
+    })).status).toBe(200);
+    return offer;
+  }
+
+  test("the hub carries the statement, and the screen's signature settles it", async () => {
+    const offer = await collected("coffee-a");
+    const read = await fetch(`${HUB}/api/offers/${offer.id}/statement`);
+    expect(read.status).toBe(200);
+    const st = (await read.json()) as {
+      offer: string;
+      expires_at: number;
+      carriage: number | null;
+      lines: { candidate: string; valence: string; amount: number; merchant: string; disclosure: { merchant: string; product: string | null } }[];
+      disclosures: { merchant: string; product: string | null; items: { label: string; value: string }[] }[];
+    };
+    // What the screen draws: a line at its price, the carriage recorded as
+    // zero rather than absent, and the block that governs each line.
+    expect(st.lines.length).toBe(1);
+    expect(st.lines[0]!.valence).toBe("consumed");
+    expect(st.lines[0]!.amount).toBe(1500);
+    expect(st.carriage).toBe(0);
+    expect(typeof st.expires_at).toBe("number");
+    const which = st.lines[0]!.disclosure;
+    expect(which.merchant).toBe(st.lines[0]!.merchant);
+    expect(st.disclosures.some((d) => d.merchant === which.merchant && d.product === which.product)).toBe(true);
+
+    const lines = st.lines.map((l) => ({ candidate: l.candidate, valence: l.valence, amount: l.amount, disputed: false }));
+    const settled = await fetch(`${HUB}/api/offers/${offer.id}/settle`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ assertion: assertOver(canonicalStatement(offer.id, lines)), disputed: [] }),
+    });
+    expect(settled.status).toBe(200);
+    const receipt = (await settled.json()) as { charged: number; disputed_amount: number; confirmation: string | null };
+    expect(receipt.charged).toBe(1500);
+    expect(receipt.disputed_amount).toBe(0);
+    expect(typeof receipt.confirmation).toBe("string");
+  });
+
+  test("a disputed line is signed for and not charged, and the engine says so", async () => {
+    // §6.5. A disputed line leaves the rail: not charged here, and what is
+    // owed for it is between the household and the seller. The screen says so
+    // in words, and this is the half the engine answers for.
+    const offer = await collected("tea-a");
+    const read = await fetch(`${HUB}/api/offers/${offer.id}/statement`);
+    const st = (await read.json()) as { lines: { candidate: string; valence: string; amount: number }[] };
+    const lines = st.lines.map((l) => ({ candidate: l.candidate, valence: l.valence, amount: l.amount, disputed: true }));
+    const settled = await fetch(`${HUB}/api/offers/${offer.id}/settle`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        assertion: assertOver(canonicalStatement(offer.id, lines)),
+        disputed: st.lines.map((l) => l.candidate),
+      }),
+    });
+    expect(settled.status).toBe(200);
+    const receipt = (await settled.json()) as { charged: number; disputed_amount: number };
+    expect(receipt.charged).toBe(0);
+    expect(receipt.disputed_amount).toBe(1200);
+  });
+
+  test("an unsigned statement is refused, so the screen cannot settle by asking", async () => {
+    const offer = await collected("tea-c");
+    const settled = await fetch(`${HUB}/api/offers/${offer.id}/settle`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    expect(settled.status).toBe(422);
+    expect(((await settled.json()) as { error: string }).error).toBe("statement_unsigned");
   });
 });
 

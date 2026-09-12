@@ -11,7 +11,7 @@
  * confirmation is the passkey's assertion over the set (§10.5), made by the
  * browser's own authenticator. This page never sees a private key.
  */
-import { challengeFor, type Decision } from "../shared/canonical.js";
+import { canonicalStatement, challengeFor, type Decision, type StatementLine } from "../shared/canonical.js";
 import { canonicalMandate, type Mandate } from "../shared/mandate.js";
 import { fromBase64, spkiToPem, toBase64, toBase64Url } from "../shared/encoding.js";
 
@@ -47,8 +47,41 @@ type Approval = {
     is_exploration: boolean;
     alternatives: string[];
     argument_against: string;
+    /** §10a.5. Which of the blocks below governs this line. */
+    disclosure: { merchant: string; product: string | null };
   }[];
+  /** §10a. Each merchant's own text, as it composed and signed it. */
+  disclosures: { merchant: string; product: string | null; version: string; items: { label: string; value: string }[] }[];
+  /** §10a.5, §7.5b. What carriage costs, from the hub's delivery record. */
+  carriage: number | null;
   excluded: { product: string; reason: string }[];
+};
+
+/**
+ * §6.5. The statement a household signs before a physical box with goods used
+ * is charged. The collection's record proposes it; the signature is what makes
+ * a consumed line a purchase, and until it arrives nothing is charged and this
+ * presenter's next box does not come.
+ */
+type Statement = {
+  offer: string;
+  household: string;
+  expires_at: number;
+  lines: {
+    candidate: string;
+    product: string;
+    merchant: string;
+    maker: string;
+    ships: string;
+    given_by: string | null;
+    valence: "kept" | "defaulted" | "consumed";
+    quantity: number;
+    unit_price: number;
+    amount: number;
+    disclosure: { merchant: string; product: string | null };
+  }[];
+  disclosures: { merchant: string; product: string | null; version: string; items: { label: string; value: string }[] }[];
+  carriage: number | null;
 };
 
 type OfferSummary = { id: string; presenter: string; state: string; expires_at: number; giver: string | null };
@@ -172,7 +205,9 @@ async function setup() {
 async function offers(member: Member) {
   const config = await (await fetch("/config")).json() as { presenters: string[] };
   const waiting: OfferSummary[] = [];
+  const settled: OfferSummary[] = [];
   const decided: OfferSummary[] = [];
+  const unsigned: OfferSummary[] = [];
   const problems: string[] = [];
   // Clause 8. Each presenter answers for its own offers to this household and
   // never for another's. The union is made here, on the person's side.
@@ -184,7 +219,21 @@ async function offers(member: Member) {
     if (list.status !== 200) { problems.push(`${presenter}: ${list.body.message ?? list.status}`); continue; }
     for (const o of list.body.offers ?? []) {
       if (o.state === "presented") waiting.push(o);
-      if (o.state === "decided") decided.push(o);
+      if (o.state === "decided" || o.state === "expired") settled.push(o);
+    }
+  }
+  // §6.5. A box whose collection found goods used waits for the household's
+  // signature, and **it waits in the open**: from the collection until the
+  // signature it stands here, reachable, rather than being announced once and
+  // forgotten. A reminder would be the wrong instrument, because a statement
+  // does not expire; what stops is delivery, and a household that is not
+  // shown the waiting statement learns only that a box did not come.
+  for (const o of settled) {
+    const st = await api<Statement & { error?: string }>("GET", `/offers/${encodeURIComponent(o.id)}/statement`);
+    if (st.status === 200 && (st.body.lines ?? []).some((l) => l.valence === "consumed")) {
+      unsigned.push(o);
+    } else if (o.state === "decided") {
+      decided.push(o);
     }
   }
   const cards = waiting.map((o) => {
@@ -221,6 +270,17 @@ async function offers(member: Member) {
       el("div", { class: "row" }, el("span", { class: "grow" }, `From ${o.presenter}`), undo),
       said);
   });
+  // §6.5. The waiting statements, above everything else on this screen: a
+  // household that does nothing here is one whose next box will not come, and
+  // that is the one thing on this surface with a consequence attached.
+  const unsignedCards = unsigned.map((o) => {
+    const open = el("button", { class: "primary" }, "See what came back") as HTMLButtonElement;
+    open.onclick = () => statement(member, o.id);
+    return el("div", { class: "card" },
+      el("div", { class: "row" }, el("span", { class: "grow" }, `From ${o.presenter}`), open),
+      el("p", { class: "muted" }, "The route found something used. Nothing is charged until you sign, and no further box comes from this seller while it waits.")
+    );
+  });
   const settings = el("button", {}, "What you have set") as HTMLButtonElement;
   settings.onclick = () => protections(member);
   const forget = el("button", {}, "Forget this device") as HTMLButtonElement;
@@ -236,11 +296,40 @@ async function offers(member: Member) {
     el("ul", {},
       el("li", {}, "household ", el("code", {}, member.household)),
       el("li", {}, "mandate ", el("code", {}, member.mandate))),
+    ...(unsignedCards.length ? [el("h2", {}, "Waiting for your signature"), ...unsignedCards] : []),
     ...(cards.length ? cards : [el("p", {}, "Nothing is waiting for you.")]),
     ...(decidedCards.length ? [el("h2", {}, "Decided, and not yet settled"), ...decidedCards] : []),
     ...problems.map((p) => failure(p)),
     el("div", { class: "row" }, settings, forget)
   );
+}
+
+
+/**
+ * §10a, §10a.5. The block a line is governed by, drawn beside that line and
+ * nowhere else.
+ *
+ * **The hub renders and never composes.** The items come back in the
+ * merchant's own order and are drawn as they are: no shortening, no
+ * translating, no folding behind a tap, because each of those would be this
+ * surface deciding what a seller said. Which block governs a line is on the
+ * line (`disclosure`), so this looks the block up rather than guessing.
+ */
+function blockFor(
+  blocks: { merchant: string; product: string | null; items: { label: string; value: string }[] }[],
+  which: { merchant: string; product: string | null }
+): Node[] {
+  const block = blocks.find((b) => b.merchant === which.merchant && b.product === which.product);
+  if (!block) {
+    // §10a.3 refuses an offer with no block long before a screen is drawn, so
+    // this is a hub reading a response it should never receive. Saying so is
+    // better than drawing a sale with no terms beside it.
+    return [failure(`${which.merchant} sent no terms for this line.`)];
+  }
+  return [
+    el("dl", { class: "terms" },
+      ...block.items.flatMap((i) => [el("dt", {}, i.label), el("dd", {}, i.value)])),
+  ];
 }
 
 // ---- the approval screen (§10 step 3 and 4) ---------------------------------
@@ -280,6 +369,10 @@ async function approval(member: Member, offerId: string) {
       el("p", {}, el("span", { class: "muted" }, "Against taking it: "), c.argument_against),
       el("p", { class: "muted" }, "Also considered:"),
       el("ul", {}, ...c.alternatives.map((alt) => el("li", {}, alt))),
+      // §10a.5. This merchant's terms, beside this merchant's line and no
+      // other. One screen carries several sellers' blocks, and each seller
+      // answers for the whole 映像面 it appears on.
+      ...blockFor(a.disclosures ?? [], c.disclosure),
       el("div", { class: "row" }, keep, ret)
     );
   });
@@ -342,9 +435,146 @@ async function approval(member: Member, offerId: string) {
     ...(a.price_band ? [el("p", { class: "muted" }, `The giver chose a band of ${yen(a.price_band.min)} to ${yen(a.price_band.max)} (clause 23).`)] : []),
     // Clause 33. Whether the one reminder has gone, never how many remain.
     ...(a.reminded ? [el("p", { class: "muted" }, "You were reminded once. There will be no second reminder.")] : []),
+    // §10a.5, 法11条1号. The carriage is a line of its own beside the goods,
+    // never folded into a price and never the word "free". Nothing recorded
+    // is said as nothing recorded, because a screen that showed no carriage
+    // would say the price includes it.
+    el("p", { class: "muted" },
+      a.carriage === null
+        ? "Carriage: not recorded yet."
+        : a.carriage === 0
+          ? "Carriage: nothing to pay on this delivery."
+          : `Carriage: ${yen(a.carriage)}.`),
     ...cards,
     ...excluded,
     el("div", { class: "row" }, confirm, back(member)),
+    status
+  );
+}
+
+// ---- the settlement statement (§6.5) ----------------------------------------
+
+/**
+ * The screen a household signs a physical settlement from. Question 36.
+ *
+ * **The collection's record is a proposal and this signature is the
+ * application.** A box came back, the route wrote down what was used, and
+ * until this is signed nothing is charged and this presenter's next box does
+ * not come. The household confirms the statement as proposed or marks
+ * consumed lines disputed and signs the rest; it cannot add a line, remove
+ * one, change an amount, or dispute a line it kept, which it signed already.
+ *
+ * A disputed line leaves the rail. That is said here in words rather than
+ * implied, because leaving the rail is not the same as owing nothing: what is
+ * owed for it is between the household and the merchant, and a screen that
+ * let a person think otherwise would be this hub answering for a contract it
+ * is not party to (clause 54).
+ */
+async function statement(member: Member, offerId: string) {
+  const got = await api<Statement & { error?: string; message?: string }>("GET", `/offers/${encodeURIComponent(offerId)}/statement`);
+  if (got.status !== 200) {
+    show(el("h1", {}, "Atarasy"), failure(got.body.message ?? `the statement answered ${got.status}`), back(member));
+    return;
+  }
+  const st = got.body;
+  const disputed = new Set<string>();
+  const status = el("p", {});
+  const sign = el("button", { class: "primary" }, "Confirm with your passkey") as HTMLButtonElement;
+
+  const total = () =>
+    st.lines.filter((l) => !disputed.has(l.candidate)).reduce((sum, l) => sum + l.amount, 0);
+  const totalLine = el("p", {});
+  const refreshTotal = () => {
+    totalLine.textContent = `To be charged: ${yen(total())}.` +
+      (disputed.size ? ` ${disputed.size} line${disputed.size === 1 ? "" : "s"} disputed and not charged here.` : "");
+  };
+
+  const cards = st.lines.map((l) => {
+    const mark = el("button", {}, "I did not use this") as HTMLButtonElement;
+    const note = el("p", { class: "muted" }, "");
+    const paint = () => {
+      const isDisputed = disputed.has(l.candidate);
+      mark.className = isDisputed ? "chosen" : "";
+      mark.textContent = isDisputed ? "Disputed" : "I did not use this";
+      note.textContent = isDisputed
+        ? "Not charged here. What is owed for it, if anything, is between you and the seller."
+        : "";
+      refreshTotal();
+    };
+    mark.onclick = () => {
+      if (disputed.has(l.candidate)) disputed.delete(l.candidate);
+      else disputed.add(l.candidate);
+      paint();
+    };
+    const wasKept = l.valence !== "consumed";
+    return el("div", { class: "card" },
+      el("div", { class: "row" },
+        el("strong", { class: "grow" }, `${l.product} × ${l.quantity}`),
+        el("span", {}, l.given_by ? "a gift" : yen(l.amount))),
+      // Clause 10. A gift arrives at its price and is never billed, and the
+      // screen says who gave it rather than leaving a zero to be read as luck.
+      el("p", { class: "muted" },
+        l.given_by
+          ? `Given by ${l.given_by}. Never billed to you (clause 10).`
+          : `${yen(l.unit_price)} each. Sold by ${l.merchant}, made by ${l.maker}.`),
+      el("p", { class: "muted" },
+        wasKept
+          ? "You kept this when you decided. It is here because it is on the same bill."
+          : "The collection found this used."),
+      ...blockFor(st.disclosures ?? [], l.disclosure),
+      // §11.2. Only a consumed line can be disputed: a kept line is one this
+      // household signed itself.
+      ...(wasKept ? [] : [el("div", { class: "row" }, mark), note])
+    );
+  });
+  refreshTotal();
+
+  sign.onclick = async () => {
+    sign.disabled = true;
+    status.textContent = "";
+    try {
+      const lines: StatementLine[] = st.lines.map((l) => ({
+        candidate: l.candidate,
+        valence: l.valence,
+        amount: l.amount,
+        disputed: l.valence === "consumed" && disputed.has(l.candidate),
+      }));
+      const bytes = new TextEncoder().encode(canonicalStatement(st.offer, lines));
+      const assertion = await assertOver(member, new Uint8Array(bytes));
+      const settled = await api<{ charged?: number; disputed_amount?: number; error?: string; message?: string }>(
+        "POST",
+        `/offers/${encodeURIComponent(st.offer)}/settle`,
+        { assertion, disputed: [...disputed] }
+      );
+      if (settled.status !== 200) throw new Error(`${settled.body.error ?? settled.status}: ${settled.body.message ?? ""}`);
+      show(
+        el("h1", {}, "Atarasy"),
+        el("div", { class: "card" },
+          el("p", {}, `Signed. ${yen(settled.body.charged ?? 0)} charged.`),
+          ...(settled.body.disputed_amount
+            ? [el("p", { class: "muted" }, `${yen(settled.body.disputed_amount)} was disputed and is not charged here. What is owed for it, if anything, is between you and the seller.`)]
+            : [])),
+        back(member)
+      );
+    } catch (e) {
+      status.textContent = (e as Error).message;
+      sign.disabled = false;
+    }
+  };
+
+  show(
+    el("h1", {}, "Atarasy"),
+    el("h2", {}, "What the box came back with"),
+    el("p", { class: "muted" }, "The route wrote this down. Nothing is charged until you sign it, and no further box comes from this seller while it waits."),
+    el("p", { class: "muted" },
+      st.carriage === null
+        ? "Carriage: not recorded."
+        : st.carriage === 0
+          ? "Carriage: nothing to pay on this delivery."
+          : `Carriage: ${yen(st.carriage)}.`),
+    ...cards,
+    totalLine,
+    el("div", { class: "row" }, sign, back(member)),
     status
   );
 }
