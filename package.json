@@ -11,6 +11,7 @@
     "start": "bun run src/server.ts"
   },
   "devDependencies": {
+    "@happy-dom/global-registrator": "^20.14.5",
     "@types/bun": "^1.4.1",
     "typescript": "^7.0.2"
   }

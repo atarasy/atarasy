@@ -144,6 +144,9 @@ describe("a refusal says what happened and what the member can do", () => {
     // loosening, which needs the people the person named (clause 47).
     expect(REFUSALS.mandate_ceiling_daily!).not.toMatch(/cannot (go through|settle) today|not today|try again tomorrow/);
     expect(REFUSALS.mandate_ceiling_daily!).toContain("while that limit stands");
+    // Every household this hub creates has no co-signers, so a sentence that
+    // sends one to "the people you named" names nobody and reads as a cure.
+    expect(REFUSALS.mandate_ceiling_daily!).toContain("if you named nobody");
   });
 
   test("a refused state does not call every offer a box, nor every refusal a settlement", () => {
