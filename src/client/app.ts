@@ -373,7 +373,7 @@ async function offers(member: Member) {
 
   const card = (o: InboxOffer) => {
     const open = el("button", { class: "primary" }, "Open") as HTMLButtonElement;
-    open.onclick = () => approval(member, o.id);
+    open.onclick = () => approval(member, o.id, o.binding);
     return el("div", { class: "card" },
       el("div", { class: "row" },
         el("span", { class: "grow" }, o.giver ? `A gift from ${o.giver}, offered by ${o.presenter}` : `From ${o.presenter}`),
@@ -521,7 +521,24 @@ function blockFor(
 
 // ---- the approval screen (§10 step 3 and 4) ---------------------------------
 
-async function approval(member: Member, offerId: string) {
+/**
+ * `04b` §2.2b. **A deadline means different things in the two bindings**, and
+ * the binding is not on the approval contract, so the list row that opened
+ * this screen passes it.
+ *
+ * Digital: an undecided candidate becomes `returned` at expiry, so the person
+ * loses nothing by letting it close and a date is the right thing to show.
+ * Physical: the goods are in the home, `lost` is never billed (§3.2), and what
+ * resolves the box is the collection rather than the deadline, so **the
+ * deadline is not the person's event.** This screen said "Open until" for both
+ * until 2026-09-12, which is the same category error the list row carried and
+ * which was found by driving the screen rather than by any suite.
+ *
+ * **The expiry stays on the screen either way**, because §10a.5 counts it among
+ * the facts of the sale and a merchant's stated application period is measured
+ * against it. What changes is whether it is framed as the person's deadline.
+ */
+async function approval(member: Member, offerId: string, binding?: "digital" | "physical") {
   const got = await api<Approval & { error?: string; message?: string }>("GET", `/offers/${encodeURIComponent(offerId)}/approval`);
   if (got.status !== 200) {
     show(el("h1", {}, "Atarasy"), failure(refusal(got.body, got.status)), back(member));
@@ -640,7 +657,10 @@ async function approval(member: Member, offerId: string) {
 
   show(
     el("h1", {}, "Atarasy"),
-    el("p", {}, `Offered by ${a.presenter}. Open until ${when(a.expires_at)}.`),
+    ...(binding === "physical"
+      ? [el("p", {}, `Offered by ${a.presenter}. This box is with you: what you use is bought, and what you send back is not.`),
+         el("p", { class: "muted" }, `It was offered until ${when(a.expires_at)}.`)]
+      : [el("p", {}, `Offered by ${a.presenter}. Open until ${when(a.expires_at)}.`)]),
     el("p", { class: "muted" },
       a.mandate.kind === "standing"
         ? `Under a standing mandate: ${a.mandate.scope}, lapsing ${a.mandate.lapses_at ? when(a.mandate.lapses_at) : "never"} (clause 58).`
