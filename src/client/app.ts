@@ -835,7 +835,11 @@ async function statement(member: Member, offerId: string) {
         amount: l.amount,
         disputed: l.valence === "consumed" && disputed.has(l.candidate),
       }));
-      const bytes = new TextEncoder().encode(canonicalStatement(st.offer, lines));
+      // §6.5, question 40. What the screen showed as the carriage is inside
+      // what the passkey signs. `carriage` is null only where no delivery is
+      // recorded, and the engine refuses such a settlement before reading a
+      // signature, so 0 there signs bytes nothing can settle.
+      const bytes = new TextEncoder().encode(canonicalStatement(st.offer, st.carriage ?? 0, lines));
       const assertion = await assertOver(member, new Uint8Array(bytes));
       const settled = await api<{ charged?: number; disputed_amount?: number; error?: string; message?: string }>(
         "POST",

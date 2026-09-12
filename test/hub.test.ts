@@ -562,11 +562,15 @@ describe("the statement a household signs (§6.5)", () => {
   const STATEMENT_DOMAIN = "valence.statement.1";
   const canonicalStatement = (
     offer: string,
+    // §6.5, question 40, 2026-09-13. The carriage the screen showed is inside
+    // the bytes, between the offer id and the lines.
+    carriage: number,
     lines: { candidate: string; valence: string; amount: number; disputed: boolean }[]
   ) =>
     [
       STATEMENT_DOMAIN,
       offer,
+      String(carriage),
       ...[...lines]
         .sort((a, b) => (a.candidate < b.candidate ? -1 : a.candidate > b.candidate ? 1 : 0))
         .map((l) => `${l.candidate}:${l.valence}:${l.amount}:${l.disputed ? "disputed" : ""}`),
@@ -666,7 +670,7 @@ describe("the statement a household signs (§6.5)", () => {
     const settled = await fetch(`${HUB}/api/offers/${offer.id}/settle`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ assertion: assertOver(canonicalStatement(offer.id, lines)), disputed: [] }),
+      body: JSON.stringify({ assertion: assertOver(canonicalStatement(offer.id, 0, lines)), disputed: [] }),
     });
     expect(settled.status).toBe(200);
     const receipt = (await settled.json()) as { charged: number; disputed_amount: number; confirmation: string | null };
@@ -687,7 +691,7 @@ describe("the statement a household signs (§6.5)", () => {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        assertion: assertOver(canonicalStatement(offer.id, lines)),
+        assertion: assertOver(canonicalStatement(offer.id, 0, lines)),
         disputed: st.lines.map((l) => l.candidate),
       }),
     });
@@ -716,7 +720,7 @@ describe("the statement a household signs (§6.5)", () => {
     const settled = await fetch(`${HUB}/api/offers/${offer.id}/settle`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ assertion: assertOver(canonicalStatement(offer.id, lines)), disputed: [] }),
+      body: JSON.stringify({ assertion: assertOver(canonicalStatement(offer.id, 0, lines)), disputed: [] }),
     });
     expect(settled.status).toBe(200);
     const charged = ((await settled.json()) as { charged: number }).charged;
@@ -725,7 +729,7 @@ describe("the statement a household signs (§6.5)", () => {
     const again = await fetch(`${HUB}/api/offers/${offer.id}/settle`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ assertion: assertOver(canonicalStatement(offer.id, lines)), disputed: [] }),
+      body: JSON.stringify({ assertion: assertOver(canonicalStatement(offer.id, 0, lines)), disputed: [] }),
     });
     expect(again.status).toBe(409);
     expect(((await again.json()) as { error: string }).error).toBe("already_settled");

@@ -64,15 +64,25 @@ export type StatementLine = {
 
 export const STATEMENT_DOMAIN = "valence.statement.1";
 
-export function canonicalStatement(offerId: string, lines: StatementLine[]): string {
+export function canonicalStatement(
+  offerId: string,
+  /**
+   * §6.5, question 40, decided 2026-09-13. The carriage the screen showed,
+   * inside the bytes the passkey signs. A whole number and never null: the
+   * engine refuses a statement settlement with no delivery recorded, so a
+   * screen that has a statement has a figure.
+   */
+  carriage: number,
+  lines: StatementLine[]
+): string {
   const body = [...lines]
     .sort((a, b) => (a.candidate < b.candidate ? -1 : a.candidate > b.candidate ? 1 : 0))
     .map((l) => `${l.candidate}:${l.valence}:${l.amount}:${l.disputed ? "disputed" : ""}`);
-  return [STATEMENT_DOMAIN, offerId, ...body].join("\n");
+  return [STATEMENT_DOMAIN, offerId, String(carriage), ...body].join("\n");
 }
 
 /** §6.5, §10.5. The challenge a passkey signs for a statement. */
-export async function challengeForStatement(offerId: string, lines: StatementLine[]): Promise<Uint8Array<ArrayBuffer>> {
-  const bytes = new TextEncoder().encode(canonicalStatement(offerId, lines));
+export async function challengeForStatement(offerId: string, carriage: number, lines: StatementLine[]): Promise<Uint8Array<ArrayBuffer>> {
+  const bytes = new TextEncoder().encode(canonicalStatement(offerId, carriage, lines));
   return new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
 }

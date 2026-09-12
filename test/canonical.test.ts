@@ -37,11 +37,11 @@ describe("§10.5: the canonical form of a decided set", () => {
  */
 describe("§6.5: the canonical form of a settlement statement", () => {
   test("is the domain tag, the offer id, then one line per line in ascending candidate id", () => {
-    const text = canonicalStatement("offer-1", [
+    const text = canonicalStatement("offer-1", 500, [
       { candidate: "c-2", valence: "consumed", amount: 900, disputed: true },
       { candidate: "c-1", valence: "kept", amount: 0, disputed: false },
     ]);
-    expect(text).toBe("valence.statement.1\noffer-1\nc-1:kept:0:\nc-2:consumed:900:disputed");
+    expect(text).toBe("valence.statement.1\noffer-1\n500\nc-1:kept:0:\nc-2:consumed:900:disputed");
   });
 
   test("the domain tag is the first line and is what keeps it from verifying as a decided set", () => {
@@ -49,19 +49,22 @@ describe("§6.5: the canonical form of a settlement statement", () => {
     // the same prefix and the same four fields. The tag costs one line and
     // cannot be added once signatures are in the wild.
     expect(STATEMENT_DOMAIN).toBe("valence.statement.1");
-    expect(canonicalStatement("o", []).split("\n")[0]).toBe(STATEMENT_DOMAIN);
+    expect(canonicalStatement("o", 0, []).split("\n")[0]).toBe(STATEMENT_DOMAIN);
     expect(canonicalDecisions("o", [{ candidate: "a", valence: "returned" }]).startsWith(STATEMENT_DOMAIN)).toBe(false);
   });
 
   test("a gift is zero and an undisputed line's fourth field is empty, not missing", () => {
-    expect(canonicalStatement("o", [{ candidate: "a", valence: "kept", amount: 0, disputed: false }]))
-      .toBe("valence.statement.1\no\na:kept:0:");
+    // §6.5, question 40. The carriage is a whole number and never null here,
+    // because the engine refuses a statement settlement with no delivery
+    // recorded, and a price that includes carriage records zero.
+    expect(canonicalStatement("o", 0, [{ candidate: "a", valence: "kept", amount: 0, disputed: false }]))
+      .toBe("valence.statement.1\no\n0\na:kept:0:");
   });
 
   test("the challenge is the SHA-256 of that form, and nothing random", async () => {
     const lines = [{ candidate: "c-1", valence: "consumed" as const, amount: 1500, disputed: false }];
-    const challenge = await challengeForStatement("offer-1", lines);
-    const expected = createHash("sha256").update(canonicalStatement("offer-1", lines), "utf8").digest();
+    const challenge = await challengeForStatement("offer-1", 500, lines);
+    const expected = createHash("sha256").update(canonicalStatement("offer-1", 500, lines), "utf8").digest();
     expect(Buffer.from(challenge).equals(expected)).toBe(true);
     expect(Buffer.from(challenge).toString("base64url")).toBe(expected.toString("base64url"));
   });
