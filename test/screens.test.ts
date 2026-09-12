@@ -80,6 +80,30 @@ async function render(routes: Route, member: Record<string, unknown> | null = ME
   return settled();
 }
 
+/**
+ * What an authenticator hands back, so the one path that signs can be drawn.
+ *
+ * **The receipt had never been rendered by anything**, which all three
+ * refutation rounds said in their own words: no browser walk pressed Confirm,
+ * and no test reached past it. The engine verifies the assertion and this stub
+ * does not produce a real one, so what is proven here is what the member is
+ * shown after a settle, and not that the settle verifies.
+ */
+function stubAuthenticator() {
+  const bytes = (n: number) => new Uint8Array(n).fill(1).buffer;
+  // happy-dom's `navigator.credentials` is read-only, so it is redefined
+  // rather than assigned.
+  Object.defineProperty(globalThis.navigator, "credentials", {
+    configurable: true,
+    value: {
+      get: async () => ({
+        rawId: bytes(16),
+        response: { authenticatorData: bytes(37), clientDataJSON: bytes(64), signature: bytes(64) },
+      }),
+    },
+  });
+}
+
 /** Let the screen's own promises finish before reading what it drew. */
 async function settled() {
   for (let i = 0; i < 3; i++) await new Promise((r) => setTimeout(r, 5));
@@ -347,5 +371,79 @@ describe("the statement, as a member sees it", () => {
     const app = await openStatement();
     [...app.querySelectorAll("button")].find((b) => text(b) === "I did not use this")!.click();
     expect(text(document.getElementById("app")!)).toContain("To be charged for the goods: ¥0");
+  });
+});
+
+describe("what a member is shown after signing a statement", () => {
+  const LINE = { candidate: "c-1", product: "tea-a", merchant: "shop-x", maker: "made-by-tea", ships: "carrier-a", given_by: null, valence: "consumed", quantity: 1, unit_price: 1200, amount: 1200, disclosure: { merchant: "shop-x", product: null } };
+
+  /** The list, then the statement, then Confirm, against whatever settle answers. */
+  async function sign(onSettle: (body: unknown) => { status: number; body: unknown }, onSettlement?: () => { status: number; body: unknown }) {
+    stubAuthenticator();
+    const app = await render((url, method, body) => {
+      if (url === "/config") return { status: 200, body: CONFIG };
+      if (url.startsWith("/api/offers?")) {
+        return { status: 200, body: { offers: [offerRow({ binding: "physical", state: "decided", candidates: [{ id: "c-1", valence: "consumed" }] })] } };
+      }
+      if (url.includes("/statement")) {
+        return { status: 200, body: { offer: "o-1", household: MEMBER.household, expires_at: 9_999_999_999_999, lines: [LINE], disclosures: [STANDING], carriage: 500 } };
+      }
+      if (url.includes("/settlement")) return onSettlement ? onSettlement() : { status: 404, body: {} };
+      if (url.includes("/settle") && method === "POST") return onSettle(body);
+      return { status: 404, body: {} };
+    });
+    [...app.querySelectorAll("button")].find((b) => text(b) === "See what came back")!.click();
+    await settled();
+    [...document.querySelectorAll("button")].find((b) => text(b) === "Confirm with your passkey")!.click();
+    return text(await settled());
+  }
+
+  test("a settlement that went through says what was charged", async () => {
+    const shown = await sign(() => ({ status: 200, body: { charged: 1200, disputed_amount: 0 } }));
+    expect(shown).toContain("Signed.");
+    expect(shown).toContain("¥1,200 charged");
+  });
+
+  test("a body that could not be read never becomes a figure", async () => {
+    // **The most severe thing round three found.** `api()` hands back an empty
+    // body for a `200` that was truncated or was not JSON, and `charged ?? 0`
+    // drew "Signed. ¥0 charged." over a settlement the engine had made at its
+    // real amount. Zero is a real figure here, so the member could not tell.
+    const shown = await sign(() => ({ status: 200, body: "<html>gateway</html>" }));
+    expect(shown).toContain("could not be read");
+    expect(shown).not.toContain("¥0");
+  });
+
+  test("a box that had already settled is not told this signature settled it", async () => {
+    // The engine throws `already_settled` to say that what was just signed did
+    // not settle this box. That is true of a lost answer and equally true of a
+    // second tab that disputed a line and lost the race, and the screen told
+    // both that the signature was theirs and had settled it.
+    const shown = await sign(
+      () => ({ status: 409, body: { error: "already_settled" } }),
+      () => ({ status: 200, body: { charged: 1200, disputed_amount: 0, settled_at: 1_700_000_000_000 } })
+    );
+    expect(shown).toContain("What you just signed did not settle it");
+    expect(shown).toContain("¥1,200 was charged by the settlement that stands");
+  });
+
+  test("nothing answering is answered by reading the settlement, not by silence", async () => {
+    // The case the receipt exists for. The member was told to open the list
+    // again; a settled box is on no list, and nothing read the settlement.
+    const shown = await sign(
+      () => ({ status: 0, body: {} }),
+      () => ({ status: 200, body: { charged: 1200, disputed_amount: 0 } })
+    );
+    expect(shown).toContain("had already settled");
+    expect(shown).toContain("¥1,200");
+  });
+
+  test("nothing answering and no settlement standing is said plainly", async () => {
+    const shown = await sign(() => ({ status: 0, body: {} }), () => ({ status: 404, body: {} }));
+    // The screen stays on the statement and says so. What it must not do is
+    // draw a receipt, which would claim a settlement that may not exist.
+    expect(shown).toContain("Nothing answered");
+    expect(shown).not.toContain("Signed.");
+    expect(shown).not.toContain("had already settled");
   });
 });
