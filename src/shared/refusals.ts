@@ -43,12 +43,15 @@ export const REFUSALS: Record<string, string> = {
    * said "It cannot go through today", which promises a tomorrow the register
    * records as possibly never coming.
    *
-   * **And it sent a household to people it never named.** Every household this
-   * hub can create has no co-signers, because the screen cannot record one, so
-   * "raising a limit needs the people you named" named nobody and read as a
-   * cure. The sentence now says plainly that there may be no way to raise it.
+   * **And then it said the opposite of what the engine does.** Round three
+   * faulted it for sending a household to people it never named, and the
+   * sentence written for that said there may be no way to raise the limit.
+   * Round four measured the engine: a household with no co-signers raises and
+   * removes its own ceiling, signing alone, and is accepted. Clause 47 was
+   * amended on 2026-09-13 to say so. **Both earlier sentences were wrong in
+   * the same direction**, telling a member a door was shut that was open.
    */
-  mandate_ceiling_daily: "This is more than the daily limit you set for yourself, counting what has already settled today. It cannot settle while that limit stands, and this screen cannot raise a limit: loosening one needs the people you named when you set it, and if you named nobody there is no way to raise it here.",
+  mandate_ceiling_daily: "This is more than the daily limit you set for yourself, counting what has already settled today. It cannot settle while that limit stands. If you named nobody to hold your limits with you, you can raise it yourself on the protections screen; if you named somebody, raising it needs them.",
   /**
    * **Not here, and the gap is named rather than papered over.** The hub
    * carried `mandate_ceiling`, which neither the engine nor the

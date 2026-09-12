@@ -1039,13 +1039,16 @@ async function protections(member: Member) {
   async function write(patch: Partial<Mandate>, loosening: string | null) {
     status.textContent = "";
     try {
-      if (loosening) {
-        throw new Error(
-          loosening +
-            (current && current.co_signers.length > 0
-              ? `, and needs everyone you named: ${current.co_signers.join(", ")}`
-              : ", and this screen does not do it")
-        );
+      // Clause 47, amended 2026-09-13, and §16.1. **A loosening needs the
+      // people the mandate names, and where it names none the person's own
+      // signature is the whole of it.** This screen refused every loosening
+      // and told the member so, which was the only thing making a household
+      // stuck: measured on 2026-09-13, the engine accepts a lone loosening
+      // from a household with no co-signers, and this hub can create no other
+      // kind. Three passes and two documents had taken the refusal for the
+      // engine's rule and reasoned from it.
+      if (loosening && current && current.co_signers.length > 0) {
+        throw new Error(`${loosening}, and needs everyone you named: ${current.co_signers.join(", ")}`);
       }
       // A renewal moves the lapse later, which is a loosening, so it needs the
       // people the person named. With nobody named it is theirs alone.
@@ -1118,9 +1121,15 @@ async function protections(member: Member) {
     el("h1", {}, "Atarasy"),
     el("h2", {}, "What you have set for yourself"),
     el("p", { class: "muted" },
-      current
-        ? `Version ${current.version}. Nothing here can be loosened without the people you named (clause 47).`
-        : "Nothing yet. What you set here is yours to tighten alone, and needs the people you named to loosen."),
+      current && current.co_signers.length > 0
+        ? `Version ${current.version}. Tightening is yours alone; loosening needs everyone you named: ${current.co_signers.join(", ")} (clause 47).`
+        : current
+          // **The honest sentence for the only household this hub can make.**
+          // No co-signer can be recorded here, so nothing it sets is protected
+          // from the person who set it. Saying otherwise was the screen
+          // claiming a protection that was never there.
+          ? `Version ${current.version}. You have named nobody to hold these with you, so anything here is yours to change back at any time. Naming somebody is what would make it otherwise, and this screen cannot yet do that (clause 47).`
+          : "Nothing yet. Until you name somebody to hold them with you, anything you set here stays yours alone to change back."),
     el("div", { class: "card" },
       el("p", {}, "How long a decision waits before it can settle, and can be taken back."),
       el("div", { class: "row" }, ...coolingRow)),

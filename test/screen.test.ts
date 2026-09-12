@@ -137,16 +137,17 @@ describe("a refusal says what happened and what the member can do", () => {
     }
   });
 
-  test("the daily ceiling does not promise a tomorrow that question 39 says may never come", () => {
-    // The sentence may say what was counted today; what it may not do is
-    // frame the refusal as a wait. Where the box's own total is above the
-    // ceiling it can never be signed at that ceiling, and the cure is a
-    // loosening, which needs the people the person named (clause 47).
+  test("the daily ceiling names the cure that exists for the member reading it", () => {
+    // **Two earlier versions of this sentence were wrong in the same
+    // direction**, telling a member a door was shut that is open. It may say
+    // what was counted today; it may not frame the refusal as a wait, and it
+    // may not say there is no way to raise the limit. Measured 2026-09-13: a
+    // household with no co-signers raises and removes its own ceiling, signing
+    // alone, and the engine accepts it. Clause 47 was amended to say so.
     expect(REFUSALS.mandate_ceiling_daily!).not.toMatch(/cannot (go through|settle) today|not today|try again tomorrow/);
     expect(REFUSALS.mandate_ceiling_daily!).toContain("while that limit stands");
-    // Every household this hub creates has no co-signers, so a sentence that
-    // sends one to "the people you named" names nobody and reads as a cure.
-    expect(REFUSALS.mandate_ceiling_daily!).toContain("if you named nobody");
+    expect(REFUSALS.mandate_ceiling_daily!).not.toMatch(/no way to raise/);
+    expect(REFUSALS.mandate_ceiling_daily!).toContain("you can raise it yourself");
   });
 
   test("a refused state does not call every offer a box, nor every refusal a settlement", () => {
