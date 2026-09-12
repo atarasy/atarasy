@@ -17,6 +17,12 @@ import { fromBase64, spkiToPem, toBase64, toBase64Url } from "../shared/encoding
 // The rule that sorts a member's own list, in a module the suite can reach:
 // filing a collected box as settled was the worst thing this screen did.
 import { awaitsDecision, awaitsStatement, byArrival, type InboxOffer } from "../shared/inbox.js";
+// The sentences a refusal reads as, in a module the suite can reach: four of
+// them directed the member wrongly and nothing here could have said so.
+import { REFUSALS, refusal } from "../shared/refusals.js";
+// The judgements the screens make, separated from the drawing of them: a
+// reviewer reverted five of them at once and the suite stayed green.
+import { blocksFor, decidable, disputable, statementTotal } from "../shared/screen.js";
 
 type Member = {
   /** What the person typed. This browser's own label, and nobody else's business. */
@@ -146,8 +152,14 @@ async function api<T>(method: string, path: string, body?: unknown): Promise<{ s
   } catch {
     return { status: 0, body: {} as T };
   }
-  const text = await response.text();
+  // **The body is read inside the guard too.** A connection that drops after
+  // the headers and before the body ends rejects `text()`, and that rejection
+  // used to escape this function past both catches, with no caller holding a
+  // handler: "Loading." for ever, which is the state this function's own
+  // comment says it exists to remove. Found by a refutation pass on
+  // 2026-09-12, which is the second time this exact failure has been written.
   try {
+    const text = await response.text();
     return { status: response.status, body: (text ? JSON.parse(text) : {}) as T };
   } catch {
     return { status: response.status, body: {} as T };
@@ -167,43 +179,6 @@ function show(...nodes: (string | Node)[]) {
 
 function failure(message: string) {
   return el("div", { class: "card error" }, el("p", {}, message));
-}
-
-/**
- * What a refusal reads as.
- *
- * **The engine's message is written for the party that built against it**: it
- * names sections, and `mandate_cooling` carries a thirteen-digit epoch. A
- * member reading `mandate_cooling: this set settles at 1757700000000, after
- * the cooling window the person set` has been told nothing they can act on.
- * So each refusal this screen can provoke has a sentence here, and anything
- * unrecognised falls through to the engine's own words rather than to
- * silence: a refusal nobody wrote a sentence for is still better shown than
- * swallowed.
- */
-const REFUSALS: Record<string, string> = {
-  engine_unreachable: "The engine did not answer. Nothing was sent and nothing was decided.",
-  mandate_cooling: "You set a waiting time before a decision can settle, and this one is still inside it. It settles by itself once the time has passed; there is nothing more to sign.",
-  mandate_ceiling_daily: "This comes to more than the daily limit you set for yourself, counting everything else that settled today. It cannot go through today.",
-  mandate_ceiling: "This is above the ceiling you set for a shop outside your network.",
-  statement_unsigned: "This box cannot settle until you sign what came back with it.",
-  already_settled: "This box has already settled, and this signature was not what settled it. Nothing you just marked was recorded.",
-  already_decided: "One of these lines has already been decided, so this screen is out of date. Go back and open it again.",
-  bad_signature: "The signature did not match what was on the screen. Nothing was recorded.",
-  delivery_missing: "No delivery has been recorded for this box, so what carriage costs is not known and it cannot settle yet.",
-  not_disputable: "Only a line the collection found used can be disputed. A line you kept is one you signed for yourself.",
-  bad_state: "This box is not in a state that can settle. Go back and open the list again.",
-  config_missing: "The catalogue this offer was priced against is no longer available, so it cannot settle. Nothing was charged.",
-  no_cooling: "You have set no cooling window, so a decision is final as soon as it is signed.",
-  cooling_over: "The window has closed and the decision is final.",
-  confirmation_reused: "This confirmation has been used already. Go back and open the offer again.",
-};
-
-/** The sentence for a refusal, or the engine's own words where none is written. */
-function refusal(body: { error?: string; message?: string }, status: number): string {
-  if (status === 0) return REFUSALS.engine_unreachable!;
-  const known = body.error ? REFUSALS[body.error] : undefined;
-  return known ?? body.message ?? `this answered ${status}`;
 }
 
 const when = (ms: number) => new Date(ms).toLocaleString();
@@ -245,7 +220,14 @@ async function setup() {
             { type: "public-key", alg: -8 },
             { type: "public-key", alg: -257 },
           ],
-          authenticatorSelection: { userVerification: "required", residentKey: "preferred" },
+          // **"required", not "preferred", and the cost is named.** Coming
+          // back to a household needs a discoverable credential, because
+          // recovery asks the authenticator for any credential it holds for
+          // this site. Under "preferred" an authenticator may make one that
+          // is not discoverable, setup succeeds, and that member has no way
+          // back and no way to know. An authenticator that cannot make one
+          // now fails here instead, loudly.
+          authenticatorSelection: { userVerification: "required", residentKey: "required" },
           attestation: "none",
         },
       })) as PublicKeyCredential | null;
@@ -339,7 +321,9 @@ async function offers(member: Member) {
   try {
     presenters = ((await (await fetch("/config")).json()) as { presenters: string[] }).presenters;
   } catch {
-    show(el("h1", {}, "Atarasy"), failure(REFUSALS.engine_unreachable!), retry(member));
+    // It is this hub that did not answer, not an engine: `/config` is served
+    // here. Saying "the engine" sent the member looking in the wrong place.
+    show(el("h1", {}, "Atarasy"), failure("This page could not reach the service that serves it, so nothing could be listed. Nothing was sent."), retry(member));
     return;
   }
   const waiting: InboxOffer[] = [];
@@ -399,8 +383,27 @@ async function offers(member: Member) {
   // there is no window to take it back into, which is what the protections
   // screen is for.
   const decidedCards = decided.map((o) => {
+    // `04b` §1b.2 separates the bindings, and this was the one section that
+    // did not: a digital set the household signed sat beside a box the
+    // collection resolved, under one sentence about a window closing.
+    //
+    // **The button belongs only to the first of those.** Taking a decision
+    // back is taking back something the household signed (§16.5); a box the
+    // route resolved with nothing used carries no signed set, so offering to
+    // withdraw it offers to withdraw a commitment that was never made, and
+    // pressing it returns the box to `presented` and drops the row off this
+    // screen. Found by a refutation pass on 2026-09-12.
+    const box = o.binding === "physical";
+    const said = el("p", { class: "muted" },
+      box
+        ? "The route has resolved this box. Nothing here is waiting on you."
+        : "Decided. It settles when its window closes.");
+    if (box) {
+      return el("div", { class: "card" },
+        el("div", { class: "row" }, el("span", { class: "grow" }, `From ${o.presenter}`)),
+        said);
+    }
     const undo = el("button", {}, "Take it back") as HTMLButtonElement;
-    const said = el("p", { class: "muted" }, "Decided. It settles when its window closes.");
     undo.onclick = async () => {
       undo.disabled = true;
       const taken = await api<{ error?: string; message?: string }>("DELETE", `/offers/${encodeURIComponent(o.id)}/decisions`);
@@ -488,33 +491,21 @@ function blockFor(
   blocks: { merchant: string; product: string | null; items: { label: string; value: string }[] }[],
   which: { merchant: string; product: string | null }
 ): Node[] {
-  const standing = blocks.find((b) => b.merchant === which.merchant && b.product === null);
-  const forProduct = which.product === null
-    ? undefined
-    : blocks.find((b) => b.merchant === which.merchant && b.product === which.product);
-  if (!standing && !forProduct) {
+  const governing = blocksFor(blocks, which);
+  if (governing.length === 0) {
     // §10a.3 refuses an offer with no block long before a screen is drawn, so
     // this is a hub reading a response it should never receive. Saying so is
     // better than drawing a sale with no terms beside it.
     return [failure(`${which.merchant} sent no terms for this line.`)];
   }
-  const draw = (b: { items: { label: string; value: string }[] }) =>
-    el("dl", { class: "terms" }, ...b.items.flatMap((i) => [el("dt", {}, i.label), el("dd", {}, i.value)]));
   const nodes: Node[] = [];
-  // §10a.5. **Both blocks, and never one in the other's place.** A product
-  // block "carries only the items that differ", so drawing it alone left the
-  // payment timing, the delivery timing and the 返品特約 off the screen
-  // entirely wherever a merchant had registered one: the person signed a line
-  // whose terms they had never been shown. The product block is drawn first,
-  // because where a label appears in both it is the one that governs this
-  // line, and the two are shown as signed rather than merged.
-  if (forProduct) {
-    nodes.push(el("p", { class: "muted" }, `${which.merchant}, for this product:`));
-    nodes.push(draw(forProduct));
-  }
-  if (standing) {
-    nodes.push(el("p", { class: "muted" }, forProduct ? `${which.merchant}, in general:` : `${which.merchant}:`));
-    nodes.push(draw(standing));
+  for (const { block, scope } of governing) {
+    nodes.push(el("p", { class: "muted" },
+      scope === "product"
+        ? `${which.merchant}, for this product:`
+        : governing.length > 1 ? `${which.merchant}, in general:` : `${which.merchant}:`));
+    nodes.push(el("dl", { class: "terms" },
+      ...block.items.flatMap((i) => [el("dt", {}, i.label), el("dd", {}, i.value)])));
   }
   return nodes;
 }
@@ -556,8 +547,7 @@ async function approval(member: Member, offerId: string, binding?: "digital" | "
   // choice on every candidate and post the lot, which the engine refused with
   // `already_decided` naming a candidate id: the member could never confirm
   // the lines that were still theirs, from the only screen that offers to.
-  const open = a.candidates.filter((c) => c.valence === "offered");
-  const settled = a.candidates.filter((c) => c.valence !== "offered");
+  const { open, resolved: settled } = decidable(a.candidates);
   const refresh = () => { confirm.disabled = choices.size !== open.length || open.length === 0; };
 
   const cards = a.candidates.map((c) => {
@@ -685,7 +675,7 @@ async function approval(member: Member, offerId: string, binding?: "digital" | "
       ? [el("p", { class: "muted" },
           open.length
             ? `${settled.length} of these ${settled.length === 1 ? "line has" : "lines have"} already been settled by what the route found. ${open.length} ${open.length === 1 ? "is" : "are"} still yours to decide.`
-            : "Every line here has already been decided or found used. There is nothing left on this screen to confirm.")]
+            : "Nothing on this screen is still yours to decide. Every line has already been resolved, by you, by the route, or by the deadline passing.")]
       : []),
     ...cards,
     ...excluded,
@@ -723,8 +713,7 @@ async function statement(member: Member, offerId: string) {
   const status = el("p", {});
   const sign = el("button", { class: "primary" }, "Confirm with your passkey") as HTMLButtonElement;
 
-  const total = () =>
-    st.lines.filter((l) => !disputed.has(l.candidate)).reduce((sum, l) => sum + l.amount, 0);
+  const total = () => statementTotal(st.lines, disputed);
   const totalLine = el("p", {});
   const refreshTotal = () => {
     // §7.5b. **The total is the goods and the carriage is beside it**, and the
@@ -754,7 +743,7 @@ async function statement(member: Member, offerId: string) {
       else disputed.add(l.candidate);
       paint();
     };
-    const wasKept = l.valence !== "consumed";
+    const wasKept = !disputable(l);
     return el("div", { class: "card" },
       el("div", { class: "row" },
         el("strong", { class: "grow" }, `${l.product} × ${l.quantity}`),
