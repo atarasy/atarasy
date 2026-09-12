@@ -377,6 +377,73 @@ describe("the statement, as a member sees it", () => {
   });
 });
 
+describe("what the screen posts, which nothing read until now", () => {
+  /**
+   * **The deepest thing four refutation rounds found.** Renaming the key the
+   * settle body carries, or dropping `kept_as` from a decision, left the whole
+   * suite green against a real engine: every test read what the engine
+   * answered and none read what the screen asked. A screen that posts the
+   * wrong shape is refused by the engine at run time and by nothing here.
+   */
+  const LINE = { candidate: "c-1", product: "tea-a", merchant: "shop-x", maker: "made-by-tea", ships: "carrier-a", given_by: null, valence: "consumed", quantity: 1, unit_price: 1200, amount: 1200, disclosure: { merchant: "shop-x", product: null } };
+
+  async function capture(open: "approval" | "statement") {
+    stubAuthenticator();
+    const posted: { url: string; body: any }[] = [];
+    const app = await render((url, method, body) => {
+      if (method === "POST") posted.push({ url, body });
+      if (url === "/config") return { status: 200, body: CONFIG };
+      if (url.startsWith("/api/offers?")) {
+        return { status: 200, body: { offers: [offerRow(open === "statement"
+          ? { binding: "physical", state: "decided", candidates: [{ id: "c-1", valence: "consumed" }] }
+          : {})] } };
+      }
+      if (url.includes("/approval")) {
+        return { status: 200, body: {
+          offer: "o-1", presenter: "presenter-a", expires_at: 9_999_999_999_999, reminded: false,
+          price_band: null, mandate: { kind: "individual", scope: "this offer", lapses_at: null },
+          candidates: [candidate()], disclosures: [STANDING], carriage: 500, excluded: [],
+        } };
+      }
+      if (url.includes("/statement")) {
+        return { status: 200, body: { offer: "o-1", household: MEMBER.household, expires_at: 9_999_999_999_999, lines: [LINE], disclosures: [STANDING], carriage: 500 } };
+      }
+      if (url.includes("/decisions")) return { status: 200, body: { state: "decided" } };
+      if (url.includes("/settle")) return { status: 200, body: { charged: 1200, disputed_amount: 0 } };
+      return { status: 404, body: {} };
+    });
+    const label = open === "statement" ? "See what came back" : "Open";
+    [...app.querySelectorAll("button")].find((b) => text(b) === label)!.click();
+    await settled();
+    if (open === "approval") {
+      [...document.querySelectorAll("button")].find((b) => text(b) === "Keep")!.click();
+    }
+    [...document.querySelectorAll("button")].find((b) => text(b) === "Confirm with your passkey")!.click();
+    await settled();
+    return posted;
+  }
+
+  test("a decided set is posted as the engine reads it, kept_as included", async () => {
+    const posted = await capture("approval");
+    const sent = posted.find((p) => p.url.includes("/decisions"))!;
+    expect(sent).toBeDefined();
+    expect(sent.body.decisions).toEqual([{ candidate: "c-1", valence: "kept", kept_as: "self" }]);
+    // §10.5. The confirmation is the authenticator's assertion, under the key
+    // the engine reads it from, with all three parts present.
+    expect(Object.keys(sent.body.assertion).sort()).toEqual(["authenticator_data", "client_data_json", "signature"]);
+    for (const v of Object.values(sent.body.assertion)) expect(typeof v).toBe("string");
+  });
+
+  test("a settlement is posted as the engine reads it, with the disputed lines named", async () => {
+    const posted = await capture("statement");
+    const sent = posted.find((p) => p.url.includes("/settle"))!;
+    expect(sent).toBeDefined();
+    expect(Object.keys(sent.body).sort()).toEqual(["assertion", "disputed"]);
+    expect(sent.body.disputed).toEqual([]);
+    expect(Object.keys(sent.body.assertion).sort()).toEqual(["authenticator_data", "client_data_json", "signature"]);
+  });
+});
+
 describe("what a member is shown after signing a statement", () => {
   const LINE = { candidate: "c-1", product: "tea-a", merchant: "shop-x", maker: "made-by-tea", ships: "carrier-a", given_by: null, valence: "consumed", quantity: 1, unit_price: 1200, amount: 1200, disclosure: { merchant: "shop-x", product: null } };
 
