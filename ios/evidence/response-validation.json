@@ -1,0 +1,53 @@
+{
+  "date": "2026-09-13",
+  "baseline_commit": "e2dafaf32ba3ac5d6275e252879d92a56df8fa13",
+  "source_hashes": {
+    "contracts/ios-first/ApprovalResponse.schema.json": "9f22859e495032364f45052038d5fab54d3aae4a7d355794a56b2934327c2a9b",
+    "contracts/ios-first/ErrorResponse.schema.json": "0b6dc74f655b9286a19b398f34e2ec6e166ba725a640060c8e7456935bc7c68e",
+    "contracts/ios-first/OfferListResponse.schema.json": "f614f6320211e89ed410dea85b6f9cd4f5780655cf5e1c3199567d637056d52b",
+    "contracts/ios-first/OfferResponse.schema.json": "d28d140b1ba5607736930c208915ffa721420fa0de606fa1fe1e47c7f755e023",
+    "contracts/ios-first/README.md": "ae5eeb3d56bbef4f94855db7208f0fbf3da6413781ea4b469596291f752043f4",
+    "contracts/ios-first/RecoveryResponse.schema.json": "8e9bbd2b176bab0b5d7a637a00ad358aed0c2d3cf5d944ba9968552d67179429",
+    "contracts/ios-first/SettlementResponse.schema.json": "ed31e6e1cb378d0bccd08f4f29f851e69649c171646e20d6524a2094cc4dae3d",
+    "contracts/ios-first/openapi.json": "07f1a1de07f436b6daf9371fcb609d14f102dfe1036d6d604af265cb5d758e47",
+    "contracts/ios-first/response-examples.json": "5771001c87ec838356a1ed5065bc1285bec1027cd6339f4988dbb5e27ac25baa",
+    "ios/AtarasyCore/Sources/AtarasyCore/ReferenceResponses.swift": "b7ec2d0f0ed1f94a728885be063242267ac715c488a18b928a4a69b3f3f8c4c5",
+    "ios/AtarasyCore/Tests/AtarasyCoreTests/Fixtures/response-examples.json": "5771001c87ec838356a1ed5065bc1285bec1027cd6339f4988dbb5e27ac25baa",
+    "ios/AtarasyCore/Tests/AtarasyCoreTests/ReferenceResponseTests.swift": "2cdf9cb6d6d7af6d34981370e2506040816b9e6ba3dc6112f12a08f3d0079eea",
+    "ios/README.md": "fc393f28c737484a160a7e887cb8f803b7222038cf0ff841dbf1af655ff558d3",
+    "scripts/ios-first/capture-responses.ts": "d2cf078b4c3d602d3975644d1a4efc02e5b83ddb39b8dbf9dd5768f5dc13ff72",
+    "scripts/ios-first/validate-contracts.py": "8087aacf966e70318b9cc33ec6726cac480828505008f21429aa4c888fe91ea2",
+    "scripts/ios-first/verify-engine-responses.py": "7184953b9769b3255e007151244a1e058b9fff7386acb666fdc66b03889463bd"
+  },
+  "results": {
+    "reference_handler_responses": 27,
+    "negative_response_schema_cases": 54,
+    "schemas": 13,
+    "request_examples": 15,
+    "proposed_envelope_cases": 5,
+    "swift_tests": 12,
+    "swift_failures": 0,
+    "ios_simulator_build": "passed"
+  },
+  "logs": {
+    "response-core-tests-20260913.log": {
+      "path": "/Users/yoichirohara/Documents/atarasy-development/response-core-tests-20260913.log",
+      "sha256": "dddbccf87a9f01dd20a40060fc4cc40d83a932e479b55c748ce2bb517bc9a2ab"
+    },
+    "response-schema-tests-20260913.log": {
+      "path": "/Users/yoichirohara/Documents/atarasy-development/response-schema-tests-20260913.log",
+      "sha256": "dd37de4bc948366c51a855220c4f1acf6490ab53fcac0fdd4f40736cf31eb35d"
+    },
+    "response-ios-build-20260913.log": {
+      "path": "/Users/yoichirohara/Documents/atarasy-development/response-ios-build-20260913.log",
+      "sha256": "7739e8713fe8ec039e303a3ab9603f131232fcfecf94f24b02dc0746dff4bc73"
+    }
+  },
+  "limits": [
+    "In-process reference handler, no HTTP listener",
+    "Bare signatures with ephemeral test keys, no native authenticator",
+    "No caller authentication or provider payment tested",
+    "Swift settlement reader only; native UI remains synthetic",
+    "Prior UI evidence remains bound to its original commit; UI tests not rerun for unused decoder addition"
+  ]
+}

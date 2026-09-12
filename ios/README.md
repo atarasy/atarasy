@@ -38,3 +38,7 @@ UI tests exercise household filtering, arrival ordering, partial-source display,
 Dials/co-signer UI, account enrollment, actual AuthenticationServices, private keys/storage, host migration, operator workbench and the production coordinator are not implemented here. The schemas are an executable native request/statement subset, not all IC-01–08. The proposed integration envelope has no deployed endpoint. The separate contract README and manifest retain those distinctions.
 
 Measured results and screenshots are retained in [the validation record](evidence/validation.json).
+
+## Reference response increment
+
+The core now also decodes the pinned engine's settlement read response and preserves HTTP/refusal distinctions without treating a receipt as provider-paid. [The response pack](../contracts/ios-first/README.md) records 27 actual in-process handler responses and source provenance. The native UI still uses its original synthetic presentation model; transport, credentials and authenticated integration remain separate work. The first UI screenshots/validation record describe the earlier prototype commit, not a fresh device test of this decoder increment.

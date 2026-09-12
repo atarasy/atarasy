@@ -19,3 +19,14 @@ for f in fixtures['offers']:assert f['household'] in fixtures['households'] and 
 for n in ['canonical-vectors','fixtures']:
     assert (pack/(n+'.json')).read_bytes() == (root/'ios/AtarasyCore/Tests/AtarasyCoreTests/Fixtures'/(n+'.json')).read_bytes()
 print(json.dumps({'schemas':len(schemas),'request_examples':len(examples),'proposed_envelope_cases':5,'fixtures':'two households and two merchants; resource copies match','limits':'Structural checks only. No signature or deployed access control tested.'},indent=2))
+responses=json.loads((pack/'response-examples.json').read_text())
+negative_count=0
+for example in responses['cases']:
+    schema=schemas[example['schema']];validator=Draft202012Validator(schema)
+    validator.validate(example['value'])
+    missing=dict(example['value']);del missing[schema['required'][0]]
+    assert not validator.is_valid(missing),example['id']+' missing field'
+    assert not validator.is_valid({**example['value'],'unexpected_presentation':'<script>'}),example['id']+' extra field'
+    negative_count+=2
+assert (pack/'response-examples.json').read_bytes()==(root/'ios/AtarasyCore/Tests/AtarasyCoreTests/Fixtures/response-examples.json').read_bytes()
+print(json.dumps({'reference_responses':len(responses['cases']),'negative_response_cases':negative_count,'source_commit':responses['source']['commit'],'limits':'In-process reference handler; no transport, native credential, provider or deployed access-control verification'},indent=2))

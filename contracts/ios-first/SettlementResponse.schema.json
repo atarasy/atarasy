@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SettlementResponse",
+  "description": "Pinned reference projection. Safe-integer limits and closed fields are native contract checks, not authenticated service guarantees.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "offer": {
+      "type": "string"
+    },
+    "settled_at": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "kept_amount": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "consumed_amount": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "lost_amount": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "charged": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "disputed_amount": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "lines": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "candidate": {
+            "type": "string"
+          },
+          "product": {
+            "type": "string"
+          },
+          "merchant": {
+            "type": "string"
+          },
+          "maker": {
+            "type": "string"
+          },
+          "ships": {
+            "type": "string"
+          },
+          "valence": {
+            "enum": [
+              "offered",
+              "kept",
+              "returned",
+              "consumed",
+              "defaulted",
+              "lost"
+            ]
+          },
+          "amount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "disputed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "candidate",
+          "product",
+          "merchant",
+          "maker",
+          "ships",
+          "valence",
+          "amount",
+          "disputed"
+        ]
+      }
+    },
+    "payer": {
+      "type": "string"
+    },
+    "signed_by": {
+      "type": "string"
+    },
+    "signed_as": {
+      "enum": [
+        "agent"
+      ]
+    },
+    "receipt": {
+      "type": "string"
+    },
+    "confirmation": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "offer",
+    "settled_at",
+    "kept_amount",
+    "consumed_amount",
+    "lost_amount",
+    "charged",
+    "disputed_amount",
+    "lines",
+    "payer",
+    "signed_by",
+    "signed_as",
+    "receipt",
+    "confirmation"
+  ]
+}

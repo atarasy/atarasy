@@ -1,0 +1,290 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ApprovalResponse",
+  "description": "Pinned reference projection. Safe-integer limits and closed fields are native contract checks, not authenticated service guarantees.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "price_band": {
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "min": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "max": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "min",
+            "max"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "disclosures": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "merchant": {
+            "type": "string"
+          },
+          "product": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "version": {
+            "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "label": {
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "label",
+                "value"
+              ]
+            }
+          },
+          "signature": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "merchant",
+          "product",
+          "version",
+          "items",
+          "signature"
+        ]
+      }
+    },
+    "offer": {
+      "type": "string"
+    },
+    "presenter": {
+      "type": "string"
+    },
+    "expires_at": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "carriage": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "reminded": {
+      "type": "boolean"
+    },
+    "mandate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "standing",
+            "individual"
+          ]
+        },
+        "scope": {
+          "type": "string"
+        },
+        "lapses_at": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "scope",
+        "lapses_at"
+      ]
+    },
+    "candidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "merchant": {
+            "type": "string"
+          },
+          "maker": {
+            "type": "string"
+          },
+          "ships": {
+            "type": "string"
+          },
+          "given_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "product": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "unit_price": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "is_exploration": {
+            "type": "boolean"
+          },
+          "valence": {
+            "enum": [
+              "offered",
+              "kept",
+              "returned",
+              "consumed",
+              "defaulted",
+              "lost"
+            ]
+          },
+          "alternatives": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "argument_against": {
+            "type": "string"
+          },
+          "disclosure": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "merchant": {
+                "type": "string"
+              },
+              "product": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "merchant",
+              "product"
+            ]
+          }
+        },
+        "required": [
+          "merchant",
+          "maker",
+          "ships",
+          "given_by",
+          "id",
+          "product",
+          "quantity",
+          "unit_price",
+          "is_exploration",
+          "valence",
+          "alternatives",
+          "argument_against",
+          "disclosure"
+        ]
+      }
+    },
+    "excluded": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "product": {
+            "type": "string"
+          },
+          "reason": {
+            "enum": [
+              "auto_renewal",
+              "obstructed_cancellation",
+              "manufactured_scarcity",
+              "late_price",
+              "outside_mandate",
+              "declined_before"
+            ]
+          }
+        },
+        "required": [
+          "product",
+          "reason"
+        ]
+      }
+    }
+  },
+  "required": [
+    "price_band",
+    "disclosures",
+    "offer",
+    "presenter",
+    "expires_at",
+    "carriage",
+    "reminded",
+    "mandate",
+    "candidates",
+    "excluded"
+  ]
+}

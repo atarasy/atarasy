@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Valence iOS integration subset",
-    "version": "0.1.0-design"
+    "version": "0.2.0-design"
   },
   "x-warning": "Not a complete API or authenticated deployment; no production server URL.",
   "paths": {
@@ -21,8 +21,68 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "OfferResponse.schema.json"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "ErrorResponse.schema.json"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "ErrorResponse.schema.json"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "ErrorResponse.schema.json"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "ErrorResponse.schema.json"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "ErrorResponse.schema.json"
+                }
+              }
+            }
+          },
           "default": {
-            "description": "Exact success/refusal response pack remains incomplete; do not generate a production client from this subset."
+            "description": "Undocumented HTTP outcome or intermediary failure; retain status and do not infer success or retry a mutation."
           }
         },
         "parameters": [
@@ -36,6 +96,85 @@
             }
           }
         ]
+      },
+      "delete": {
+        "operationId": "deleteOfferResponse",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "OfferResponse.schema.json"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "ErrorResponse.schema.json"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "ErrorResponse.schema.json"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "ErrorResponse.schema.json"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "ErrorResponse.schema.json"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "ErrorResponse.schema.json"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Undocumented HTTP outcome or intermediary failure; retain status and do not infer success or retry a mutation."
+          }
+        }
       }
     },
     "/offers/{id}/settle": {
@@ -53,8 +192,68 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "SettlementResponse.schema.json"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "ErrorResponse.schema.json"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "ErrorResponse.schema.json"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "ErrorResponse.schema.json"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "ErrorResponse.schema.json"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "ErrorResponse.schema.json"
+                }
+              }
+            }
+          },
           "default": {
-            "description": "Exact success/refusal response pack remains incomplete; do not generate a production client from this subset."
+            "description": "Undocumented HTTP outcome or intermediary failure; retain status and do not infer success or retry a mutation."
           }
         },
         "parameters": [
@@ -85,8 +284,68 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "RecoveryResponse.schema.json"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "ErrorResponse.schema.json"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "ErrorResponse.schema.json"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "ErrorResponse.schema.json"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "ErrorResponse.schema.json"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "ErrorResponse.schema.json"
+                }
+              }
+            }
+          },
           "default": {
-            "description": "Exact success/refusal response pack remains incomplete; do not generate a production client from this subset."
+            "description": "Undocumented HTTP outcome or intermediary failure; retain status and do not infer success or retry a mutation."
           }
         },
         "parameters": [
@@ -100,6 +359,85 @@
             }
           }
         ]
+      },
+      "get": {
+        "operationId": "getRecoveryResponse",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "RecoveryResponse.schema.json"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "ErrorResponse.schema.json"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "ErrorResponse.schema.json"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "ErrorResponse.schema.json"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "ErrorResponse.schema.json"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "ErrorResponse.schema.json"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Undocumented HTTP outcome or intermediary failure; retain status and do not infer success or retry a mutation."
+          }
+        }
       }
     },
     "/_node/mandates": {
@@ -147,6 +485,59 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "ErrorResponse.schema.json"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "ErrorResponse.schema.json"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "ErrorResponse.schema.json"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "ErrorResponse.schema.json"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "ErrorResponse.schema.json"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Undocumented HTTP outcome or intermediary failure; retain status and do not infer success or retry a mutation."
           }
         }
       }
@@ -175,11 +566,315 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "OfferListResponse.schema.json"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "ErrorResponse.schema.json"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "ErrorResponse.schema.json"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "ErrorResponse.schema.json"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "ErrorResponse.schema.json"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "ErrorResponse.schema.json"
+                }
+              }
+            }
+          },
           "default": {
-            "description": "Offer list response and complete error schema still to be pinned."
+            "description": "Undocumented HTTP outcome or intermediary failure; retain status and do not infer success or retry a mutation."
+          }
+        }
+      }
+    },
+    "/offers/{id}": {
+      "get": {
+        "operationId": "getOfferResponse",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "OfferResponse.schema.json"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "ErrorResponse.schema.json"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "ErrorResponse.schema.json"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "ErrorResponse.schema.json"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "ErrorResponse.schema.json"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "ErrorResponse.schema.json"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Undocumented HTTP outcome or intermediary failure; retain status and do not infer success or retry a mutation."
+          }
+        }
+      }
+    },
+    "/offers/{id}/approval": {
+      "get": {
+        "operationId": "getApprovalResponse",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "ApprovalResponse.schema.json"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "ErrorResponse.schema.json"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "ErrorResponse.schema.json"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "ErrorResponse.schema.json"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "ErrorResponse.schema.json"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "ErrorResponse.schema.json"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Undocumented HTTP outcome or intermediary failure; retain status and do not infer success or retry a mutation."
+          }
+        }
+      }
+    },
+    "/offers/{id}/settlement": {
+      "get": {
+        "operationId": "getSettlementResponse",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "SettlementResponse.schema.json"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "ErrorResponse.schema.json"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "ErrorResponse.schema.json"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "ErrorResponse.schema.json"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "ErrorResponse.schema.json"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Pinned reference projection; not evidence of identity or provider payment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "ErrorResponse.schema.json"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Undocumented HTTP outcome or intermediary failure; retain status and do not infer success or retry a mutation."
           }
         }
       }
     }
-  }
+  },
+  "x-error-status-note": "Listed statuses share an envelope; not every refusal is reachable on every route. Unknown codes remain strings. Reference internal-error message is not suitable for end-user display."
 }
