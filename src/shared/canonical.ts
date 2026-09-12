@@ -43,6 +43,7 @@ export async function challengeFor(offerId: string, decisions: Decision[]): Prom
  *
  *   valence.statement.1
  *   <offer id>
+ *   <carriage>
  *   <candidate>:<valence>:<amount>:<"disputed" or empty>
  *
  * one line per kept, defaulted or consumed candidate, and per candidate the

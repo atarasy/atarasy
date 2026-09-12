@@ -8,7 +8,7 @@
 
 ## What it does
 
-Three things, and nothing the engine already does.
+The hub provides these surfaces and carries their calls to the engine.
 
 - **Serves the screen.** A single page that renders what `GET /offers/{id}/approval` returns: each candidate with its maker and its carrier (clause 12), the alternatives the agent considered and the argument against taking it (clause 59), what was left out and which published rule left it out (clause 36), and whether the one reminder has gone (clause 33). Text from data fields, in the hub's own type. The order of the candidates, the alternatives and the exclusions is the presenter's agent's, which is the one thing here a presenter chooses, and it is a list of text either way (clause 54).
 - **Confirms with a passkey.** A member's key is a passkey in the browser's own authenticator. The public half is registered at `/_identities` under two names, both derived from the credential id: the mandate reference, which confirms decided sets (§10.5), and the household's own name, which signs the protections a mandate carries (§16.1). A decided set is confirmed by the authenticator's assertion, whose challenge is the SHA-256 of the set's canonical form. The hub never sees a private key and signs nothing on anyone's behalf (clause 35).
@@ -46,7 +46,7 @@ bun test            # needs the engine: a checkout of atarasy/valence beside thi
 ## What it does not do
 
 - **It does not draft.** Candidates, alternatives and the argument against come from the agent that composed the offer, through the engine. The hub refuses to render a screen that does not carry them, and this page shows that refusal rather than filling the gap.
-- **Two protections of the three, and nothing that loosens.** The cooling window (§16.5) and the daily ceiling (§16.3) can be set here; co-signers cannot, and neither can any change that loosens what is already set. There were four until 2026-09-12, when §16.4's categories needing a second signature were withdrawn from the specification. A loosening needs everyone the person named, and this screen says who they are rather than pretending the move does not exist.
+- **Cooling and the daily ceiling can be set here; co-signers cannot be managed here.** The person may loosen these protections alone where the existing mandate names no co-signers. Where it names some, a loosening needs all of them and this screen cannot collect their signatures. The out-of-network ceiling is not editable here. Purchase co-signatures were withdrawn with §16.4 on 2026-09-12.
 - **Gifts onward.** A gift is a lineage edge signed by the giver, and §7.1 takes a bare signature, which a passkey cannot make. So this hub keeps for the household only.
 - **It does not know about an offer until a presenter it asks has presented one.** Nothing in the specification tells a hub that an offer was presented; the decided copy arrives (§13.2), the presented one does not. So this hub asks each presenter it is configured with. That is an open question in the specification's §15, added the day this was written, and it works only for presenters the person already deals with.
 - **It does not tell a presenter who a member is.** An offer names a household and a mandate, and both are the credential's id here rather than anything the person typed. How a presenter comes to know them is between the household and the presenter, outside the specification, so the screen shows the person both and leaves the handing over to them. What the person types is a label this browser keeps.
