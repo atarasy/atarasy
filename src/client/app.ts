@@ -783,16 +783,26 @@ async function statement(member: Member, offerId: string) {
         `/offers/${encodeURIComponent(st.offer)}/settle`,
         { assertion, disputed: [...disputed] }
       );
-      if (settled.status !== 200) throw new Error(refusal(settled.body, settled.status));
-      show(
-        el("h1", {}, "Atarasy"),
-        el("div", { class: "card" },
-          el("p", {}, `Signed. ${yen(settled.body.charged ?? 0)} charged.`),
-          ...(settled.body.disputed_amount
-            ? [el("p", { class: "muted" }, `${yen(settled.body.disputed_amount)} was disputed and is not charged here. What is owed for it, if anything, is between you and the seller.`)]
-            : [])),
-        back(member)
-      );
+      if (settled.status !== 200) {
+        // §6.5. **A box that has already settled is one this member may have
+        // settled themselves**, a moment ago, with an answer that never
+        // arrived. Refusing and stopping there left them charged with no
+        // screen anywhere that could say for what: the row is `settled`, so
+        // it is on no list, and signing again only repeats the refusal.
+        // Measured by a refutation pass on 2026-09-12.
+        if (settled.body.error === "already_settled") {
+          const stood = await api<Receipt & { error?: string; message?: string }>(
+            "GET",
+            `/offers/${encodeURIComponent(st.offer)}/settlement`
+          );
+          if (stood.status === 200) {
+            show(el("h1", {}, "Atarasy"), receipt(stood.body, true), back(member));
+            return;
+          }
+        }
+        throw new Error(refusal(settled.body, settled.status));
+      }
+      show(el("h1", {}, "Atarasy"), receipt(settled.body, false), back(member));
     } catch (e) {
       status.textContent = (e as Error).message;
       sign.disabled = false;
@@ -824,6 +834,29 @@ async function statement(member: Member, offerId: string) {
     el("div", { class: "row" }, sign, back(member)),
     status
   );
+}
+
+/** §6.5. What a settlement came to, as the member reads it. */
+type Receipt = { charged?: number; disputed_amount?: number; settled_at?: number };
+
+/**
+ * §6.5. What was charged, drawn identically whether this signature made it or
+ * found it already standing. **The second case is not an error to the member**:
+ * it is their own earlier act, and the only wrong answer is silence about the
+ * amount.
+ */
+function receipt(r: Receipt, stood: boolean): Node {
+  return el("div", { class: "card" },
+    el("p", {},
+      stood
+        ? `Already settled${r.settled_at ? ` on ${when(r.settled_at)}` : ""}. ${yen(r.charged ?? 0)} was charged.`
+        : `Signed. ${yen(r.charged ?? 0)} charged.`),
+    ...(stood
+      ? [el("p", { class: "muted" }, "If you signed this a moment ago and the answer never came back, this is that signature. Nothing was charged twice.")]
+      : []),
+    ...(r.disputed_amount
+      ? [el("p", { class: "muted" }, `${yen(r.disputed_amount)} was disputed and is not charged here. What is owed for it, if anything, is between you and the seller.`)]
+      : []));
 }
 
 /**

@@ -697,6 +697,44 @@ describe("the statement a household signs (§6.5)", () => {
     expect(receipt.disputed_amount).toBe(1200);
   });
 
+  test("the member can read what a settlement came to, and it adds no exposure", async () => {
+    // §6.5. A household signs, the engine settles, the answer is lost. Signing
+    // again answers `already_settled`, the row is `settled` so it is on no
+    // list, and until 2026-09-12 no screen anywhere could say what had been
+    // charged. **Carrying the read costs nothing**, which is the half that had
+    // to be checked rather than assumed: `POST .../settle` with an empty body
+    // is already carried and already returns the same record to whoever holds
+    // the id, so this is the same bytes through a verb that does not write.
+    const offer = await collected("tea-b");
+    const read = await fetch(`${HUB}/api/offers/${offer.id}/settlement`);
+    expect(read.status).toBe(404);
+
+    const st = (await (await fetch(`${HUB}/api/offers/${offer.id}/statement`)).json()) as {
+      lines: { candidate: string; valence: string; amount: number }[];
+    };
+    const lines = st.lines.map((l) => ({ candidate: l.candidate, valence: l.valence, amount: l.amount, disputed: false }));
+    const settled = await fetch(`${HUB}/api/offers/${offer.id}/settle`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ assertion: assertOver(canonicalStatement(offer.id, lines)), disputed: [] }),
+    });
+    expect(settled.status).toBe(200);
+    const charged = ((await settled.json()) as { charged: number }).charged;
+
+    // The second tab, or the same member after a lost answer.
+    const again = await fetch(`${HUB}/api/offers/${offer.id}/settle`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ assertion: assertOver(canonicalStatement(offer.id, lines)), disputed: [] }),
+    });
+    expect(again.status).toBe(409);
+    expect(((await again.json()) as { error: string }).error).toBe("already_settled");
+
+    const stood = await fetch(`${HUB}/api/offers/${offer.id}/settlement`);
+    expect(stood.status).toBe(200);
+    expect(((await stood.json()) as { charged: number }).charged).toBe(charged);
+  });
+
   test("an unsigned statement is refused, so the screen cannot settle by asking", async () => {
     const offer = await collected("tea-c");
     const settled = await fetch(`${HUB}/api/offers/${offer.id}/settle`, {

@@ -137,6 +137,21 @@ function carries(method: string, path: string): boolean {
   // the consumed lines an application rather than a third party's record.
   if (method === "GET" && parts.length === 3 && parts[0] === "offers" && parts[2] === "statement") return true;
   if (method === "POST" && parts.length === 3 && parts[0] === "offers" && parts[2] === "settle") return true;
+  // §6.5. What a settlement came to, for the household that signed it.
+  //
+  // **It adds no exposure, which is why it is here and why that had to be
+  // checked rather than assumed.** `POST .../settle` with an empty body is
+  // already carried and already returns the whole settlement record for an
+  // offer that has settled, `confirmation` included, to whoever holds the id.
+  // This is the same bytes through a verb that does not also attempt a write.
+  //
+  // **What it buys the member is the one thing the statement screen could not
+  // do.** A household signs, the engine settles, the answer is lost. Signing
+  // again answers `already_settled`, the row is `settled` so it is on no list,
+  // and until 2026-09-12 there was no screen anywhere that could say what had
+  // been charged: the member was charged and every sentence available to them
+  // said otherwise or said nothing. Measured by a refutation pass that night.
+  if (method === "GET" && parts.length === 3 && parts[0] === "offers" && parts[2] === "settlement") return true;
   // §16. The protections a person sets for themselves, and reads back.
   if (method === "POST" && parts.length === 2 && parts[0] === "_node" && parts[1] === "mandates") return true;
   if (method === "GET" && parts.length === 3 && parts[0] === "_node" && parts[1] === "mandates") return true;
