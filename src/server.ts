@@ -111,9 +111,13 @@ const MEMBER_NAME = /^(mandate|household)-[A-Za-z0-9_-]{16,}$/;
  * `GET /_node/mandates/{id}` hands the household's ceilings, cooling window
  * and co-signers to any holder of a mandate reference, which the screen tells
  * the member to give to every shop. `POST .../settle` on an offer that has
- * already settled answered with the whole settlement until the engine was
- * corrected the same day, and reading a statement is still a giver's channel
- * into whether a recipient kept a gift (clause 16, §7.2). **The narrowing
+ * already settled **still answers an unsigned body with the whole settlement**,
+ * which is the route's own idempotency for a presenter and is the same read
+ * through a route that is carried; what the engine refuses since 2026-09-12 is
+ * a signed body, which is a different problem. An earlier version of this
+ * comment said the read had been corrected, which it had not. Reading a
+ * statement is likewise a giver's channel into whether a recipient kept a
+ * gift (clause 16, §7.2). **The narrowing
  * that removes all of it is one narrowing**, an engine that authenticates a
  * caller, which the reference does not do (`08` §3 of the concept documents
  * records this as the open half of clause 53). Naming only the write was the
