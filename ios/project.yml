@@ -1,0 +1,46 @@
+name: AtarasyPrototype
+options:
+  bundleIdPrefix: dev.atarasy
+packages:
+  AtarasyCore:
+    path: AtarasyCore
+settings:
+  base:
+    SWIFT_VERSION: '6.0'
+    CODE_SIGNING_ALLOWED: NO
+    TARGETED_DEVICE_FAMILY: '1,2'
+targets:
+  AtarasyPrototype:
+    type: application
+    platform: iOS
+    deploymentTarget: '17.0'
+    sources:
+      - path: AtarasyPrototype
+      - path: ../contracts/ios-first/fixtures.json
+        buildPhase: resources
+    dependencies:
+      - package: AtarasyCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.atarasy.prototype
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
+  AtarasyPrototypeUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: '17.0'
+    sources: [AtarasyPrototypeUITests]
+    dependencies:
+      - target: AtarasyPrototype
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  AtarasyPrototype:
+    build:
+      targets:
+        AtarasyPrototype: all
+    test:
+      targets: [AtarasyPrototypeUITests]

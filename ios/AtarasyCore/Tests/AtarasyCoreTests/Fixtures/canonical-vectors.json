@@ -1,0 +1,177 @@
+[
+  {
+    "id": "decision-basic",
+    "kind": "decision",
+    "offer": "digital-a",
+    "decisions": [
+      {
+        "candidate": "b",
+        "valence": "returned"
+      },
+      {
+        "candidate": "a",
+        "valence": "kept",
+        "kept_as": "self"
+      }
+    ],
+    "canonical": "digital-a\na:kept:self:\nb:returned::",
+    "sha256": "f8483b13da000b468de999e2adc52a794b36873f851d074da5cf6a76fb957a74",
+    "challenge": "-Eg7E9oAC0aN6ZnircUqeUs2hz-FHQdNpc9qdvuVenQ"
+  },
+  {
+    "id": "decision-unicode-order",
+    "kind": "decision",
+    "offer": "unicode",
+    "decisions": [
+      {
+        "candidate": "",
+        "valence": "returned"
+      },
+      {
+        "candidate": "😀",
+        "valence": "kept",
+        "kept_as": "self"
+      },
+      {
+        "candidate": "é",
+        "valence": "returned"
+      }
+    ],
+    "canonical": "unicode\né:returned::\n😀:kept:self:\n:returned::",
+    "sha256": "cc913d1fafe07175c3d1c8af2db9a4d49550740f1bc8a92b0bc350d396282d06",
+    "challenge": "zJE9H6_gcXXD0civLbmk1JVQdA8byKkrC8NQ05YoLQY"
+  },
+  {
+    "id": "decision-normalisation-distinct",
+    "kind": "decision",
+    "offer": "unicode-distinct",
+    "decisions": [
+      {
+        "candidate": "é",
+        "valence": "returned"
+      },
+      {
+        "candidate": "é",
+        "valence": "kept",
+        "kept_as": "self"
+      }
+    ],
+    "canonical": "unicode-distinct\né:kept:self:\né:returned::",
+    "sha256": "66283c446e53ba813f2989cf0e1443bca92705d8a368b179580b532cc94e2cae",
+    "challenge": "Zig8RG5TuoE_KYnPDhRDvKknBdijaLF5WAtTLMlOLK4"
+  },
+  {
+    "id": "decision-empty",
+    "kind": "decision",
+    "offer": "empty",
+    "decisions": [],
+    "canonical": "empty",
+    "sha256": "2e1cfa82b035c26cbbbdae632cea070514eb8b773f616aaeaf668e2f0be8f10d",
+    "challenge": "Lhz6grA1wmy7va5jLOoHBRTri3c_YWqur2aOLwvo8Q0"
+  },
+  {
+    "id": "statement-carriage",
+    "kind": "statement",
+    "offer": "physical-a",
+    "carriage": 200,
+    "lines": [
+      {
+        "candidate": "b",
+        "valence": "consumed",
+        "amount": 0,
+        "disputed": false
+      },
+      {
+        "candidate": "a",
+        "valence": "consumed",
+        "amount": 600,
+        "disputed": true
+      },
+      {
+        "candidate": "c",
+        "valence": "kept",
+        "amount": 800,
+        "disputed": false
+      }
+    ],
+    "canonical": "valence.statement.1\nphysical-a\n200\na:consumed:600:disputed\nb:consumed:0:\nc:kept:800:",
+    "sha256": "955380b19ec435e6d29fb56245d27722f9b8864eb04ddd0a116287a999a9041a",
+    "challenge": "lVOAsZ7ENebSn7ViRdJ3Ivm4hk6wTd0KEWKHqZmpBBo"
+  },
+  {
+    "id": "statement-zero",
+    "kind": "statement",
+    "offer": "physical-zero",
+    "carriage": 0,
+    "lines": [
+      {
+        "candidate": "gift",
+        "valence": "consumed",
+        "amount": 0,
+        "disputed": false
+      }
+    ],
+    "canonical": "valence.statement.1\nphysical-zero\n0\ngift:consumed:0:",
+    "sha256": "30fa5e7f70330ae5e68acebe2885e8a8414d6ef6e866f741a1a6602bc77ab772",
+    "challenge": "MPpef3AzCuXmis6-KIXoqEFNbvboZvdBoaZgK8d6t3I"
+  },
+  {
+    "id": "mandate-null",
+    "kind": "mandate",
+    "mandate": {
+      "id": "mandate-fixture-a",
+      "household": "household-fixture-a",
+      "ceiling_out_of_network": 2000,
+      "ceiling_daily": null,
+      "cooling_seconds": null,
+      "co_signers": [
+        "key,b",
+        "key a",
+        "key/é"
+      ],
+      "lapses_at": 1800000000000,
+      "version": 1
+    },
+    "canonical": "mandate-fixture-a\nhousehold-fixture-a\n2000\n\n\nkey%20a,key%2Cb,key%2F%C3%A9\n1800000000000\n1",
+    "sha256": "d7f9aabe77da3b3edd52bfccb2dc55465cf83616458d8d466dd471d79f24a33c",
+    "challenge": "1_mqvnfaOz7dUr_MstxVRlz4NhZFjY1GbdRx158kozw"
+  },
+  {
+    "id": "mandate-zero",
+    "kind": "mandate",
+    "mandate": {
+      "id": "mandate-fixture-a",
+      "household": "household-fixture-a",
+      "ceiling_out_of_network": 2000,
+      "ceiling_daily": 0,
+      "cooling_seconds": 0,
+      "co_signers": [
+        "key,b",
+        "key a",
+        "key/é"
+      ],
+      "lapses_at": 1800000000000,
+      "version": 1
+    },
+    "canonical": "mandate-fixture-a\nhousehold-fixture-a\n2000\n0\n0\nkey%20a,key%2Cb,key%2F%C3%A9\n1800000000000\n1",
+    "sha256": "0d2cb8443be37f4d12f4e98981fdd1911484b0f3abc021d9f4ae03b096dfc6de",
+    "challenge": "DSy4RDvjf00S9OmJgf3RkRSEsPOrwCHZ9K4DsJbfxt4"
+  },
+  {
+    "id": "mandate-empty-signers",
+    "kind": "mandate",
+    "mandate": {
+      "id": "mandate-fixture-a",
+      "household": "household-fixture-a",
+      "ceiling_out_of_network": 2000,
+      "ceiling_daily": null,
+      "cooling_seconds": null,
+      "co_signers": [],
+      "lapses_at": 1800000000000,
+      "version": 1
+    },
+    "canonical": "mandate-fixture-a\nhousehold-fixture-a\n2000\n\n\n\n1800000000000\n1",
+    "sha256": "0e1cf0ec1803528cf826f57c4bc67553402e8043ef450cef144b69b41811587c",
+    "challenge": "Dhzw7BgDUoz4JvV8S8Z1U0AugEPvRQzvFEtptBgRWHw"
+  }
+]

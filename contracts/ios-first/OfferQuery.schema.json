@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OfferQuery",
+  "description": "Pinned native-client subset; schema validation is not authority verification or complete server conformance.",
+  "type": "object",
+  "properties": {
+    "household": {
+      "type": "string",
+      "minLength": 1
+    },
+    "presenter": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "household",
+    "presenter"
+  ],
+  "additionalProperties": false
+}

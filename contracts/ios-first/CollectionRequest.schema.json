@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CollectionRequest",
+  "description": "Pinned native-client subset; schema validation is not authority verification or complete server conformance.",
+  "type": "object",
+  "properties": {
+    "returned": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "consumed": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  },
+  "required": [
+    "returned",
+    "consumed"
+  ],
+  "additionalProperties": false
+}

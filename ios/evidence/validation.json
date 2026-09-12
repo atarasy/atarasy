@@ -1,0 +1,65 @@
+{
+  "date": "2026-09-13",
+  "scope": "Synthetic native simulator prototype; no network, authenticator or payment verification",
+  "source_hashes": "source-hashes.json",
+  "toolchain": {
+    "xcode": "27.0 (27A5252f)",
+    "swift": "6.4.0.33.1",
+    "xcodegen": "2.45.4",
+    "runtime": "iOS Simulator 27.0"
+  },
+  "results": {
+    "swift_core": {
+      "tests": 6,
+      "failures": 0
+    },
+    "canonical_vectors": {
+      "cases": 9,
+      "web_swift_pinned_engine": "matched"
+    },
+    "json_schema": {
+      "schemas": 7,
+      "request_examples": 15,
+      "proposed_envelope_cases": 5
+    },
+    "iphone_ui": {
+      "tests": 4,
+      "failures": 0
+    },
+    "ipad_ui": {
+      "tests": 4,
+      "failures": 0
+    }
+  },
+  "logs": [
+    {
+      "path": "/Users/yoichirohara/Documents/atarasy-development/core-tests-20260913.log",
+      "sha256": "701f7310a168d17d2398a5d10ada8be63c9d12d3d8504c9ec06b7995cc0c98cd"
+    },
+    {
+      "path": "/Users/yoichirohara/Documents/atarasy-development/prototype-build-tests-20260913.log",
+      "sha256": "4839b5c1a128fd5f58af2485d9c1108b625f4fb50a32c1ebd4d74f2e85b3e2a7"
+    },
+    {
+      "path": "/Users/yoichirohara/Documents/atarasy-development/prototype-phone-v4-20260913.log",
+      "sha256": "c3242c413d4fd0db3505dee15012bb74ea2d3d9d56d3158e8e3c2276cc828043"
+    },
+    {
+      "path": "/Users/yoichirohara/Documents/atarasy-development/prototype-tablet-v4-20260913.log",
+      "sha256": "2047b8eb78752db632f2665557abb080e24587fca9630001e37a6dff99654ff6"
+    }
+  ],
+  "result_bundles": [
+    "/Users/yoichirohara/Documents/atarasy-development/prototype-phone-v4-20260913.xcresult",
+    "/Users/yoichirohara/Documents/atarasy-development/prototype-tablet-v4-20260913.xcresult"
+  ],
+  "visual_review": {
+    "phone.png": "Inspected native physical statement; readable content and controls",
+    "tablet.png": "Inspected adaptive sidebar and physical statement; readable content and controls"
+  },
+  "limits": [
+    "No physical-device tests",
+    "No real passkey, authenticated service, private production store or payment",
+    "Contract subset does not complete IC-01\u201308"
+  ]
+}

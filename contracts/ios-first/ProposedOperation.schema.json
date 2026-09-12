@@ -1,0 +1,505 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ProposedOperation",
+  "description": "Unimplemented private coordinator envelope. Actor/environment derived from session. Digest must be recomputed; structural validity grants no authority.",
+  "type": "object",
+  "properties": {
+    "contract_version": {
+      "const": "integration.operation/0"
+    },
+    "client_operation_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{16,96}$"
+    },
+    "action": {
+      "type": "string",
+      "enum": [
+        "decision",
+        "statement",
+        "mandate"
+      ]
+    },
+    "target": {
+      "type": "string",
+      "minLength": 1
+    },
+    "content_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "request": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "decisions": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "candidate": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "valence": {
+                    "type": "string",
+                    "enum": [
+                      "kept",
+                      "returned"
+                    ]
+                  },
+                  "kept_as": {
+                    "type": "string",
+                    "enum": [
+                      "self",
+                      "gift",
+                      "order"
+                    ]
+                  },
+                  "lineage": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "candidate",
+                  "valence"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "assertion": {
+              "type": "object",
+              "properties": {
+                "authenticator_data": {
+                  "type": "string",
+                  "minLength": 4,
+                  "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"
+                },
+                "client_data_json": {
+                  "type": "string",
+                  "minLength": 4,
+                  "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"
+                },
+                "signature": {
+                  "type": "string",
+                  "minLength": 4,
+                  "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"
+                }
+              },
+              "required": [
+                "authenticator_data",
+                "client_data_json",
+                "signature"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "decisions",
+            "assertion"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "assertion": {
+              "type": "object",
+              "properties": {
+                "authenticator_data": {
+                  "type": "string",
+                  "minLength": 4,
+                  "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"
+                },
+                "client_data_json": {
+                  "type": "string",
+                  "minLength": 4,
+                  "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"
+                },
+                "signature": {
+                  "type": "string",
+                  "minLength": 4,
+                  "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"
+                }
+              },
+              "required": [
+                "authenticator_data",
+                "client_data_json",
+                "signature"
+              ],
+              "additionalProperties": false
+            },
+            "disputed": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "household": {
+              "type": "string",
+              "minLength": 1
+            },
+            "ceiling_out_of_network": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "ceiling_daily": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "cooling_seconds": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "co_signers": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "lapses_at": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "assertions": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "authenticator_data": {
+                    "type": "string",
+                    "minLength": 4,
+                    "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"
+                  },
+                  "client_data_json": {
+                    "type": "string",
+                    "minLength": 4,
+                    "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"
+                  },
+                  "signature": {
+                    "type": "string",
+                    "minLength": 4,
+                    "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"
+                  }
+                },
+                "required": [
+                  "authenticator_data",
+                  "client_data_json",
+                  "signature"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "id",
+            "household",
+            "ceiling_out_of_network",
+            "co_signers",
+            "lapses_at",
+            "version",
+            "assertions"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    }
+  },
+  "required": [
+    "contract_version",
+    "client_operation_id",
+    "action",
+    "target",
+    "content_sha256",
+    "request"
+  ],
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "decision"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "request": {
+            "type": "object",
+            "properties": {
+              "decisions": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "candidate": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "valence": {
+                      "type": "string",
+                      "enum": [
+                        "kept",
+                        "returned"
+                      ]
+                    },
+                    "kept_as": {
+                      "type": "string",
+                      "enum": [
+                        "self",
+                        "gift",
+                        "order"
+                      ]
+                    },
+                    "lineage": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "candidate",
+                    "valence"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "assertion": {
+                "type": "object",
+                "properties": {
+                  "authenticator_data": {
+                    "type": "string",
+                    "minLength": 4,
+                    "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"
+                  },
+                  "client_data_json": {
+                    "type": "string",
+                    "minLength": 4,
+                    "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"
+                  },
+                  "signature": {
+                    "type": "string",
+                    "minLength": 4,
+                    "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"
+                  }
+                },
+                "required": [
+                  "authenticator_data",
+                  "client_data_json",
+                  "signature"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "decisions",
+              "assertion"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "statement"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "request": {
+            "type": "object",
+            "properties": {
+              "assertion": {
+                "type": "object",
+                "properties": {
+                  "authenticator_data": {
+                    "type": "string",
+                    "minLength": 4,
+                    "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"
+                  },
+                  "client_data_json": {
+                    "type": "string",
+                    "minLength": 4,
+                    "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"
+                  },
+                  "signature": {
+                    "type": "string",
+                    "minLength": 4,
+                    "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"
+                  }
+                },
+                "required": [
+                  "authenticator_data",
+                  "client_data_json",
+                  "signature"
+                ],
+                "additionalProperties": false
+              },
+              "disputed": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "mandate"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "request": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "household": {
+                "type": "string",
+                "minLength": 1
+              },
+              "ceiling_out_of_network": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "ceiling_daily": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "cooling_seconds": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "co_signers": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "lapses_at": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "version": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "assertions": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "authenticator_data": {
+                      "type": "string",
+                      "minLength": 4,
+                      "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"
+                    },
+                    "client_data_json": {
+                      "type": "string",
+                      "minLength": 4,
+                      "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"
+                    },
+                    "signature": {
+                      "type": "string",
+                      "minLength": 4,
+                      "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"
+                    }
+                  },
+                  "required": [
+                    "authenticator_data",
+                    "client_data_json",
+                    "signature"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "id",
+              "household",
+              "ceiling_out_of_network",
+              "co_signers",
+              "lapses_at",
+              "version",
+              "assertions"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    }
+  ]
+}

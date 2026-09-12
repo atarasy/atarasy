@@ -1,0 +1,242 @@
+[
+  {
+    "id": "decision-valid-shape",
+    "schema": "NativeDecisionRequest",
+    "valid": true,
+    "value": {
+      "decisions": [
+        {
+          "candidate": "cart-a",
+          "valence": "kept",
+          "kept_as": "self"
+        },
+        {
+          "candidate": "cart-b",
+          "valence": "returned"
+        }
+      ],
+      "assertion": {
+        "authenticator_data": "QUJDRA==",
+        "client_data_json": "QUJDRA==",
+        "signature": "QUJDRA=="
+      }
+    }
+  },
+  {
+    "id": "decision-not-consumption",
+    "schema": "NativeDecisionRequest",
+    "valid": false,
+    "value": {
+      "decisions": [
+        {
+          "candidate": "cart-a",
+          "valence": "consumed"
+        }
+      ],
+      "assertion": {
+        "authenticator_data": "QUJDRA==",
+        "client_data_json": "QUJDRA==",
+        "signature": "QUJDRA=="
+      }
+    }
+  },
+  {
+    "id": "no-extra-signature",
+    "schema": "NativeDecisionRequest",
+    "valid": false,
+    "value": {
+      "decisions": [],
+      "assertion": {
+        "authenticator_data": "QUJDRA==",
+        "client_data_json": "QUJDRA==",
+        "signature": "QUJDRA=="
+      },
+      "signature": "QUJDRA=="
+    }
+  },
+  {
+    "id": "collection",
+    "schema": "CollectionRequest",
+    "valid": true,
+    "value": {
+      "returned": [
+        "physical-c"
+      ],
+      "consumed": [
+        "physical-a",
+        "physical-b"
+      ]
+    }
+  },
+  {
+    "id": "collection-cannot-carry-price",
+    "schema": "CollectionRequest",
+    "valid": false,
+    "value": {
+      "returned": [],
+      "consumed": [],
+      "amount": 500
+    }
+  },
+  {
+    "id": "empty-settle-shape",
+    "schema": "NativeSettleRequest",
+    "valid": true,
+    "value": {}
+  },
+  {
+    "id": "physical-assertion",
+    "schema": "NativeSettleRequest",
+    "valid": true,
+    "value": {
+      "assertion": {
+        "authenticator_data": "QUJDRA==",
+        "client_data_json": "QUJDRA==",
+        "signature": "QUJDRA=="
+      },
+      "disputed": [
+        "physical-a"
+      ]
+    }
+  },
+  {
+    "id": "client-cannot-post-settle-amount",
+    "schema": "NativeSettleRequest",
+    "valid": false,
+    "value": {
+      "assertion": {
+        "authenticator_data": "QUJDRA==",
+        "client_data_json": "QUJDRA==",
+        "signature": "QUJDRA=="
+      },
+      "amount": 100
+    }
+  },
+  {
+    "id": "query-needs-presenter",
+    "schema": "OfferQuery",
+    "valid": false,
+    "value": {
+      "household": "household-fixture-a"
+    }
+  },
+  {
+    "id": "query",
+    "schema": "OfferQuery",
+    "valid": true,
+    "value": {
+      "household": "household-fixture-a",
+      "presenter": "merchant-fixture-a"
+    }
+  },
+  {
+    "id": "mandate-ceiling-None",
+    "schema": "NativeMandateRequest",
+    "valid": true,
+    "value": {
+      "id": "mandate-fixture-a",
+      "household": "household-fixture-a",
+      "ceiling_out_of_network": 2000,
+      "ceiling_daily": null,
+      "cooling_seconds": null,
+      "co_signers": [],
+      "lapses_at": 1800000000000,
+      "version": 1,
+      "assertions": {
+        "fixture-key": {
+          "authenticator_data": "QUJDRA==",
+          "client_data_json": "QUJDRA==",
+          "signature": "QUJDRA=="
+        }
+      }
+    }
+  },
+  {
+    "id": "mandate-ceiling-0",
+    "schema": "NativeMandateRequest",
+    "valid": true,
+    "value": {
+      "id": "mandate-fixture-a",
+      "household": "household-fixture-a",
+      "ceiling_out_of_network": 2000,
+      "ceiling_daily": 0,
+      "cooling_seconds": null,
+      "co_signers": [],
+      "lapses_at": 1800000000000,
+      "version": 1,
+      "assertions": {
+        "fixture-key": {
+          "authenticator_data": "QUJDRA==",
+          "client_data_json": "QUJDRA==",
+          "signature": "QUJDRA=="
+        }
+      }
+    }
+  },
+  {
+    "id": "mandate-ceiling--1",
+    "schema": "NativeMandateRequest",
+    "valid": false,
+    "value": {
+      "id": "mandate-fixture-a",
+      "household": "household-fixture-a",
+      "ceiling_out_of_network": 2000,
+      "ceiling_daily": -1,
+      "cooling_seconds": null,
+      "co_signers": [],
+      "lapses_at": 1800000000000,
+      "version": 1,
+      "assertions": {
+        "fixture-key": {
+          "authenticator_data": "QUJDRA==",
+          "client_data_json": "QUJDRA==",
+          "signature": "QUJDRA=="
+        }
+      }
+    }
+  },
+  {
+    "id": "mandate-ceiling-1.2",
+    "schema": "NativeMandateRequest",
+    "valid": false,
+    "value": {
+      "id": "mandate-fixture-a",
+      "household": "household-fixture-a",
+      "ceiling_out_of_network": 2000,
+      "ceiling_daily": 1.2,
+      "cooling_seconds": null,
+      "co_signers": [],
+      "lapses_at": 1800000000000,
+      "version": 1,
+      "assertions": {
+        "fixture-key": {
+          "authenticator_data": "QUJDRA==",
+          "client_data_json": "QUJDRA==",
+          "signature": "QUJDRA=="
+        }
+      }
+    }
+  },
+  {
+    "id": "mandate-ceiling-9007199254740992",
+    "schema": "NativeMandateRequest",
+    "valid": false,
+    "value": {
+      "id": "mandate-fixture-a",
+      "household": "household-fixture-a",
+      "ceiling_out_of_network": 2000,
+      "ceiling_daily": 9007199254740992,
+      "cooling_seconds": null,
+      "co_signers": [],
+      "lapses_at": 1800000000000,
+      "version": 1,
+      "assertions": {
+        "fixture-key": {
+          "authenticator_data": "QUJDRA==",
+          "client_data_json": "QUJDRA==",
+          "signature": "QUJDRA=="
+        }
+      }
+    }
+  }
+]

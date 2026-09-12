@@ -1,0 +1,185 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Valence iOS integration subset",
+    "version": "0.1.0-design"
+  },
+  "x-warning": "Not a complete API or authenticated deployment; no production server URL.",
+  "paths": {
+    "/offers/{id}/decisions": {
+      "post": {
+        "operationId": "NativeDecisionRequest",
+        "x-status": "existing-route-native-subset",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "NativeDecisionRequest.schema.json"
+              }
+            }
+          }
+        },
+        "responses": {
+          "default": {
+            "description": "Exact success/refusal response pack remains incomplete; do not generate a production client from this subset."
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ]
+      }
+    },
+    "/offers/{id}/settle": {
+      "post": {
+        "operationId": "NativeSettleRequest",
+        "x-status": "existing-route-native-subset",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "NativeSettleRequest.schema.json"
+              }
+            }
+          }
+        },
+        "responses": {
+          "default": {
+            "description": "Exact success/refusal response pack remains incomplete; do not generate a production client from this subset."
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ]
+      }
+    },
+    "/offers/{id}/recovery": {
+      "post": {
+        "operationId": "CollectionRequest",
+        "x-status": "existing-route-native-subset",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "CollectionRequest.schema.json"
+              }
+            }
+          }
+        },
+        "responses": {
+          "default": {
+            "description": "Exact success/refusal response pack remains incomplete; do not generate a production client from this subset."
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ]
+      }
+    },
+    "/_node/mandates": {
+      "post": {
+        "operationId": "NativeMandateRequest",
+        "x-status": "existing-route-native-subset",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "NativeMandateRequest.schema.json"
+              }
+            }
+          }
+        },
+        "responses": {
+          "default": {
+            "description": "Exact success/refusal response pack remains incomplete; do not generate a production client from this subset."
+          }
+        }
+      }
+    },
+    "/offers/{id}/statement": {
+      "get": {
+        "operationId": "readStatement",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Existing statement projection; challenge does not authorise null carriage.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "StatementResponse.schema.json"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/offers": {
+      "get": {
+        "operationId": "listOffers",
+        "parameters": [
+          {
+            "name": "household",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "presenter",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Offer list response and complete error schema still to be pinned."
+          }
+        }
+      }
+    }
+  }
+}
