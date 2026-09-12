@@ -158,6 +158,7 @@ describe("the list, as a member sees it", () => {
     expect(heads).toEqual(["Waiting for your signature", "Boxes with you now", "Offered to you"]);
     // §11. A box is not a draft, and one sentence used to cover both.
     expect(text(app)).toContain("This box is with you");
+    expect(text(app)).toContain("The route comes for it on");
     expect(text(app)).toContain("Nothing is ordered if you do nothing");
   });
 
@@ -270,7 +271,10 @@ describe("the approval, as a member sees it", () => {
     [...physical.querySelectorAll("button")].find((b) => text(b) === "Open")!.click();
     const box = text(await settled());
     expect(box).toContain("This box is with you");
-    expect(box).toContain("It was offered until");
+    // Question 44. One date, in the swap's words, carrying the expiry §10a.5
+    // needs and not reading as the person's deadline.
+    expect(box).toContain("The route comes for it on");
+    expect(box).toContain("which is when this offer closes");
     expect(box).not.toContain("Open until");
 
     const digital = await open([candidate()]);

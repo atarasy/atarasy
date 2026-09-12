@@ -368,9 +368,16 @@ async function offers(member: Member) {
       // home, and what is used is bought whether or not this screen is ever
       // opened, so telling its owner that doing nothing orders nothing is
       // false about the one row where it matters.
+      // `04b` §1b.3, §2.2b, question 44 decided 2026-09-13. **The date a box's
+      // owner needs is the swap, and it is the offer's expiry.** The engine
+      // opens the recovery with the offer's own expiry as its due date, so the
+      // two are one number wearing two names; what §2.2b asks for is not a
+      // second figure but a second sentence, the route coming rather than a
+      // deadline the person loses something by missing. The row had the
+      // sentence and no date at all.
       el("p", { class: "muted" },
         o.binding === "physical"
-          ? "This box is with you. What you use is bought; what you send back is not."
+          ? `This box is with you. What you use is bought; what you send back is not. The route comes for it on ${when(o.expires_at)}, which is when this offer closes.`
           : `Waiting until ${when(o.expires_at)}. Nothing is ordered if you do nothing.`)
     );
   };
@@ -674,7 +681,11 @@ async function approval(member: Member, offerId: string, binding?: "digital" | "
     el("h1", {}, "Atarasy"),
     ...(binding === "physical"
       ? [el("p", {}, `Offered by ${a.presenter}. This box is with you: what you use is bought, and what you send back is not.`),
-         el("p", { class: "muted" }, `It was offered until ${when(a.expires_at)}.`)]
+         // §10a.5 counts the expiry among the facts of the sale, because a
+         // merchant's stated application period is measured against it, and
+         // §2.2b says a box's owner should not read it as their deadline. One
+         // date, said once, carrying both.
+         el("p", { class: "muted" }, `The route comes for it on ${when(a.expires_at)}, which is when this offer closes.`)]
       : [el("p", {}, `Offered by ${a.presenter}. Open until ${when(a.expires_at)}.`)]),
     el("p", { class: "muted" },
       a.mandate.kind === "standing"
