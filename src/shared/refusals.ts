@@ -58,6 +58,14 @@ export const REFUSALS: Record<string, string> = {
   delivery_missing: "No delivery has been recorded for this box, so what carriage costs is not known and it cannot settle yet.",
   not_disputable: "Only a line the collection found used can be disputed. A line you kept is one you signed for yourself.",
   /**
+   * §16.5, question 43, decided 2026-09-13. A box the route resolved
+   * carries no signed set, so there is nothing to withdraw. **This sentence
+   * is ahead of the engine**, which does not send the code yet: the screen
+   * stopped offering the button on 2026-09-12 and the engine change is
+   * queued behind a mutation sweep. It is here so the two land together.
+   */
+  not_withdrawable: "There is nothing here to take back. This box was resolved by the collection rather than by a decision you signed.",
+  /**
    * Thrown by `settle`, by `decide` on an offer that closed while the screen
    * was open, and by a take-back on an offer that moved on. The sentence said
    * "This box is not in a state that can settle", which names the wrong event

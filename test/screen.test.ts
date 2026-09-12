@@ -105,7 +105,7 @@ describe("a refusal says what happened and what the member can do", () => {
     for (const code of [
       "mandate_cooling", "mandate_ceiling_daily", "mandate_ceiling", "statement_unsigned",
       "already_settled", "already_decided", "bad_signature", "delivery_missing",
-      "not_disputable", "bad_state", "config_missing", "no_cooling", "cooling_over",
+      "not_disputable", "not_withdrawable", "bad_state", "config_missing", "no_cooling", "cooling_over",
       "confirmation_reused", "engine_unreachable",
     ]) {
       expect(typeof REFUSALS[code]).toBe("string");
