@@ -271,7 +271,7 @@ async function setup() {
    * could sign for. Found by a refutation pass over this hub.
    *
    * An empty `allowCredentials` asks the authenticator for any credential it
-   * holds for this site, which is what `residentKey: "preferred"` above makes
+   * holds for this site, which is what `residentKey: "required"` above makes
    * possible. Nothing is registered here: the key is already the one the
    * engine knows, and re-registering would be refused (clause 22).
    */
@@ -393,11 +393,27 @@ async function offers(member: Member) {
     // withdraw it offers to withdraw a commitment that was never made, and
     // pressing it returns the box to `presented` and drops the row off this
     // screen. Found by a refutation pass on 2026-09-12.
-    const box = o.binding === "physical";
+    // §16.5. **The button belongs to a set the household signed, and the
+    // binding is not that fact.** A physical box reaches this state two ways:
+    // a collection resolving its last line, which nobody signed, and the
+    // household answering the box on the approval, which is a signed set the
+    // specification says keeps the window's whole meaning. Judging by binding
+    // denied the take-back to exactly that box and told its owner the route
+    // had resolved it. A `kept` line is producible only by a signed decision,
+    // so it is the fact to read. **The residue is named**: a box the household
+    // answered by returning everything looks like a collection that returned
+    // everything, and only the engine's confirmation register tells them
+    // apart, which question 43 puts on the row.
+    const box = o.binding === "physical" && !o.candidates.some((c) => c.valence === "kept");
     const said = el("p", { class: "muted" },
       box
         ? "The route has resolved this box. Nothing here is waiting on you."
-        : "Decided. It settles when its window closes.");
+        // **Nothing settles when a window closes.** The engine has no
+        // scheduler: a digital set settles when the presenter asks it to, and
+        // a cooling window only stops that happening sooner. This was the
+        // sentence family refuted in `mandate_cooling` the day before, sitting
+        // one screen over where the module's own test cannot see it.
+        : "Decided. It is the shop's to settle now; what you can still do is take it back.");
     if (box) {
       return el("div", { class: "card" },
         el("div", { class: "row" }, el("span", { class: "grow" }, `From ${o.presenter}`)),
@@ -531,8 +547,17 @@ function blockFor(
  */
 async function approval(member: Member, offerId: string, binding?: "digital" | "physical") {
   const got = await api<Approval & { error?: string; message?: string }>("GET", `/offers/${encodeURIComponent(offerId)}/approval`);
-  if (got.status !== 200) {
-    show(el("h1", {}, "Atarasy"), failure(refusal(got.body, got.status)), back(member));
+  // **A status is not a body.** `api()` stopped throwing on a body it could
+  // not read, and hands back `{}` with the status it got, so a `200` from a
+  // captive portal or a truncated response reached the renderer and threw a
+  // `TypeError` inside an `onclick` with no handler: the button did nothing,
+  // silently, which is the defect the rewrite was said to have removed. It had
+  // moved up one level. Found by a third refutation round on 2026-09-13.
+  if (got.status !== 200 || !Array.isArray(got.body.candidates)) {
+    show(el("h1", {}, "Atarasy"), failure(
+      got.status === 200
+        ? "This offer came back in a form this screen could not read. Nothing was decided."
+        : refusal(got.body, got.status)), back(member));
     return;
   }
   const a = got.body;
@@ -674,7 +699,7 @@ async function approval(member: Member, offerId: string, binding?: "digital" | "
     ...(settled.length
       ? [el("p", { class: "muted" },
           open.length
-            ? `${settled.length} of these ${settled.length === 1 ? "line has" : "lines have"} already been settled by what the route found. ${open.length} ${open.length === 1 ? "is" : "are"} still yours to decide.`
+            ? `${settled.length} of these ${settled.length === 1 ? "line is" : "lines are"} already resolved by what the route found. ${open.length} ${open.length === 1 ? "is" : "are"} still yours to decide.`
             : "Nothing on this screen is still yours to decide. Every line has already been resolved, by you, by the route, or by the deadline passing.")]
       : []),
     ...cards,
@@ -704,8 +729,11 @@ async function approval(member: Member, offerId: string, binding?: "digital" | "
  */
 async function statement(member: Member, offerId: string) {
   const got = await api<Statement & { error?: string; message?: string }>("GET", `/offers/${encodeURIComponent(offerId)}/statement`);
-  if (got.status !== 200) {
-    show(el("h1", {}, "Atarasy"), failure(refusal(got.body, got.status)), back(member));
+  if (got.status !== 200 || !Array.isArray(got.body.lines)) {
+    show(el("h1", {}, "Atarasy"), failure(
+      got.status === 200
+        ? "What came back with this box came back in a form this screen could not read. Nothing was signed."
+        : refusal(got.body, got.status)), back(member));
     return;
   }
   const st = got.body;
@@ -800,6 +828,22 @@ async function statement(member: Member, offerId: string) {
             return;
           }
         }
+        // **Nothing answered, and the signature may still have settled the
+        // box.** This is the case the receipt above exists for, and it could
+        // not be reached: the member was told to open the list again, a
+        // settled box is on no list, and nothing read the settlement. Asking
+        // once here is what turns "this may or may not have gone through"
+        // into an answer. Found by a third refutation round on 2026-09-13.
+        if (settled.status === 0) {
+          const stood = await api<Receipt & { error?: string }>(
+            "GET",
+            `/offers/${encodeURIComponent(st.offer)}/settlement`
+          );
+          if (stood.status === 200) {
+            show(el("h1", {}, "Atarasy"), receipt(stood.body, true), back(member));
+            return;
+          }
+        }
         throw new Error(refusal(settled.body, settled.status));
       }
       show(el("h1", {}, "Atarasy"), receipt(settled.body, false), back(member));
@@ -840,19 +884,39 @@ async function statement(member: Member, offerId: string) {
 type Receipt = { charged?: number; disputed_amount?: number; settled_at?: number };
 
 /**
- * §6.5. What was charged, drawn identically whether this signature made it or
- * found it already standing. **The second case is not an error to the member**:
- * it is their own earlier act, and the only wrong answer is silence about the
- * amount.
+ * §6.5. What was charged.
+ *
+ * **A missing amount is not zero, and this printed one.** `api()` hands back
+ * an empty body for a `200` whose body was truncated on the wire or was not
+ * JSON, and `charged ?? 0` then drew "Signed. ¥0 charged." over a settlement
+ * the engine had made at its real figure. Zero is a real amount here, every
+ * line disputed or every line a gift, so the member could not tell the two
+ * apart and the screen had invented a number it never received.
+ *
+ * **`stood` is not the member's own signature, and the sentence said it was.**
+ * The engine throws `already_settled` for exactly one reason: a signed body
+ * arrived and a settlement already stood, so what was just signed did not
+ * settle this box. That is true of a lost answer, where the standing
+ * settlement is the member's own earlier act, and equally true of a second tab
+ * that disputed a line and lost the race. Telling the second tab that its
+ * signature is what settled the box is the thing the engine's refusal exists
+ * to prevent. So the sentence says what the engine said.
  */
 function receipt(r: Receipt, stood: boolean): Node {
+  const amount = typeof r.charged === "number" ? yen(r.charged) : null;
   return el("div", { class: "card" },
     el("p", {},
       stood
-        ? `Already settled${r.settled_at ? ` on ${when(r.settled_at)}` : ""}. ${yen(r.charged ?? 0)} was charged.`
-        : `Signed. ${yen(r.charged ?? 0)} charged.`),
+        ? `This box had already settled${r.settled_at ? `, on ${when(r.settled_at)}` : ""}. What you just signed did not settle it.`
+        : "Signed."),
+    el("p", {},
+      amount === null
+        ? "The amount could not be read back, so this screen cannot say what was charged. Nothing here means it was nothing."
+        : stood
+          ? `${amount} was charged by the settlement that stands.`
+          : `${amount} charged.`),
     ...(stood
-      ? [el("p", { class: "muted" }, "If you signed this a moment ago and the answer never came back, this is that signature. Nothing was charged twice.")]
+      ? [el("p", { class: "muted" }, "If you signed this a moment ago and the answer never came back, that signature is the one that stands. Nothing was charged twice.")]
       : []),
     ...(r.disputed_amount
       ? [el("p", { class: "muted" }, `${yen(r.disputed_amount)} was disputed and is not charged here. What is owed for it, if anything, is between you and the seller.`)]
@@ -1015,6 +1079,14 @@ async function protections(member: Member) {
       el("div", { class: "row" }, ...coolingRow)),
     el("div", { class: "card" },
       el("p", {}, "The most that may be settled for you in one day, across every shop."),
+      // §16.3, question 39, decided 2026-09-13. **A ceiling can stop a box
+      // settling and not merely delay it**, because since §6.5 the household
+      // is the party that presses the button and a box whose used goods come
+      // to more than the ceiling can never be signed at that ceiling. The
+      // specification makes saying so a requirement on this surface, and the
+      // requirement shipped in the refusal and not here, where a person
+      // chooses the number.
+      el("p", { class: "muted" }, "A ceiling can stop a box settling altogether, not just delay it: if what you used in one box comes to more than this, it cannot settle until the ceiling is raised, and raising one needs the people you named."),
       el("div", { class: "row" }, ...dailyRow)),
     // Clause 58, clause 46. What the person is signing besides the button they
     // pressed. A screen that hides the rest of the record asks for a signature

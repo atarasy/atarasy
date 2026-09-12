@@ -52,7 +52,7 @@ The engine needs `VALENCE_RP_ID` set to the hostname the page is opened at, beca
 - **Telling the hub an offer was presented.** The specification's §13.2 sends the hub the decided copy and not the presented one, so this hub asks each presenter it is configured with. It is an open question in `SPEC.md` §15; a change there comes first.
 - **Gifts onward.** `kept_as: "gift"` needs a lineage edge, and the screen keeps for the household only (`self`).
 - **Every protection but the cooling window and the daily ceiling** (§16): no co-signers, and so nothing that loosens, which is the half clause 47 says needs the people a person named. The categories needing a second signature were here until 2026-09-12, when §16.4 was withdrawn.
-- **Anything of the physical binding.** This is the digital binding's screen.
+- ~~**Anything of the physical binding.** This is the digital binding's screen.~~ **Built 2026-09-12**, and this line was still here on 2026-09-13 in a file whose own paragraph above describes driving the statement screen for a physical box. The screen now lists boxes apart from digital offers, renders the settlement statement a household signs, asks only about the lines a collection has left open, and frames a box's expiry as a fact rather than as the person's deadline. **What is still missing of it is the collection date**, which no surface carries: that is question 44 of the concept documents.
 
 ## What a passkey can and cannot sign, which is the shape of this whole hub
 

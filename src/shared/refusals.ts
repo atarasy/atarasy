@@ -44,7 +44,17 @@ export const REFUSALS: Record<string, string> = {
    * records as possibly never coming.
    */
   mandate_ceiling_daily: "This is more than the daily limit you set for yourself, counting what has already settled today. It cannot settle while that limit stands, and raising a limit needs the people you named.",
-  mandate_ceiling: "This is above the ceiling you set for a shop outside your network.",
+  /**
+   * **Not here, and the gap is named rather than papered over.** The hub
+   * carried `mandate_ceiling`, which neither the engine nor the
+   * specification uses: the engine throws `over_ceiling` and §16.6 names
+   * it `mandate_ceiling_out_of_network`, so one refusal had three names
+   * and the hub's was nobody's. It is also unreachable from any screen,
+   * because the ceiling refuses at presentation, which is the presenter's
+   * call. A sentence for a code that cannot arrive is dead text a test
+   * then asserts. The engine and the specification disagreeing is the
+   * engine's to fix and is queued with the rest.
+   */
   statement_unsigned: "This box cannot settle until you sign what came back with it.",
   /**
    * §6.5. It is also what a household sees when its own signature went

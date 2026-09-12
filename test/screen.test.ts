@@ -103,7 +103,7 @@ describe("§6.5: what the statement says will be charged", () => {
 describe("a refusal says what happened and what the member can do", () => {
   test("every code the screen can provoke has a sentence", () => {
     for (const code of [
-      "mandate_cooling", "mandate_ceiling_daily", "mandate_ceiling", "statement_unsigned",
+      "mandate_cooling", "mandate_ceiling_daily", "statement_unsigned",
       "already_settled", "already_decided", "bad_signature", "delivery_missing",
       "not_disputable", "not_withdrawable", "bad_state", "config_missing", "no_cooling", "cooling_over",
       "confirmation_reused", "engine_unreachable",
