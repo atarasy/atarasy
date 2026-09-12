@@ -14,6 +14,9 @@
 import { canonicalStatement, challengeFor, type Decision, type StatementLine } from "../shared/canonical.js";
 import { canonicalMandate, type Mandate } from "../shared/mandate.js";
 import { fromBase64, spkiToPem, toBase64, toBase64Url } from "../shared/encoding.js";
+// The rule that sorts a member's own list, in a module the suite can reach:
+// filing a collected box as settled was the worst thing this screen did.
+import { awaitsDecision, awaitsStatement, byArrival, type InboxOffer } from "../shared/inbox.js";
 
 type Member = {
   /** What the person typed. This browser's own label, and nobody else's business. */
@@ -43,7 +46,23 @@ type Approval = {
     quantity: number;
     unit_price: number;
     merchant: string;
+    /**
+     * Clause 12. **Who made it, which is not who sold it.** This type had no
+     * `maker` and the card printed "Made by ${c.merchant}", so the screen a
+     * person signs from named the seller as the maker while the statement
+     * screen beside it named the real one: two screens, two makers, one line.
+     * Question 32 made them different parties on 2026-09-12.
+     */
+    maker: string;
     ships: string;
+    /**
+     * Clause 10, §6.2. A gift is never billed, and this card used to print
+     * `unit_price × quantity` beside every line with nothing naming a giver,
+     * so a person was asked to sign without being told which lines cost money.
+     */
+    given_by: string | null;
+    /** §10 step 3c. `offered` is a line still this household's to decide. */
+    valence: string;
     is_exploration: boolean;
     alternatives: string[];
     argument_against: string;
@@ -84,8 +103,6 @@ type Statement = {
   carriage: number | null;
 };
 
-type OfferSummary = { id: string; presenter: string; state: string; expires_at: number; giver: string | null };
-
 /** Clause 36, §10 step 3. The published rules, in words a person reads. */
 const RULES: Record<string, string> = {
   auto_renewal: "it carries an auto-renewing subscription",
@@ -108,14 +125,33 @@ function load(): Member | null {
   }
 }
 
+/**
+ * Every call the screen makes.
+ *
+ * **It never throws**, and that is the point. A rejected fetch or a body that
+ * is not JSON used to come out of here as an exception, and the only handler
+ * above it was the one around a signature: the list drew "Loading." for ever
+ * when this hub was down or answered HTML, which is the one state a member
+ * cannot tell from an empty inbox. Status `0` is "nothing answered", and every
+ * caller already checks the status.
+ */
 async function api<T>(method: string, path: string, body?: unknown): Promise<{ status: number; body: T }> {
-  const response = await fetch(`/api${path}`, {
-    method,
-    headers: body === undefined ? {} : { "content-type": "application/json" },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
+  let response: Response;
+  try {
+    response = await fetch(`/api${path}`, {
+      method,
+      headers: body === undefined ? {} : { "content-type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  } catch {
+    return { status: 0, body: {} as T };
+  }
   const text = await response.text();
-  return { status: response.status, body: (text ? JSON.parse(text) : {}) as T };
+  try {
+    return { status: response.status, body: (text ? JSON.parse(text) : {}) as T };
+  } catch {
+    return { status: response.status, body: {} as T };
+  }
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, attrs: Record<string, string> = {}, ...children: (string | Node)[]) {
@@ -131,6 +167,43 @@ function show(...nodes: (string | Node)[]) {
 
 function failure(message: string) {
   return el("div", { class: "card error" }, el("p", {}, message));
+}
+
+/**
+ * What a refusal reads as.
+ *
+ * **The engine's message is written for the party that built against it**: it
+ * names sections, and `mandate_cooling` carries a thirteen-digit epoch. A
+ * member reading `mandate_cooling: this set settles at 1757700000000, after
+ * the cooling window the person set` has been told nothing they can act on.
+ * So each refusal this screen can provoke has a sentence here, and anything
+ * unrecognised falls through to the engine's own words rather than to
+ * silence: a refusal nobody wrote a sentence for is still better shown than
+ * swallowed.
+ */
+const REFUSALS: Record<string, string> = {
+  engine_unreachable: "The engine did not answer. Nothing was sent and nothing was decided.",
+  mandate_cooling: "You set a waiting time before a decision can settle, and this one is still inside it. It settles by itself once the time has passed; there is nothing more to sign.",
+  mandate_ceiling_daily: "This comes to more than the daily limit you set for yourself, counting everything else that settled today. It cannot go through today.",
+  mandate_ceiling: "This is above the ceiling you set for a shop outside your network.",
+  statement_unsigned: "This box cannot settle until you sign what came back with it.",
+  already_settled: "This box has already settled, and this signature was not what settled it. Nothing you just marked was recorded.",
+  already_decided: "One of these lines has already been decided, so this screen is out of date. Go back and open it again.",
+  bad_signature: "The signature did not match what was on the screen. Nothing was recorded.",
+  delivery_missing: "No delivery has been recorded for this box, so what carriage costs is not known and it cannot settle yet.",
+  not_disputable: "Only a line the collection found used can be disputed. A line you kept is one you signed for yourself.",
+  bad_state: "This box is not in a state that can settle. Go back and open the list again.",
+  config_missing: "The catalogue this offer was priced against is no longer available, so it cannot settle. Nothing was charged.",
+  no_cooling: "You have set no cooling window, so a decision is final as soon as it is signed.",
+  cooling_over: "The window has closed and the decision is final.",
+  confirmation_reused: "This confirmation has been used already. Go back and open the offer again.",
+};
+
+/** The sentence for a refusal, or the engine's own words where none is written. */
+function refusal(body: { error?: string; message?: string }, status: number): string {
+  if (status === 0) return REFUSALS.engine_unreachable!;
+  const known = body.error ? REFUSALS[body.error] : undefined;
+  return known ?? body.message ?? `this answered ${status}`;
 }
 
 const when = (ms: number) => new Date(ms).toLocaleString();
@@ -155,7 +228,16 @@ async function setup() {
         publicKey: {
           challenge: crypto.getRandomValues(new Uint8Array(32)),
           rp: { name: "Atarasy", id: location.hostname },
-          user: { id: new TextEncoder().encode(label), name: label, displayName: label },
+          // **The handle is random, and it used to be the label the person
+          // typed.** WebAuthn replaces a credential that shares an `rp.id` and
+          // a `user.id`, so two people on one authenticator picking the same
+          // name, or one person setting up twice, destroyed the earlier key:
+          // the engine keeps the first key registered for a name and refuses a
+          // later, different one (clause 22), so that household's decisions
+          // could never be confirmed again by anything. A random handle makes
+          // each setup its own account and leaves recovery to the discoverable
+          // credential below, which is what actually carries the household.
+          user: { id: crypto.getRandomValues(new Uint8Array(32)), name: label, displayName: label },
           // ES256 first, because that is what most phones and laptops carry;
           // EdDSA and RS256 after it. The engine checks by the registered key's type.
           pubKeyCredParams: [
@@ -183,7 +265,7 @@ async function setup() {
       const pem = spkiToPem(spki);
       for (const key of [mandate, household]) {
         const registered = await api<{ error?: string; message?: string }>("POST", "/_identities", { key, public_key: pem });
-        if (registered.status !== 201) throw new Error(registered.body.message ?? `registering ${key} answered ${registered.status}`);
+        if (registered.status !== 201) throw new Error(refusal(registered.body, registered.status));
       }
       const member: Member = { label, household, mandate, credential_id: credentialId };
       localStorage.setItem(STORAGE, JSON.stringify(member));
@@ -193,59 +275,124 @@ async function setup() {
       button.disabled = false;
     }
   };
+
+  /**
+   * §16.1. **Coming back, which there was no way to do.**
+   *
+   * The household and the mandate are derived from the credential's id, so the
+   * credential is the household: a person holding the passkey holds everything
+   * this browser's storage held. Until 2026-09-12 nothing asked for it. A
+   * second device, a cleared browser or a tap on "Forget this device" created
+   * a new household, and every offer placed with the old one, every protection
+   * set under it and any statement waiting on it became unreachable, while the
+   * shop that had been given the old identifier went on placing boxes nobody
+   * could sign for. Found by a refutation pass over this hub.
+   *
+   * An empty `allowCredentials` asks the authenticator for any credential it
+   * holds for this site, which is what `residentKey: "preferred"` above makes
+   * possible. Nothing is registered here: the key is already the one the
+   * engine knows, and re-registering would be refused (clause 22).
+   */
+  const again = el("button", {}, "Use a passkey I already have") as HTMLButtonElement;
+  again.onclick = async () => {
+    again.disabled = true;
+    status.textContent = "";
+    try {
+      const credential = (await navigator.credentials.get({
+        publicKey: {
+          challenge: crypto.getRandomValues(new Uint8Array(32)),
+          rpId: location.hostname,
+          userVerification: "required",
+        },
+      })) as PublicKeyCredential | null;
+      if (!credential) throw new Error("no passkey was offered");
+      const credentialId = toBase64Url(credential.rawId);
+      const member: Member = {
+        label: input.value.trim() || `household-${credentialId.slice(0, 6)}`,
+        household: `household-${credentialId}`,
+        mandate: `mandate-${credentialId}`,
+        credential_id: credentialId,
+      };
+      localStorage.setItem(STORAGE, JSON.stringify(member));
+      await offers(member);
+    } catch (e) {
+      status.textContent = (e as Error).message;
+      again.disabled = false;
+    }
+  };
+
   show(
     el("h1", {}, "Atarasy"),
     el("p", {}, "Nothing is offered to you until you have a key to answer with."),
-    el("div", { class: "card" }, el("div", { class: "row" }, input, button), note, status)
+    el("div", { class: "card" }, el("div", { class: "row" }, input, button), note, status),
+    el("div", { class: "card" },
+      el("p", {}, "Already have one, on this device or another?"),
+      el("p", { class: "muted" }, "Your passkey is your household. Answering with it here brings back everything placed with it, wherever you last used it."),
+      el("div", { class: "row" }, again))
   );
 }
 
 // ---- the offers waiting on the person ---------------------------------------
 
 async function offers(member: Member) {
-  const config = await (await fetch("/config")).json() as { presenters: string[] };
-  const waiting: OfferSummary[] = [];
-  const settled: OfferSummary[] = [];
-  const decided: OfferSummary[] = [];
-  const unsigned: OfferSummary[] = [];
+  let presenters: string[] = [];
+  try {
+    presenters = ((await (await fetch("/config")).json()) as { presenters: string[] }).presenters;
+  } catch {
+    show(el("h1", {}, "Atarasy"), failure(REFUSALS.engine_unreachable!), retry(member));
+    return;
+  }
+  const waiting: InboxOffer[] = [];
+  const decided: InboxOffer[] = [];
+  const unsigned: InboxOffer[] = [];
   const problems: string[] = [];
   // Clause 8. Each presenter answers for its own offers to this household and
   // never for another's. The union is made here, on the person's side.
-  for (const presenter of config.presenters) {
-    const list = await api<{ offers?: OfferSummary[]; message?: string }>(
+  for (const presenter of presenters) {
+    const list = await api<{ offers?: InboxOffer[]; error?: string; message?: string }>(
       "GET",
       `/offers?household=${encodeURIComponent(member.household)}&presenter=${encodeURIComponent(presenter)}`
     );
-    if (list.status !== 200) { problems.push(`${presenter}: ${list.body.message ?? list.status}`); continue; }
+    if (list.status !== 200) { problems.push(`${presenter}: ${refusal(list.body, list.status)}`); continue; }
     for (const o of list.body.offers ?? []) {
-      if (o.state === "presented") waiting.push(o);
-      if (o.state === "decided" || o.state === "expired") settled.push(o);
+      // §6.5. A box whose collection found goods used waits for the
+      // household's signature, and **it waits in the open**: from the
+      // collection until the signature it stands here, reachable, rather than
+      // being announced once and forgotten. A reminder would be the wrong
+      // instrument, because a statement does not expire; what stops is
+      // delivery, and a household that is not shown the waiting statement
+      // learns only that a box did not come.
+      if (awaitsStatement(o)) unsigned.push(o);
+      else if (awaitsDecision(o)) waiting.push(o);
+      else if (o.state === "decided") decided.push(o);
     }
   }
-  // §6.5. A box whose collection found goods used waits for the household's
-  // signature, and **it waits in the open**: from the collection until the
-  // signature it stands here, reachable, rather than being announced once and
-  // forgotten. A reminder would be the wrong instrument, because a statement
-  // does not expire; what stops is delivery, and a household that is not
-  // shown the waiting statement learns only that a box did not come.
-  for (const o of settled) {
-    const st = await api<Statement & { error?: string }>("GET", `/offers/${encodeURIComponent(o.id)}/statement`);
-    if (st.status === 200 && (st.body.lines ?? []).some((l) => l.valence === "consumed")) {
-      unsigned.push(o);
-    } else if (o.state === "decided") {
-      decided.push(o);
-    }
-  }
-  const cards = waiting.map((o) => {
+  waiting.sort(byArrival);
+  decided.sort(byArrival);
+  unsigned.sort(byArrival);
+
+  const card = (o: InboxOffer) => {
     const open = el("button", { class: "primary" }, "Open") as HTMLButtonElement;
     open.onclick = () => approval(member, o.id);
     return el("div", { class: "card" },
       el("div", { class: "row" },
         el("span", { class: "grow" }, o.giver ? `A gift from ${o.giver}, offered by ${o.presenter}` : `From ${o.presenter}`),
         open),
-      el("p", { class: "muted" }, `Waiting until ${when(o.expires_at)}. Nothing is ordered if you do nothing.`)
+      // §11, `04b` §1b.3. **The two bindings say different things and one
+      // sentence used to cover both.** A digital offer expires and nothing is
+      // ordered if the person does nothing. A physical box is already in the
+      // home, and what is used is bought whether or not this screen is ever
+      // opened, so telling its owner that doing nothing orders nothing is
+      // false about the one row where it matters.
+      el("p", { class: "muted" },
+        o.binding === "physical"
+          ? "This box is with you. What you use is bought; what you send back is not."
+          : `Waiting until ${when(o.expires_at)}. Nothing is ordered if you do nothing.`)
     );
-  });
+  };
+  // `04b` §1b.2. The two bindings are separated, and each is newest first.
+  const boxes = waiting.filter((o) => o.binding === "physical").map(card);
+  const cards = waiting.filter((o) => o.binding === "digital").map(card);
 
   // §16.5. A decided set waits out its cooling window before it can settle,
   // and the person can take it back while it does. Without a cooling window
@@ -258,12 +405,7 @@ async function offers(member: Member) {
       undo.disabled = true;
       const taken = await api<{ error?: string; message?: string }>("DELETE", `/offers/${encodeURIComponent(o.id)}/decisions`);
       if (taken.status === 200) { await offers(member); return; }
-      said.textContent =
-        taken.body.error === "no_cooling"
-          ? "You have set no cooling window, so a decision is final as soon as it is signed."
-          : taken.body.error === "cooling_over"
-            ? "The window has closed and the decision is final."
-            : taken.body.message ?? `taking it back answered ${taken.status}`;
+      said.textContent = refusal(taken.body, taken.status);
       undo.disabled = false;
     };
     return el("div", { class: "card" },
@@ -278,13 +420,27 @@ async function offers(member: Member) {
     open.onclick = () => statement(member, o.id);
     return el("div", { class: "card" },
       el("div", { class: "row" }, el("span", { class: "grow" }, `From ${o.presenter}`), open),
-      el("p", { class: "muted" }, "The route found something used. Nothing is charged until you sign, and no further box comes from this seller while it waits.")
+      // Clause 11. **The presenter is not the seller.** A box is one
+      // presenter's and several merchants', and §6.5 blocks the next box of
+      // the presenter this one came from. Saying "this seller" told the
+      // household that the wrong party had stopped delivering.
+      el("p", { class: "muted" }, `The route found something used. Nothing is charged until you sign, and no further box comes from ${o.presenter} while it waits.`)
     );
   });
   const settings = el("button", {}, "What you have set") as HTMLButtonElement;
   settings.onclick = () => protections(member);
   const forget = el("button", {}, "Forget this device") as HTMLButtonElement;
+  // §16.1. It forgets the browser's copy and not the household, which lives in
+  // the passkey. The setup screen takes that passkey back, and this used to
+  // be a one-way door with nothing on the screen saying so.
   forget.onclick = () => { localStorage.removeItem(STORAGE); setup(); };
+  // **Nothing waiting and nothing answering are different things**, and one
+  // screen used to draw them together: a presenter that failed put a card at
+  // the foot of the page while "Nothing is waiting for you." stood above it.
+  // A member cannot act on a list that is silent about how much of it is
+  // missing.
+  const partial = problems.length > 0;
+  const empty = !boxes.length && !cards.length;
   show(
     el("h1", {}, "Atarasy"),
     el("p", { class: "muted" }, `${member.label}. Decisions are confirmed with this browser's passkey.`),
@@ -296,12 +452,25 @@ async function offers(member: Member) {
     el("ul", {},
       el("li", {}, "household ", el("code", {}, member.household)),
       el("li", {}, "mandate ", el("code", {}, member.mandate))),
-    ...(unsignedCards.length ? [el("h2", {}, "Waiting for your signature"), ...unsignedCards] : []),
-    ...(cards.length ? cards : [el("p", {}, "Nothing is waiting for you.")]),
-    ...(decidedCards.length ? [el("h2", {}, "Decided, and not yet settled"), ...decidedCards] : []),
     ...problems.map((p) => failure(p)),
+    ...(unsignedCards.length ? [el("h2", {}, "Waiting for your signature"), ...unsignedCards] : []),
+    ...(boxes.length ? [el("h2", {}, "Boxes with you now"), ...boxes] : []),
+    ...(cards.length ? [el("h2", {}, "Offered to you"), ...cards] : []),
+    ...(empty
+      ? [el("p", {}, partial
+          ? "Nothing is waiting for you from the shops that answered. What the card above names did not answer, so this list is not the whole of it."
+          : "Nothing is waiting for you.")]
+      : []),
+    ...(decidedCards.length ? [el("h2", {}, "Decided, and not yet settled"), ...decidedCards] : []),
     el("div", { class: "row" }, settings, forget)
   );
+}
+
+/** When nothing answered at all, the one thing left to offer is another try. */
+function retry(member: Member) {
+  const b = el("button", { class: "primary" }, "Try again") as HTMLButtonElement;
+  b.onclick = () => offers(member);
+  return b;
 }
 
 
@@ -319,17 +488,35 @@ function blockFor(
   blocks: { merchant: string; product: string | null; items: { label: string; value: string }[] }[],
   which: { merchant: string; product: string | null }
 ): Node[] {
-  const block = blocks.find((b) => b.merchant === which.merchant && b.product === which.product);
-  if (!block) {
+  const standing = blocks.find((b) => b.merchant === which.merchant && b.product === null);
+  const forProduct = which.product === null
+    ? undefined
+    : blocks.find((b) => b.merchant === which.merchant && b.product === which.product);
+  if (!standing && !forProduct) {
     // §10a.3 refuses an offer with no block long before a screen is drawn, so
     // this is a hub reading a response it should never receive. Saying so is
     // better than drawing a sale with no terms beside it.
     return [failure(`${which.merchant} sent no terms for this line.`)];
   }
-  return [
-    el("dl", { class: "terms" },
-      ...block.items.flatMap((i) => [el("dt", {}, i.label), el("dd", {}, i.value)])),
-  ];
+  const draw = (b: { items: { label: string; value: string }[] }) =>
+    el("dl", { class: "terms" }, ...b.items.flatMap((i) => [el("dt", {}, i.label), el("dd", {}, i.value)]));
+  const nodes: Node[] = [];
+  // §10a.5. **Both blocks, and never one in the other's place.** A product
+  // block "carries only the items that differ", so drawing it alone left the
+  // payment timing, the delivery timing and the 返品特約 off the screen
+  // entirely wherever a merchant had registered one: the person signed a line
+  // whose terms they had never been shown. The product block is drawn first,
+  // because where a label appears in both it is the one that governs this
+  // line, and the two are shown as signed rather than merged.
+  if (forProduct) {
+    nodes.push(el("p", { class: "muted" }, `${which.merchant}, for this product:`));
+    nodes.push(draw(forProduct));
+  }
+  if (standing) {
+    nodes.push(el("p", { class: "muted" }, forProduct ? `${which.merchant}, in general:` : `${which.merchant}:`));
+    nodes.push(draw(standing));
+  }
+  return nodes;
 }
 
 // ---- the approval screen (§10 step 3 and 4) ---------------------------------
@@ -337,7 +524,7 @@ function blockFor(
 async function approval(member: Member, offerId: string) {
   const got = await api<Approval & { error?: string; message?: string }>("GET", `/offers/${encodeURIComponent(offerId)}/approval`);
   if (got.status !== 200) {
-    show(el("h1", {}, "Atarasy"), failure(got.body.message ?? `the approval answered ${got.status}`), back(member));
+    show(el("h1", {}, "Atarasy"), failure(refusal(got.body, got.status)), back(member));
     return;
   }
   const a = got.body;
@@ -345,9 +532,19 @@ async function approval(member: Member, offerId: string) {
   const confirm = el("button", { class: "primary" }, "Confirm with your passkey") as HTMLButtonElement;
   confirm.disabled = true;
   const status = el("p", {});
-  const refresh = () => { confirm.disabled = choices.size !== a.candidates.length; };
+  // §10 step 3c. **Only the lines still waiting on this household are asked
+  // about.** A physical box is collected line by line and the offer stays
+  // presented, so an approval routinely carries a line the route already
+  // found used beside one nobody has decided. This screen used to require a
+  // choice on every candidate and post the lot, which the engine refused with
+  // `already_decided` naming a candidate id: the member could never confirm
+  // the lines that were still theirs, from the only screen that offers to.
+  const open = a.candidates.filter((c) => c.valence === "offered");
+  const settled = a.candidates.filter((c) => c.valence !== "offered");
+  const refresh = () => { confirm.disabled = choices.size !== open.length || open.length === 0; };
 
   const cards = a.candidates.map((c) => {
+    const decidable = c.valence === "offered";
     const keep = el("button", {}, "Keep") as HTMLButtonElement;
     const ret = el("button", {}, "Return") as HTMLButtonElement;
     const pick = (v: "kept" | "returned") => {
@@ -361,10 +558,19 @@ async function approval(member: Member, offerId: string) {
     return el("div", { class: "card" },
       el("div", { class: "row" },
         el("strong", { class: "grow" }, `${c.product} × ${c.quantity}`),
-        el("span", {}, yen(c.unit_price * c.quantity))),
+        // Clause 10, §6.2. A gift arrives at its price and is never billed, so
+        // the card says so instead of printing a figure nobody will be charged.
+        el("span", {}, c.given_by ? "a gift" : yen(c.unit_price * c.quantity))),
       // Clause 12. The maker and the carrier are on the screen the person
-      // signs from.
-      el("p", { class: "muted" }, `Made by ${c.merchant}. Carried by ${c.ships}.`),
+      // signs from, and the maker is not the merchant.
+      el("p", { class: "muted" },
+        c.given_by
+          ? `Given by ${c.given_by}. Never billed to you (clause 10). Made by ${c.maker}, carried by ${c.ships}.`
+          : `Sold by ${c.merchant}, made by ${c.maker}. Carried by ${c.ships}.`),
+      ...(decidable ? [] : [el("p", { class: "muted" },
+        c.valence === "consumed"
+          ? "The route found this used, so it is not yours to decide here. It comes back on the statement you sign."
+          : `Already ${c.valence}. Nothing on this screen changes it.`)]),
       ...(c.is_exploration ? [el("p", { class: "exploration" }, "Something you have not been offered before (§5).")] : []),
       // Clauses 54 and 59. **These are the presenter's words, and the screen
       // says so.** The alternatives and the argument against are free text the
@@ -380,7 +586,7 @@ async function approval(member: Member, offerId: string) {
       // other. One screen carries several sellers' blocks, and each seller
       // answers for the whole 映像面 it appears on.
       ...blockFor(a.disclosures ?? [], c.disclosure),
-      el("div", { class: "row" }, keep, ret)
+      ...(decidable ? [el("div", { class: "row" }, keep, ret)] : [])
     );
   });
 
@@ -392,7 +598,7 @@ async function approval(member: Member, offerId: string) {
   confirm.onclick = async () => {
     confirm.disabled = true;
     status.textContent = "";
-    const decisions: Decision[] = a.candidates.map((c) => {
+    const decisions: Decision[] = open.map((c) => {
       const valence = choices.get(c.id)!;
       return valence === "kept" ? { candidate: c.id, valence, kept_as: "self" } : { candidate: c.id, valence };
     });
@@ -418,7 +624,7 @@ async function approval(member: Member, offerId: string) {
           signature: toBase64(r.signature),
         },
       });
-      if (decided.status !== 200) throw new Error(`${decided.body.error ?? decided.status}: ${decided.body.message ?? ""}`);
+      if (decided.status !== 200) throw new Error(refusal(decided.body, decided.status));
       show(
         el("h1", {}, "Atarasy"),
         el("div", { class: "card" },
@@ -452,9 +658,18 @@ async function approval(member: Member, offerId: string) {
         : a.carriage === 0
           ? "Carriage: nothing to pay on this delivery."
           : `Carriage: ${yen(a.carriage)}.`),
+    // §10 step 3c. Where the route has already resolved part of the box, the
+    // screen says which part is still the person's rather than offering a
+    // button that can never be pressed.
+    ...(settled.length
+      ? [el("p", { class: "muted" },
+          open.length
+            ? `${settled.length} of these ${settled.length === 1 ? "line has" : "lines have"} already been settled by what the route found. ${open.length} ${open.length === 1 ? "is" : "are"} still yours to decide.`
+            : "Every line here has already been decided or found used. There is nothing left on this screen to confirm.")]
+      : []),
     ...cards,
     ...excluded,
-    el("div", { class: "row" }, confirm, back(member)),
+    el("div", { class: "row" }, ...(open.length ? [confirm] : []), back(member)),
     status
   );
 }
@@ -480,7 +695,7 @@ async function approval(member: Member, offerId: string) {
 async function statement(member: Member, offerId: string) {
   const got = await api<Statement & { error?: string; message?: string }>("GET", `/offers/${encodeURIComponent(offerId)}/statement`);
   if (got.status !== 200) {
-    show(el("h1", {}, "Atarasy"), failure(got.body.message ?? `the statement answered ${got.status}`), back(member));
+    show(el("h1", {}, "Atarasy"), failure(refusal(got.body, got.status)), back(member));
     return;
   }
   const st = got.body;
@@ -492,7 +707,13 @@ async function statement(member: Member, offerId: string) {
     st.lines.filter((l) => !disputed.has(l.candidate)).reduce((sum, l) => sum + l.amount, 0);
   const totalLine = el("p", {});
   const refreshTotal = () => {
-    totalLine.textContent = `To be charged: ${yen(total())}.` +
+    // §7.5b. **The total is the goods and the carriage is beside it**, and the
+    // screen used to print the two figures with nothing between them saying
+    // which was inside which: a household reading "Carriage: ¥500" above "To
+    // be charged: ¥900" could not tell whether it owed 900 or 1,400. The
+    // engine's `charged` excludes the carriage, so the screen says so.
+    totalLine.textContent = `To be charged for the goods: ${yen(total())}.` +
+      (st.carriage ? ` The carriage above is not in this figure.` : "") +
       (disputed.size ? ` ${disputed.size} line${disputed.size === 1 ? "" : "s"} disputed and not charged here.` : "");
   };
 
@@ -553,7 +774,7 @@ async function statement(member: Member, offerId: string) {
         `/offers/${encodeURIComponent(st.offer)}/settle`,
         { assertion, disputed: [...disputed] }
       );
-      if (settled.status !== 200) throw new Error(`${settled.body.error ?? settled.status}: ${settled.body.message ?? ""}`);
+      if (settled.status !== 200) throw new Error(refusal(settled.body, settled.status));
       show(
         el("h1", {}, "Atarasy"),
         el("div", { class: "card" },
@@ -572,7 +793,17 @@ async function statement(member: Member, offerId: string) {
   show(
     el("h1", {}, "Atarasy"),
     el("h2", {}, "What the box came back with"),
-    el("p", { class: "muted" }, "The route wrote this down. Nothing is charged until you sign it, and no further box comes from this seller while it waits."),
+    // Clause 11. Whoever sent the box is the presenter, and a presenter is not
+    // the seller: this box is one presenter's and several merchants'. The
+    // statement names the merchants line by line and carries no presenter, so
+    // the sentence names neither rather than naming the wrong one.
+    el("p", { class: "muted" }, "The route wrote this down. Nothing is charged until you sign it, and no further box comes from whoever sent this one while it waits."),
+    // §6.5, §10a.5. **The offer's expiry, because a merchant's block may state
+    // an application period and a period is measured against something.** The
+    // engine has carried it since this route was written and this screen
+    // dropped it, so a block reading "apply within 7 days of the offer" stood
+    // beside no date at all.
+    el("p", { class: "muted" }, `This box was offered until ${when(st.expires_at)}.`),
     el("p", { class: "muted" },
       st.carriage === null
         ? "Carriage: not recorded."
@@ -629,7 +860,16 @@ const DAILY = [
 ] as const;
 
 async function protections(member: Member) {
-  const read = await api<Mandate & { error?: string }>("GET", `/_node/mandates/${encodeURIComponent(member.mandate)}`);
+  const read = await api<Mandate & { error?: string; message?: string }>("GET", `/_node/mandates/${encodeURIComponent(member.mandate)}`);
+  // **A record that could not be read is not a record that is absent**, and
+  // this screen used to draw both as "Nothing yet": a member whose engine was
+  // unreachable was shown a blank protections screen and would have set a
+  // ceiling over a record it could not see, on version 1 of a mandate already
+  // at version 4.
+  if (read.status !== 200 && read.status !== 404) {
+    show(el("h1", {}, "Atarasy"), failure(refusal(read.body, read.status)), back(member));
+    return;
+  }
   const current: Mandate | null = read.status === 200 ? read.body : null;
   const status = el("p", {});
 
@@ -643,12 +883,12 @@ async function protections(member: Member) {
    * loosens, and says who would have to be asked rather than pretending the
    * move does not exist.
    */
-  async function write(patch: Partial<Mandate>, refusal: string | null) {
+  async function write(patch: Partial<Mandate>, loosening: string | null) {
     status.textContent = "";
     try {
-      if (refusal) {
+      if (loosening) {
         throw new Error(
-          refusal +
+          loosening +
             (current && current.co_signers.length > 0
               ? `, and needs everyone you named: ${current.co_signers.join(", ")}`
               : ", and this screen does not do it")
@@ -681,7 +921,7 @@ async function protections(member: Member) {
         ...next,
         assertions: { [member.household]: await assertOver(member, bytes) },
       });
-      if (recorded.status !== 201) throw new Error(recorded.body.message ?? `the record answered ${recorded.status}`);
+      if (recorded.status !== 201) throw new Error(refusal(recorded.body, recorded.status));
       await protections(member);
     } catch (e) {
       status.textContent = (e as Error).message;

@@ -299,13 +299,26 @@ describe("the hub in front of an engine", () => {
     })).status).toBe(201);
     expect((await post(ENGINE, `/offers/${offerId}/present`, {})).status).toBe(200);
 
-    const list = (await (await fetch(`${HUB}/api/offers?household=${HOUSEHOLD}&presenter=${PRESENTER}`)).json()) as { offers: { id: string; state: string }[] };
+    const list = (await (await fetch(`${HUB}/api/offers?household=${HOUSEHOLD}&presenter=${PRESENTER}`)).json()) as {
+      offers: { id: string; state: string; binding: string; presented_at: number | null; candidates: { valence: string }[] }[];
+    };
     expect(list.offers.map((o) => [o.id, o.state])).toEqual([[offerId, "presented"]]);
+
+    // **The screen classifies this list without asking a second question**, so
+    // every field the rule reads has to be on it. It used to ask the engine,
+    // once per historical offer, whether a settlement statement was waiting,
+    // and file anything that did not answer 200 as a box that settles by
+    // itself. Reading the row instead means a transport failure can no longer
+    // be read as an answer; that only holds while the row carries this.
+    const row = list.offers[0]!;
+    expect(row.binding).toBe("digital");
+    expect(typeof row.presented_at).toBe("number");
+    expect(row.candidates.map((c) => c.valence)).toEqual(["offered", "offered"]);
   });
 
   test("the approval the screen renders carries what clause 59 and clause 36 require", async () => {
     const approval = (await (await fetch(`${HUB}/api/offers/${offerId}/approval`)).json()) as {
-      candidates: { alternatives: string[]; argument_against: string; merchant: string; ships: string }[];
+      candidates: { product: string; alternatives: string[]; argument_against: string; merchant: string; maker: string; ships: string; given_by: string | null; valence: string }[];
       excluded: { product: string; reason: string }[];
       reminded: boolean;
     };
@@ -315,6 +328,18 @@ describe("the hub in front of an engine", () => {
       expect(c.argument_against).not.toBe("");
       expect(c.merchant).toBe("maker-a");
       expect(c.ships).toBe("carrier-a");
+      // Clause 12, clause 10, §10 step 3c. **Three fields the screen draws and
+      // could not read.** It printed "Made by ${c.merchant}", so it named the
+      // seller as the maker while the statement screen beside it named the
+      // real one; it printed a price beside a gift with no giver; and with no
+      // valence it asked for a choice on lines a collection had already
+      // resolved. Each was on the engine and missing from the hub's own type.
+      // The fixture gives each product a maker that is not its merchant, and
+      // the two candidates have different ones, so a screen printing either
+      // the seller or a constant fails here.
+      expect(c.maker).toBe(({ "tea-a": "made-by-tea", "coffee-a": "made-by-coffee" } as Record<string, string>)[c.product]!);
+      expect(c.given_by).toBeNull();
+      expect(c.valence).toBe("offered");
     }
     expect(approval.excluded).toEqual([{ product: "tea-b", reason: "declined_before" }]);
     expect(approval.reminded).toBe(false);

@@ -93,18 +93,31 @@ const MEMBER_NAME = /^(mandate|household)-[A-Za-z0-9_-]{16,}$/;
  * why the specification treats it as the person's alone, and nothing checks
  * that it is the person.
  *
- * **`POST .../settle` joined the list on 2026-09-12 and it is the widest thing
- * on it.** §6.5 makes the household's signature over the settlement statement
- * the application for a physical box's consumed lines, and the signature has
- * to reach the engine somehow, so the screen posts it here. The cost is that
- * whoever knows an offer id can ask this engine to settle it: for a physical
- * box with goods used that is refused without a signature this hub cannot
- * forge, and **for a digital offer it is not**, since a digital settlement
- * takes an empty body and commits the ledger for what the person already
- * signed at the decision. What that costs is the timing rather than the
- * amount, because the charge is the decided set either way. It is named here
- * rather than left in the list, and the narrowing that would remove it is an
- * engine that authenticates a caller, which the reference does not do.
+ * **`POST .../settle` joined the list on 2026-09-12.** §6.5 makes the
+ * household's signature over the settlement statement the application for a
+ * physical box's consumed lines, and the signature has to reach the engine
+ * somehow, so the screen posts it here. The cost is that whoever knows an
+ * offer id can ask this engine to settle it: for a physical box with goods
+ * used that is refused without a signature this hub cannot forge, and **for a
+ * digital offer it is not**, since a digital settlement takes an empty body
+ * and commits the ledger for what the person already signed at the decision.
+ * What that costs is the timing rather than the amount, because the charge is
+ * the decided set either way.
+ *
+ * **It is not the widest thing on this list, and a version of this comment
+ * said it was.** The widest are the reads, and they were never named. `GET
+ * .../statement` and `GET .../approval` hand any holder of an offer id the
+ * household's identifier, every product, the giver's name and the carriage;
+ * `GET /_node/mandates/{id}` hands the household's ceilings, cooling window
+ * and co-signers to any holder of a mandate reference, which the screen tells
+ * the member to give to every shop. `POST .../settle` on an offer that has
+ * already settled answered with the whole settlement until the engine was
+ * corrected the same day, and reading a statement is still a giver's channel
+ * into whether a recipient kept a gift (clause 16, §7.2). **The narrowing
+ * that removes all of it is one narrowing**, an engine that authenticates a
+ * caller, which the reference does not do (`08` §3 of the concept documents
+ * records this as the open half of clause 53). Naming only the write was the
+ * comfortable half of the accounting.
  */
 function carries(method: string, path: string): boolean {
   const parts = path.split("/").filter(Boolean);
@@ -176,7 +189,10 @@ export async function handle(request: Request): Promise<Response> {
     try {
       upstream = await fetch(target, { method: request.method, headers, body });
     } catch {
-      return json({ error: "engine_unreachable", message: `the engine at ${engine} did not answer` }, 502);
+      // The member is told that nothing answered, and not where. The internal
+      // address of an engine is an operator's fact, and printing it into a
+      // failure card put it on a screen anybody who can open the page reads.
+      return json({ error: "engine_unreachable", message: "the engine did not answer" }, 502);
     }
     return new Response(await upstream.arrayBuffer(), {
       status: upstream.status,
