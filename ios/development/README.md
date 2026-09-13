@@ -31,3 +31,9 @@ On 2026-09-13 the dedicated Vercel API and Neon member runtime were deployed to 
 ## Physical-device preparation
 
 On 2026-09-13 the signed Development build was installed and launched on a physical iPhone 13 Pro. It was also installed on a physical iPad mini (6th generation), but remote launch failed because the device service connection was unavailable. Installation does not establish passkey association. An authentication-only development test principal is now prepared with no presenter grants or mandate; fresh invitation issuance waits for device interaction. No real member account has been provisioned.
+
+## iPhone authentication acceptance
+
+The user completed registration and sign-in on the physical iPhone 13 Pro. Trusted database inspection confirmed one active credential for the expected development test account with zero presenter grants. The user then reported successful sign-out/re-login. A screenshot at 17:26 JST showed Saved session verified and the expected household/18:24 expiry after the requested app restart and restoration. These are observed device outcomes, not an instrumented network trace.
+
+The user excluded physical iPad verification from this acceptance scope. Basic iPhone authentication is accepted; statement approval, offline recovery, lost responses and background expiry remain unverified.
