@@ -4,7 +4,8 @@ import AtarasyCore
 
 // Compiled only by the dedicated UI-testing configuration, never Debug or Release.
 private actor ProposalFixtureService: MemberProposalService {
-    func offerDetail(id: String) async throws -> MemberOfferDetail { try MemberDetailFixtureData.detail(id: id) }
+    func offerDetail(id: String) async throws -> MemberOfferDetail { try MemberReviewFixtureData.detail(id: id) }
+    func review(detail: MemberOfferDetail) async throws -> MemberReview { try MemberReviewFixtureData.review(detail: detail) }
     func offers(presenter: String) async throws -> [MemberOfferSummary] {
         if presenter == "Unavailable source" { throw MemberFailure.unavailable }
         if presenter == "Empty source" { return [] }

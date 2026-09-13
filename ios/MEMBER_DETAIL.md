@@ -21,3 +21,5 @@ The current UI tests use the existing labelled UITesting list fixture, including
 [The detail contract](../contracts/member-detail/README.md) records the response capture and fixture regeneration procedure. [Detail validation](evidence/member-detail-validation.json) records source/log hashes, simulator results, normal Release checks and negative control evidence. Earlier validation files retain their original source revisions.
 
 Next, pin the authenticated physical statement and digital approval projections, then connect their separate read-only review views. Preserve carriage absence, gift attribution and disclosure/alternative context before considering any signature control. Transaction submission needs its own canonical challenge, uncertain-result handling and authoritative read-back tests; a readable detail screen does not satisfy that gate. Actual device/service configuration and private-node recovery remain open.
+
+Follow-up: [read-only review](../contracts/member-review/README.md) implements the statement/approval projection work above. The original detail validation remains historical.

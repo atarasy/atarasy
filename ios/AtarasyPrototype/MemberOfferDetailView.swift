@@ -13,10 +13,16 @@ struct MemberOfferDetailView: View {
             } else {
                 Section {
                     Text("Viewing this proposal does not make a decision or payment.").font(.footnote)
-                    Button("Refresh details") { Task { await model.loadDetail(selected) } }.disabled(model.detailLoading).accessibilityIdentifier("refreshMemberDetail")
                 }
                 if model.detailLoading { ProgressView("Loading proposal") }
                 else if let detail = model.detail {
+                    Section {
+                        Button(detail.binding == "physical" ? "Load physical statement" : "Load approval information") { Task { await model.loadReview(selected) } }
+                            .disabled(model.reviewLoading).accessibilityIdentifier("loadMemberReview")
+                    }
+                    if model.reviewLoading { ProgressView("Loading review information") }
+                    else if let review = model.review { MemberReviewSections(review: review) }
+                    else if model.reviewUnavailable { Section { Text("Review information is unavailable or changed. Refresh to try again; no decision has been made.").accessibilityIdentifier("memberReviewUnavailable") } }
                     Section(detail.binding == "physical" ? "Collection proposal" : "Digital proposal") {
                         Text("Proposal: \(detail.id)")
                         Text("Presenter: \(detail.presenter)")
@@ -55,6 +61,13 @@ struct MemberOfferDetailView: View {
             }
         }
         .navigationTitle(selected.binding == "physical" ? "Physical proposal" : "Digital proposal")
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Refresh") { Task { await model.loadDetail(selected) } }
+                    .disabled(model.sessionIdentity == nil || model.detailLoading)
+                    .accessibilityIdentifier("refreshMemberDetail")
+            }
+        }
         .task(id: model.sessionIdentity) { await model.loadDetail(selected) }
         .onReceive(clock) { _ in model.checkExpiry() }
         .onDisappear { model.clearDetail() }

@@ -164,6 +164,15 @@ public actor MemberClient {
         guard session.presenters.contains(where: { same($0, value.presenter) }) else { throw MemberFailure.scopeMismatch }
         return value
     }
+    public func review(detail: MemberOfferDetail) async throws -> MemberReview {
+        try identifier(detail.id)
+        guard ["physical", "digital"].contains(detail.binding) else { throw MemberFailure.invalidInput }
+        let (reply, session) = try await read("/offers/" + detail.id + (detail.binding == "physical" ? "/statement" : "/approval"))
+        guard Data(session.household.utf8) == Data(detail.household.utf8), session.presenters.contains(where: { Data($0.utf8) == Data(detail.presenter.utf8) }) else { throw MemberFailure.scopeMismatch }
+        guard reply.status == 200 else { throw MemberFailure.http(reply.status) }
+        guard reply.contentType?.split(separator: ";").first?.trimmingCharacters(in: .whitespaces).lowercased() == "application/json" else { throw MemberFailure.malformed }
+        return try detail.binding == "physical" ? .statement(MemberStatement.decode(reply.data, detail: detail)) : .approval(MemberApproval.decode(reply.data, detail: detail))
+    }
     public func settlement(offerID: String) async throws -> ProtocolSettlement {
         try identifier(offerID); let (reply, _) = try await read("/offers/" + offerID + "/settlement")
         return try ReferenceResponseReader.settlement(status: reply.status, contentType: reply.contentType, data: reply.data, expectedOffer: offerID)

@@ -1,0 +1,229 @@
+{
+  "date": "2026-09-13",
+  "applicationBaseline": "281ba681ff0fa7c3c39a68d514b4ae7ff6c06abf",
+  "serviceCommit": "5254b7cc74f993062a72d762b4f9dd4236278e45",
+  "toolchain": {
+    "swift": "6.4",
+    "simulatorSDK": "27.0",
+    "deploymentFloor": "iOS 17.0"
+  },
+  "swiftPackage": {
+    "passed": 74,
+    "failed": 0,
+    "skipped": 0,
+    "prior": 64,
+    "newReviewTests": 10
+  },
+  "simulatorUI": {
+    "phone": {
+      "bundle": "/Users/yoichirohara/Documents/atarasy-development/member-review-phone-final-20260913.xcresult",
+      "summary": {
+        "devicesAndConfigurations": [
+          {
+            "device": {
+              "architecture": "arm64",
+              "deviceId": "33797D78-555E-4DF5-8291-F6985EB6E3ED",
+              "deviceName": "Atarasy Prototype phone",
+              "modelName": "iPhone 17 Pro",
+              "osBuildNumber": "24A5390f",
+              "osVersion": "27.0",
+              "platform": "iOS Simulator"
+            },
+            "expectedFailures": 0,
+            "failedTests": 0,
+            "passedTests": 10,
+            "skippedTests": 0,
+            "testPlanConfiguration": {
+              "configurationId": "1",
+              "configurationName": "Test Scheme Action"
+            }
+          }
+        ],
+        "environmentDescription": "AtarasyMemberListTests \u00b7 Built with macOS 27.0",
+        "expectedFailures": 0,
+        "failedTests": 0,
+        "finishTime": 1789268504.396,
+        "passedTests": 10,
+        "result": "Passed",
+        "runtimeWarnings": [],
+        "skippedTests": 0,
+        "startTime": 1789268190.62,
+        "statistics": [],
+        "testFailures": [],
+        "title": "Test - AtarasyMemberListTests",
+        "topInsights": [],
+        "totalTestCount": 10
+      }
+    },
+    "tablet": {
+      "bundle": "/Users/yoichirohara/Documents/atarasy-development/member-review-tablet-final-20260913.xcresult",
+      "summary": {
+        "devicesAndConfigurations": [
+          {
+            "device": {
+              "architecture": "arm64",
+              "deviceId": "1EA68F47-EC8C-4A19-97EB-5FACD12173B7",
+              "deviceName": "Atarasy Prototype tablet",
+              "modelName": "iPad Pro 11-inch (M5)",
+              "osBuildNumber": "24A5390f",
+              "osVersion": "27.0",
+              "platform": "iOS Simulator"
+            },
+            "expectedFailures": 0,
+            "failedTests": 0,
+            "passedTests": 2,
+            "skippedTests": 0,
+            "testPlanConfiguration": {
+              "configurationId": "1",
+              "configurationName": "Test Scheme Action"
+            }
+          }
+        ],
+        "environmentDescription": "AtarasyMemberListTests \u00b7 Built with macOS 27.0",
+        "expectedFailures": 0,
+        "failedTests": 0,
+        "finishTime": 1789268332.956,
+        "passedTests": 2,
+        "result": "Passed",
+        "runtimeWarnings": [],
+        "skippedTests": 0,
+        "startTime": 1789268231.968,
+        "statistics": [],
+        "testFailures": [],
+        "title": "Test - AtarasyMemberListTests",
+        "topInsights": [],
+        "totalTestCount": 2
+      }
+    },
+    "initialPhone": {
+      "bundle": "/Users/yoichirohara/Documents/atarasy-development/member-review-phone-20260913.xcresult",
+      "summary": {
+        "devicesAndConfigurations": [
+          {
+            "device": {
+              "architecture": "arm64",
+              "deviceId": "33797D78-555E-4DF5-8291-F6985EB6E3ED",
+              "deviceName": "Atarasy Prototype phone",
+              "modelName": "iPhone 17 Pro",
+              "osBuildNumber": "24A5390f",
+              "osVersion": "27.0",
+              "platform": "iOS Simulator"
+            },
+            "expectedFailures": 0,
+            "failedTests": 1,
+            "passedTests": 9,
+            "skippedTests": 0,
+            "testPlanConfiguration": {
+              "configurationId": "1",
+              "configurationName": "Test Scheme Action"
+            }
+          }
+        ],
+        "environmentDescription": "AtarasyMemberListTests \u00b7 Built with macOS 27.0",
+        "expectedFailures": 0,
+        "failedTests": 1,
+        "finishTime": 1789268413.702,
+        "passedTests": 9,
+        "result": "Failed",
+        "runtimeWarnings": [],
+        "skippedTests": 0,
+        "startTime": 1789267885.033,
+        "statistics": [],
+        "testFailures": [
+          {
+            "failureText": "failed - Cannot reach refreshMemberDetail",
+            "targetName": "AtarasyPrototypeUITests",
+            "testIdentifier": 3,
+            "testIdentifierString": "PrototypeUITests/testDigitalMemberReviewShowsUnknownCarriageAndArguments()",
+            "testIdentifierURL": "test://com.apple.xcode/AtarasyPrototype/AtarasyPrototypeUITests/PrototypeUITests/testDigitalMemberReviewShowsUnknownCarriageAndArguments",
+            "testName": "testDigitalMemberReviewShowsUnknownCarriageAndArguments()"
+          }
+        ],
+        "title": "Test - AtarasyMemberListTests",
+        "topInsights": [],
+        "totalTestCount": 10
+      }
+    }
+  },
+  "normalReleaseBuild": "BUILD SUCCEEDED; generic iOS Simulator; signing disabled",
+  "responseCapture": {
+    "count": 9,
+    "scope": "Actual clean pinned handler/member read gate, test-only session and ownership adapters, in-memory engine. No native authentication or network."
+  },
+  "negativeControl": {
+    "target": "MemberReviewTests/testStatementTamperedChallengeIsRejected",
+    "removed": "Exact canonical challenge comparison",
+    "originalSHA256": "c5216e34e6371fb23600df6a542813c327bbee28297696b46be0ab744804de57",
+    "mutatedSHA256": "10012aecfa0d370180f3156bc2340e05bbf5d4cd641c2ad187d6853b6437c89d",
+    "exitCode": 1,
+    "failedTests": 1,
+    "failedAssertions": 1,
+    "testFileSHA256": "18ce462b76f0f7b1b773951b4103db1bb1223b9ba45d22a0c6625d879beaf1e1"
+  },
+  "binaryInspection": {
+    "UITesting": {
+      "images": {
+        "/Users/yoichirohara/Documents/atarasy-development/member-detail-derived-20260913/Build/Products/UITesting-iphonesimulator/AtarasyPrototype.app/AtarasyPrototype": "e3438f616e694d31a7a431bc077adf395c05180b30a09cfdad7d020ccc64f2d2",
+        "/Users/yoichirohara/Documents/atarasy-development/member-detail-derived-20260913/Build/Products/UITesting-iphonesimulator/AtarasyPrototype.app/__preview.dylib": "6332ea47542bd7213276e231554f58a00da644bb91fea2f86ed206ed06ed786e",
+        "/Users/yoichirohara/Documents/atarasy-development/member-detail-derived-20260913/Build/Products/UITesting-iphonesimulator/AtarasyPrototype.app/AtarasyPrototype.debug.dylib": "e6d56339f631ff5ed31d75b38638cd5a198d66cecef66607a1922565c8e2ca45"
+      },
+      "markers": {
+        "entry": true,
+        "label": true,
+        "reviewPayload": true
+      }
+    },
+    "Release": {
+      "images": {
+        "/Users/yoichirohara/Documents/atarasy-development/member-detail-release-20260913/Build/Products/Release-iphonesimulator/AtarasyPrototype.app/AtarasyPrototype": "141645a2ed3c18e64300f5c9aaf9a5045e93804d81bfa6ae31600383d72eaf1e"
+      },
+      "markers": {
+        "entry": false,
+        "label": false,
+        "reviewPayload": false
+      }
+    }
+  },
+  "sourceSHA256": {
+    "contracts/member-review/README.md": "6edd70fb3915d7c36c4167ca81910533488c602ed97b9ded405153daab6624de",
+    "contracts/member-review/responses.json": "abb950e2fb45fb971b423b49a97020309a96485b85cc8d62136c6c80995221d8",
+    "scripts/member-review/capture.ts": "39c7a3c39e8254c3e3fd32c3b472c7c668c1efa333f2221aa285da8d7ed43bb1",
+    "scripts/member-review/sync-fixture.py": "a545d1f20bb094716a110e82b419ea89ec48b99ccf2b714069f767cffc00df4d",
+    "ios/AtarasyCore/Sources/AtarasyCore/MemberReview.swift": "c5216e34e6371fb23600df6a542813c327bbee28297696b46be0ab744804de57",
+    "ios/AtarasyCore/Sources/AtarasyCore/MemberClient.swift": "996f4f9db16949554bc00bd839beb8f03b2eb28cbed0aeb80cc61e75910a423b",
+    "ios/AtarasyCore/Sources/AtarasyCore/MemberProposals.swift": "611fb85e2065d165e8fdb6e5971a91b716210a6fec7274e4b34bb96cb9ffc26d",
+    "ios/AtarasyCore/Tests/AtarasyCoreTests/MemberReviewTests.swift": "c6631d9ac8e3c530e8991b3f0eebc2f9f4681519a0531500ccdd51389ef90319",
+    "ios/AtarasyCore/Tests/AtarasyCoreTests/Fixtures/member-review-responses.json": "abb950e2fb45fb971b423b49a97020309a96485b85cc8d62136c6c80995221d8",
+    "ios/AtarasyPrototype/MemberOfferDetailView.swift": "41553ec9d3bac461389c5126afe34a318b0d1d60f9b878f65791fd29b454ce82",
+    "ios/AtarasyPrototype/MemberProposalFixture.swift": "34c39563ca6edf69d2bae6abac218e14e15ba9a5dc4b93ccab3189e0bc74e26a",
+    "ios/AtarasyPrototype/MemberReviewView.swift": "a9aad7a8342811e70606968cccd9dcf799e99154532c2c232faa4751a37c413e",
+    "ios/AtarasyPrototype/MemberReviewFixtureData.swift": "6389c9dd2aeeeb38a5f15c10f1b25ed1e3efdd1816f8b9083f1bd062c37e79fa",
+    "ios/AtarasyPrototypeUITests/PrototypeUITests.swift": "4979b42c04f6982edfae987b46a8443d80ff83bb9dab4b16b3904dca00c48a1c",
+    "ios/README.md": "0a432ba2459babc439419037ab21a405cb48d529759845537d35b952b4acea34",
+    "ios/MEMBER_DETAIL.md": "1c62515539772e1096657bd84e03ab775d5db77af8f74cfd2087452116bb26af"
+  },
+  "logSHA256": {
+    "/Users/yoichirohara/Documents/atarasy-development/member-review-swift-20260913.log": "9b9d609a5a8122f8856bad523790f88e10d48d0b6687b1991eb6cb6da2457086",
+    "/Users/yoichirohara/Documents/atarasy-development/member-review-phone-final-20260913.log": "65b79ebd4b5ebcbb798aede9a4abb7ba91345f9e6ff3916c486cb731623cf5b0",
+    "/Users/yoichirohara/Documents/atarasy-development/member-review-tablet-final-20260913.log": "0dd12f65b462af7a11a7295bdb2b7b7ec7a4472e9a1c99d1cab933564e91b233",
+    "/Users/yoichirohara/Documents/atarasy-development/member-review-release-final-20260913.log": "c5bb5d45d08f0b817a7fcc032274e11b27034f29d4c09795c4354d0b1236b281",
+    "/Users/yoichirohara/Documents/atarasy-development/member-review-negative-20260913.log": "783612d3d5a2406a0eff4e949890d0e7c2425979dc4dcc9e95f4405b5bb2836f",
+    "/Users/yoichirohara/Documents/atarasy-development/member-review-phone-20260913.log": "483ed6c1d33f37fdf19ee54710f2167fd3399caffde15136a692a505d5d01445"
+  },
+  "notes": [
+    "Initial phone run: 9 passed, 1 failed test, 2 failed assertions. Refresh moved from inline form to navigation toolbar; full phone rerun passed.",
+    "Initial simulator diagnostic collection was terminated after tests completed; initial xcodebuild then finalised the readable failure bundle with exit 65.",
+    "Binary marker inspection used raw bytes across executable and dylibs; strings alone omits the non-ASCII fixture label.",
+    "Review fixture embeds the exact captured pack, then rebinds resource/session identities and recomputes only the physical challenge for the synthetic offer ID.",
+    "Screenshots visually reviewed: phone alternatives and argument against; tablet gift attribution, parties and persistent refresh. Tablet zero amount is verified by UI assertion, below the saved screenshot viewport.",
+    "Tooling emitted AppIntents metadata and debugger/runtime notices; selected test result summaries have no runtime warnings."
+  ],
+  "notMeasured": [
+    "Actual device passkey/RP association",
+    "Configured authenticated network UI journey",
+    "Disclosure signature verification",
+    "Member transaction authority or submission",
+    "Provider outcomes",
+    "Durable private-node recovery"
+  ]
+}

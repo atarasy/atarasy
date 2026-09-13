@@ -4,8 +4,10 @@ import Combine
 public protocol MemberProposalService: Sendable {
     func offers(presenter: String) async throws -> [MemberOfferSummary]
     func offerDetail(id: String) async throws -> MemberOfferDetail
+    func review(detail: MemberOfferDetail) async throws -> MemberReview
 }
 public extension MemberProposalService {
+    func review(detail: MemberOfferDetail) async throws -> MemberReview { throw MemberFailure.unavailable }
     func offerDetail(id: String) async throws -> MemberOfferDetail { throw MemberFailure.unavailable }
 }
 public struct MemberProposalSource: Identifiable, Sendable {
@@ -25,6 +27,10 @@ private enum ProposalRead: Sendable {
     @Published public private(set) var detail: MemberOfferDetail?
     @Published public private(set) var detailLoading = false
     @Published public private(set) var detailUnavailable = false
+    @Published public private(set) var review: MemberReview?
+    @Published public private(set) var reviewLoading = false
+    @Published public private(set) var reviewUnavailable = false
+    private var reviewGeneration: UInt64 = 0
     private var detailGeneration: UInt64 = 0
     public var incomplete: Bool { sources.contains { $0.status == .unavailable } }
     var onSessionUnavailable: (() -> Void)?
@@ -41,7 +47,27 @@ private enum ProposalRead: Sendable {
     }
     private func invalidate() { setSession(nil); onSessionUnavailable?() }
     public func clearDetail() {
+        reviewGeneration &+= 1; review = nil; reviewLoading = false; reviewUnavailable = false
         detailGeneration &+= 1; detail = nil; detailLoading = false; detailUnavailable = false
+    }
+    public func loadReview(_ selected: MemberOfferSummary) async {
+        let expectedSelection = detailGeneration &+ 1
+        await loadDetail(selected)
+        guard detailGeneration == expectedSelection, let detail, let session, !Task.isCancelled else { return }
+        let started = generation, selection = detailGeneration
+        reviewGeneration &+= 1; let request = reviewGeneration
+        reviewLoading = true; review = nil; reviewUnavailable = false
+        defer { if reviewGeneration == request { reviewLoading = false } }
+        do {
+            let value = try await service.review(detail: detail)
+            guard generation == started, detailGeneration == selection, reviewGeneration == request, !Task.isCancelled else { return }
+            guard session.expiresAt > now() else { invalidate(); return }
+            review = value
+        } catch {
+            guard generation == started, detailGeneration == selection, reviewGeneration == request else { return }
+            if session.expiresAt <= now() || error as? MemberFailure == .http(401) || error as? MemberFailure == .expired { invalidate() }
+            else if !Task.isCancelled { reviewUnavailable = true }
+        }
     }
     public func checkExpiry() { if let session, session.expiresAt <= now() { invalidate() } }
     public func loadDetail(_ selected: MemberOfferSummary) async {

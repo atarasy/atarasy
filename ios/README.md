@@ -68,3 +68,9 @@ The configured member account now loads read-only summaries from its server-deri
 Member proposal rows now open independently decoded native details. The screen preserves product references, quantities, merchant/maker/carrier identity, gifts and disclosure text, and distinguishes physical reported outcomes from digital choice status. It does not invent currency, totals, recovery facts or signing results.
 
 [Detail behaviour and lifecycle](MEMBER_DETAIL.md) describes validation, navigation and remaining statement/approval work. [Detail validation](evidence/member-detail-validation.json) keeps this increment's measurements separate from sample and device evidence.
+
+## Read-only approval and statement increment
+
+Member details now load binding-specific review sections after refreshing the owned offer. Digital review preserves alternatives, arguments against, exclusions and mandate terms. Physical review independently checks goods amounts and the statement challenge, including gift goods at zero. Both distinguish unknown carriage from zero and show relevant standing/product disclosures without claiming signature verification. Refresh stays in the navigation toolbar for access from long forms.
+
+[Review contracts and lifecycle](../contracts/member-review/README.md) explains cross-projection checks and the test-only response rebinding. [Review validation](evidence/member-review-validation.json) records this increment. Signature controls, transaction authority, actual native/device authentication and deployed transport remain separate work.

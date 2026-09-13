@@ -76,6 +76,33 @@ final class PrototypeUITests: XCTestCase {
         XCTAssertFalse(app.buttons["reviewButton"].exists)
         let screenshot = XCTAttachment(screenshot: app.screenshot()); screenshot.name = "Physical member detail (test fixture)"; screenshot.lifetime = .keepAlways; add(screenshot)
     }
+    @MainActor func testDigitalMemberReviewShowsUnknownCarriageAndArguments() {
+        let app = launch("--member-list-fixture")
+        tap("memberAccount", app); tap("memberProposal-fixture-member-offer", app); tap("loadMemberReview", app)
+        XCTAssertTrue(app.staticTexts["reviewCarriageUnknown"].waitForExistence(timeout: 5))
+        for _ in 0..<10 { if app.staticTexts["reviewArgumentAgainst"].firstMatch.isHittable { break }; app.swipeUp() }
+        XCTAssertTrue(app.staticTexts["reviewArgumentAgainst"].firstMatch.isHittable)
+        let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "Digital review alternatives and argument (test fixture)"; shot.lifetime = .keepAlways; add(shot)
+        for _ in 0..<12 { if app.staticTexts["reviewExclusion"].isHittable { break }; app.swipeUp() }
+        XCTAssertTrue(app.staticTexts["reviewExclusion"].isHittable)
+        XCTAssertFalse(app.buttons["signButton"].exists)
+        tap("refreshMemberDetail", app)
+        XCTAssertFalse(app.staticTexts["reviewCarriageUnknown"].exists)
+    }
+    @MainActor func testPhysicalMemberReviewPreservesCarriageAndZeroGiftAmount() {
+        let app = launch("--member-list-fixture")
+        tap("memberAccount", app); tap("memberProposal-fixture-member-physical", app); tap("loadMemberReview", app)
+        XCTAssertTrue(app.staticTexts["reviewCarriage"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["reviewCarriage"].label, "Carriage: 550")
+        for _ in 0..<12 { if app.staticTexts["reviewGiftAmount"].isHittable { break }; app.swipeUp() }
+        XCTAssertEqual(app.staticTexts["reviewGiftAmount"].label, "Proposed goods amount: 0")
+        XCTAssertTrue(app.staticTexts["reviewGiftAmount"].isHittable)
+        XCTAssertFalse(app.buttons["signButton"].exists)
+        let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "Physical review gift and disclosures (test fixture)"; shot.lifetime = .keepAlways; add(shot)
+        app.navigationBars["Physical proposal"].buttons.element(boundBy: 0).tap()
+        tap("memberProposal-fixture-member-physical", app)
+        XCTAssertFalse(app.staticTexts["reviewCarriage"].exists)
+    }
     #endif
     @MainActor func testInboxScopeAndPartialSource() {
         let app=launch("--inbox")
