@@ -12,15 +12,16 @@ public protocol MemberAccountService: MemberProposalService {
 extension MemberClient: MemberAccountService {}
 
 @MainActor public final class MemberAccount: ObservableObject {
-    @Published public private(set) var session: MemberSessionInfo?
+    @Published public private(set) var session: MemberSessionInfo? { didSet { statements?.setSession(session) } }
     @Published public private(set) var busy = false
     @Published public private(set) var notice = ""
+    public let statements: MemberStatementFlow?
     public let proposals: MemberProposals
     private let service: any MemberAccountService
     private let passkeys: any MemberPasskeyAuthorising
     private var generation: UInt64 = 0
-    public init(service: any MemberAccountService, passkeys: any MemberPasskeyAuthorising) {
-        self.service = service; self.passkeys = passkeys
+    public init(service: any MemberAccountService, passkeys: any MemberPasskeyAuthorising, statements: MemberStatementFlow? = nil) {
+        self.service = service; self.passkeys = passkeys; self.statements = statements
         proposals = MemberProposals(service: service)
         proposals.onSessionUnavailable = { [weak self] in
             guard let self else { return }

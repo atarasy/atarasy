@@ -89,6 +89,23 @@ final class PrototypeUITests: XCTestCase {
         tap("refreshMemberDetail", app)
         XCTAssertFalse(app.staticTexts["reviewCarriageUnknown"].exists)
     }
+    @MainActor func testNativeStatementReviewAndUnresolvedResult() {
+        let app = launch("--member-statement-fixture")
+        tap("memberAccount", app); tap("prepareMemberStatement", app)
+        XCTAssertTrue(app.staticTexts["frozenGoodsTotal"].waitForExistence(timeout: 5))
+        for _ in 0..<16 { if app.buttons["approveMemberStatement"].isHittable { break }; app.swipeUp() }
+        XCTAssertTrue(app.buttons["approveMemberStatement"].exists)
+        XCTAssertFalse(app.buttons["approveMemberStatement"].isEnabled)
+        let reviewShot = XCTAttachment(screenshot: app.screenshot()); reviewShot.name = "Frozen mandate before explicit approval"; reviewShot.lifetime = .keepAlways; add(reviewShot)
+        tap("acknowledgeFrozenStatement", app); XCTAssertTrue(app.buttons["approveMemberStatement"].isEnabled)
+        tap("approveMemberStatement", app)
+        XCTAssertTrue(app.staticTexts["statementFlowNotice"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["statementFlowNotice"].label.contains("still unknown"))
+        XCTAssertFalse(app.buttons["approveMemberStatement"].exists)
+        tap("checkMemberStatement", app)
+        XCTAssertTrue(app.staticTexts["statementFlowNotice"].label.contains("Nothing was resubmitted"))
+        let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "Unresolved statement outcome without replay"; shot.lifetime = .keepAlways; add(shot)
+    }
     @MainActor func testPhysicalMemberReviewPreservesCarriageAndZeroGiftAmount() {
         let app = launch("--member-list-fixture")
         tap("memberAccount", app); tap("memberProposal-fixture-member-physical", app); tap("loadMemberReview", app)

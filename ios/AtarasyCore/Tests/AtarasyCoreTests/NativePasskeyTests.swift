@@ -166,3 +166,19 @@ func capturedCeremony(_ name: String) throws -> MemberCeremony {
         XCTAssertNil(model.session); XCTAssertEqual(model.notice, ""); XCTAssertFalse(model.busy)
     }
 }
+
+extension NativePasskeyTests {
+    func testStatementRequestUsesOnlySelectedCredentialAndDoesNotWidenLogin() throws {
+        let url = Bundle.module.url(forResource: "member-operation-runtime", withExtension: "json", subdirectory: "Fixtures")!
+        let root = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: Any]
+        let prepared = try JSONDecoder().decode(MemberPreparedOperation.self, from: JSONSerialization.data(withJSONObject: root["prepared"]!))
+        let ceremony = MemberCeremony(id: prepared.operationID, expiresAt: prepared.expiresAt, publicKey: prepared.publicKey)
+        let options = try NativePasskeyOptions(ceremony: ceremony, environment: environment, kind: .statement, now: 1_800_000_000_003)
+        let request = try XCTUnwrap(options.request() as? ASAuthorizationPlatformPublicKeyCredentialAssertionRequest)
+        XCTAssertEqual(request.allowedCredentials.map(\.credentialID), options.allowedCredentialIDs)
+        XCTAssertEqual(request.allowedCredentials.count, 1); XCTAssertEqual(request.userVerificationPreference, .required)
+        XCTAssertThrowsError(try NativePasskeyOptions(ceremony: ceremony, environment: environment, kind: .assertion, now: 1_800_000_000_003))
+        var key = ceremony.publicKey; key["allowCredentials"] = .array([])
+        XCTAssertThrowsError(try NativePasskeyOptions(ceremony: MemberCeremony(id: ceremony.id, expiresAt: ceremony.expiresAt, publicKey: key), environment: environment, kind: .statement, now: 1_800_000_000_003))
+    }
+}

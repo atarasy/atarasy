@@ -1,0 +1,144 @@
+import Foundation
+import Combine
+
+public protocol MemberStatementService: Sendable {
+    func prepareStatement(_ local: PreparedMemberStatement, store: any MemberOperationStore) async throws -> (MemberOperationHandle, MemberPreparedOperation)
+    func operationReview(_ handle: MemberOperationHandle) async throws -> MemberPreparedOperation
+    func submitStatement(_ handle: MemberOperationHandle, assertion: MemberPasskeyResponse, store: any MemberOperationStore) async throws -> MemberOperationOutcome
+    func operationOutcome(_ handle: MemberOperationHandle) async -> MemberOperationOutcome
+    func cancelOperation(_ handle: MemberOperationHandle) async throws
+}
+extension MemberClient: MemberStatementService {}
+
+public struct FrozenMemberStatement: Sendable {
+    public let statement: MemberStatement
+    public let mandate: Mandate
+    public let disputed: [String]
+    public let goodsCharged: Int64
+    public let disputedAmount: Int64
+    init(_ prepared: MemberPreparedOperation, detail: MemberOfferDetail) throws {
+        guard case .object(let view) = prepared.review, Set(view.keys) == ["statement", "mandate", "disputed"],
+              case .object(var statement) = view["statement"], let mandate = view["mandate"],
+              case .array(let disputed) = view["disputed"] else { throw MemberFailure.malformed }
+        self.disputed = try disputed.map { guard case .string(let id) = $0 else { throw MemberFailure.malformed }; return id }
+        guard Set(self.disputed.map { Data($0.utf8) }).count == self.disputed.count,
+              case .integer(let carriage) = statement["carriage"], case .array(let rows) = statement["lines"] else { throw MemberFailure.malformed }
+        let lines = try rows.map { row -> StatementLine in
+            guard case .object(let line) = row, case .string(let id) = line["candidate"], case .string(let valence) = line["valence"], case .integer(let amount) = line["amount"] else { throw MemberFailure.malformed }
+            return .init(candidate: id, valence: valence, amount: amount, disputed: false)
+        }
+        statement["challenge"] = .string(Canonical.challenge(try Canonical.statement(offer: detail.id, carriage: carriage, lines: lines)))
+        let disputedIDs = self.disputed
+        let charged = lines.filter { !disputedIDs.contains($0.candidate) }.map(\.amount)
+        let contested = lines.filter { disputedIDs.contains($0.candidate) }.map(\.amount)
+        func sum(_ amounts: [Int64]) throws -> Int64 {
+            try amounts.reduce(0) { total, amount in guard amount >= 0, total <= Canonical.maximumInteger - amount else { throw MemberFailure.malformed }; return total + amount }
+        }
+        goodsCharged = try sum(charged); disputedAmount = try sum(contested)
+        self.statement = try MemberStatement.decode(JSONEncoder().encode(MemberJSON.object(statement)), detail: detail)
+        self.mandate = try ReferenceResponseReader.mandate(status: 200, contentType: "application/json", data: JSONEncoder().encode(mandate), expectedID: detail.mandate, expectedHousehold: detail.household)
+    }
+}
+
+@MainActor public final class MemberStatementFlow: ObservableObject {
+    @Published public private(set) var saved: [MemberOperationHandle] = []
+    @Published public private(set) var handle: MemberOperationHandle?
+    @Published public private(set) var review: FrozenMemberStatement?
+    @Published public private(set) var busy = false
+    @Published public private(set) var notice = ""
+    public var canApprove: Bool { !busy && review != nil && handle?.attempted == false && (handle?.expiresAt ?? 0) > now() && (session?.expiresAt ?? 0) > now() }
+    private let environment: MemberEnvironment
+    private let service: any MemberStatementService
+    private let passkeys: any MemberPasskeyAuthorising
+    private let store: FileMemberOperationStore
+    private let now: () -> Int64
+    private var session: MemberSessionInfo?
+    private var prepared: MemberPreparedOperation?
+    private var generation: UInt64 = 0
+    public init(environment: MemberEnvironment, service: any MemberStatementService, passkeys: any MemberPasskeyAuthorising, store: FileMemberOperationStore, now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }) {
+        self.environment = environment; self.service = service; self.passkeys = passkeys; self.store = store; self.now = now
+    }
+    public func setSession(_ session: MemberSessionInfo?) {
+        generation &+= 1; self.session = session; handle = nil; prepared = nil; review = nil; saved = []; notice = ""
+        refreshSaved()
+    }
+    public func closeReview() { generation &+= 1; handle = nil; prepared = nil; review = nil; notice = "" }
+    public func checkExpiry() {
+        if (session?.expiresAt ?? 0) <= now() { setSession(nil) }
+        else if let handle, handle.expiresAt <= now(), review != nil { review = nil; prepared = nil; notice = "This approval window ended. You can still check the recorded result." }
+    }
+    public func refreshSaved() {
+        guard let session, session.expiresAt > now() else { saved = []; return }
+        do {
+            saved = try store.handles().filter {
+                Data($0.environment.utf8) == Data(environment.name.utf8) && $0.origin == environment.origin &&
+                Data($0.sessionID.utf8) == Data(session.id.utf8) && Data($0.household.utf8) == Data(session.household.utf8) &&
+                session.presenters.contains($0.presenter)
+            }
+        } catch { saved = []; notice = "Saved operations could not be read. Do not repeat an earlier submission." }
+    }
+    public func prepare(detail: MemberOfferDetail, statement: MemberStatement, disputed: [String]) async {
+        guard !busy, let session, session.expiresAt > now() else { return }
+        busy = true; let current = generation; notice = ""; handle = nil; review = nil; prepared = nil
+        defer { busy = false }
+        do {
+            let local = try PreparedMemberStatement(environment: environment, session: session, detail: detail, statement: statement, disputed: disputed, now: now())
+            let (handle, prepared) = try await service.prepareStatement(local, store: store)
+            guard current == generation, !Task.isCancelled, session.expiresAt > now() else { return }
+            self.handle = handle; refreshSaved()
+            let frozen = try FrozenMemberStatement(prepared, detail: detail)
+            guard Data(local.canonical.utf8) == Data(prepared.canonical.utf8), frozen.disputed.map({ Data($0.utf8) }).sorted(by: { $0.lexicographicallyPrecedes($1) }) == disputed.map({ Data($0.utf8) }).sorted(by: { $0.lexicographicallyPrecedes($1) }) else { throw MemberFailure.scopeMismatch }
+            self.prepared = prepared; review = frozen
+            notice = "Read the frozen statement and mandate before approving."
+        } catch { if current == generation { notice = "The statement could not be prepared. Check saved operations before trying again."; refreshSaved() } }
+    }
+    public func approve() async {
+        guard canApprove, let handle, let prepared, let session else { return }
+        busy = true; let current = generation; notice = ""; defer { busy = false }
+        var dispatchStarted = false
+        do {
+            let fresh = try await service.operationReview(handle)
+            guard current == generation, !Task.isCancelled, session.expiresAt > now(), handle.expiresAt > now() else { return }
+            let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+            guard fresh.operationState == "prepared", fresh.operationID == prepared.operationID,
+                  fresh.reviewedRevision == prepared.reviewedRevision, fresh.publicKey == prepared.publicKey,
+                  try encoder.encode(fresh.review) == encoder.encode(prepared.review) else { throw MemberFailure.scopeMismatch }
+            let ceremony = MemberCeremony(id: handle.id, expiresAt: handle.expiresAt, publicKey: fresh.publicKey)
+            let assertion = try await passkeys.authorise(ceremony, kind: .statement)
+            guard current == generation, !Task.isCancelled, session.expiresAt > now(), handle.expiresAt > now() else { return }
+            dispatchStarted = true; review = nil; self.prepared = nil
+            let outcome = try await service.submitStatement(handle, assertion: assertion, store: store)
+            guard current == generation else { return }
+            self.handle = try store.load(id: handle.id) ?? handle; show(outcome); refreshSaved()
+        } catch {
+            guard current == generation else { return }
+            if !dispatchStarted && (error as? NativePasskeyFailure == .cancelled || error is CancellationError) { notice = "Approval cancelled. No assertion was submitted." }
+            else { review = nil; self.prepared = nil; notice = "Approval could not be confirmed. Check the saved result before taking another action." }
+            refreshSaved()
+        }
+    }
+    public func check(_ selected: MemberOperationHandle) async {
+        guard !busy, saved.contains(selected) else { return }
+        busy = true; let current = generation; handle = selected; review = nil; prepared = nil
+        defer { busy = false }
+        let outcome = await service.operationOutcome(selected)
+        guard current == generation, !Task.isCancelled else { return }
+        show(outcome)
+    }
+    public func cancelPrepared() async {
+        guard !busy, let handle, !handle.attempted, saved.contains(handle) else { return }
+        busy = true; let current = generation; defer { busy = false }
+        do {
+            try await service.cancelOperation(handle)
+            guard current == generation else { return }
+            review = nil; prepared = nil; notice = "Prepared statement cancelled. No approval was submitted by this action."
+        } catch { if current == generation { review = nil; prepared = nil; notice = "Cancellation could not be confirmed. Check the saved result." } }
+    }
+    private func show(_ outcome: MemberOperationOutcome) {
+        switch outcome {
+        case .committed(let receipt): notice = "Statement recorded. Goods amount: \(receipt.charged). This record does not confirm provider payment."
+        case .pending(let state): notice = "No committed result is reported. Current state: \(state). Nothing was resubmitted."
+        case .unresolved: notice = "The result is still unknown. Check again later; do not repeat the submission."
+        }
+    }
+}

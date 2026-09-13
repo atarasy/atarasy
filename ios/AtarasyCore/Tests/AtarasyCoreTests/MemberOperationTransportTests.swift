@@ -149,3 +149,96 @@ private struct RefusingOperationStore: MemberOperationStore {
     }
 
 }
+
+@MainActor private final class FlowService: MemberStatementService {
+    let handle: MemberOperationHandle
+    var preparation: MemberPreparedOperation
+    var submissions = 0
+    var outcomes = 0
+    var changed = false
+    init(handle: MemberOperationHandle, preparation: MemberPreparedOperation) { self.handle = handle; self.preparation = preparation }
+    func prepareStatement(_ local: PreparedMemberStatement, store: any MemberOperationStore) async throws -> (MemberOperationHandle, MemberPreparedOperation) { try store.save(handle); return (handle, preparation) }
+    func operationReview(_ handle: MemberOperationHandle) async throws -> MemberPreparedOperation { if changed { throw MemberFailure.scopeMismatch }; return preparation }
+    func submitStatement(_ handle: MemberOperationHandle, assertion: MemberPasskeyResponse, store: any MemberOperationStore) async throws -> MemberOperationOutcome { try store.claim(handle); submissions += 1; return .unresolved }
+    func operationOutcome(_ handle: MemberOperationHandle) async -> MemberOperationOutcome { outcomes += 1; return .pending("prepared") }
+    func cancelOperation(_ handle: MemberOperationHandle) async throws {}
+}
+@MainActor private final class FlowPasskeys: MemberPasskeyAuthorising {
+    var calls = 0
+    var cancel = false
+    var hold = false
+    var pending: CheckedContinuation<Void, Never>?
+    var observed: CheckedContinuation<Void, Never>?
+    func wait() async { if pending != nil { return }; await withCheckedContinuation { observed = $0 } }
+    func release() { pending?.resume(); pending = nil }
+    func authorise(_ ceremony: MemberCeremony, kind: NativePasskeyOptions.Kind) async throws -> MemberPasskeyResponse {
+        calls += 1; XCTAssertTrue(kind == .statement)
+        if hold { await withCheckedContinuation { pending = $0; observed?.resume(); observed = nil } }
+        if cancel { throw NativePasskeyFailure.cancelled }
+        return .assertion(id: "YQ", clientDataJSON: "YQ", authenticatorData: "YQ", signature: "YQ", userHandle: "YQ")
+    }
+}
+extension MemberOperationTransportTests {
+    private func flowSetup() throws -> (MemberStatementFlow, FlowService, FlowPasskeys, MemberOfferDetail, MemberStatement, MemberSessionInfo) {
+        let url = Bundle.module.url(forResource: "member-transaction-responses", withExtension: "json", subdirectory: "Fixtures")!
+        let cases = (try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: Any])["cases"] as! [[String: Any]]
+        func value(_ name: String) -> [String: Any] { cases.first { $0["name"] as? String == name }!["value"] as! [String: Any] }
+        let object = value("physical-detail"), raw = value("physical-known-carriage")
+        let detail = try MemberOfferDetail.decode(data(object), expectedID: object["id"] as! String, household: "detail-house")
+        let statement = try MemberStatement.decode(data(raw), detail: detail)
+        let info = MemberSessionInfo(id: "session", household: "detail-house", presenters: ["merchant-1"], expiresAt: 5000)
+        let env = try MemberEnvironment(name: "test", origin: URL(string: "https://unit.example")!)
+        let local = try PreparedMemberStatement(environment: env, session: info, detail: detail, statement: statement, disputed: [], now: 1000)
+        var p = try fixture("prepared"), review = p["review"] as! [String: Any], st = raw
+        st.removeValue(forKey: "challenge"); review["statement"] = st; review["disputed"] = [] as [String]
+        var mandate = review["mandate"] as! [String: Any]; mandate["id"] = detail.mandate; mandate["household"] = info.household; review["mandate"] = mandate
+        p["review"] = review; p["canonical"] = local.canonical; p["expiresAt"] = 2000
+        var h = try JSONSerialization.jsonObject(with: JSONEncoder().encode(handle())) as! [String: Any]
+        h["household"] = info.household; h["offer"] = detail.id; h["canonical"] = local.canonical; h["expiresAt"] = 2000
+        let service = try FlowService(handle: JSONDecoder().decode(MemberOperationHandle.self, from: data(h)), preparation: JSONDecoder().decode(MemberPreparedOperation.self, from: data(p)))
+        let passkeys = FlowPasskeys(), (store, _) = try store()
+        let flow = MemberStatementFlow(environment: env, service: service, passkeys: passkeys, store: store, now: { 1000 }); flow.setSession(info)
+        return (flow, service, passkeys, detail, statement, info)
+    }
+    func testFrozenReviewPrecedesNativeSigningAndUncertaintyDisablesAnotherApproval() async throws {
+        let (flow, service, passkeys, detail, statement, _) = try flowSetup()
+        await flow.approve(); XCTAssertEqual(passkeys.calls, 0)
+        await flow.prepare(detail: detail, statement: statement, disputed: [])
+        XCTAssertTrue(flow.canApprove); XCTAssertEqual(flow.review?.goodsCharged, 3000)
+        XCTAssertEqual(flow.review?.statement.disclosures, statement.disclosures)
+        await flow.approve(); XCTAssertEqual(service.submissions, 1); XCTAssertFalse(flow.canApprove)
+        await flow.approve(); XCTAssertEqual(service.submissions, 1)
+        XCTAssertTrue(flow.saved[0].attempted)
+    }
+    func testNativeCancellationAndChangedReviewNeverSubmit() async throws {
+        for changed in [false, true] {
+            let (flow, service, passkeys, detail, statement, _) = try flowSetup()
+            await flow.prepare(detail: detail, statement: statement, disputed: [])
+            passkeys.cancel = true; service.changed = changed
+            await flow.approve(); XCTAssertEqual(service.submissions, 0); XCTAssertEqual(passkeys.calls, changed ? 0 : 1)
+        }
+    }
+    func testClosingDuringNativeCeremonyDropsLateAssertion() async throws {
+        let (flow, service, passkeys, detail, statement, _) = try flowSetup()
+        await flow.prepare(detail: detail, statement: statement, disputed: []); passkeys.hold = true
+        let task = Task { await flow.approve() }; await passkeys.wait()
+        flow.closeReview(); passkeys.release(); await task.value
+        XCTAssertEqual(service.submissions, 0); XCTAssertNil(flow.review)
+    }
+    func testRestoredHandlesOnlyReadResultsAndFilterSession() async throws {
+        let (flow, service, passkeys, detail, statement, info) = try flowSetup()
+        await flow.prepare(detail: detail, statement: statement, disputed: [])
+        flow.setSession(nil); XCTAssertTrue(flow.saved.isEmpty)
+        flow.setSession(info); XCTAssertEqual(flow.saved.count, 1); XCTAssertFalse(flow.canApprove)
+        await flow.check(flow.saved[0]); XCTAssertEqual(service.outcomes, 1); XCTAssertEqual(passkeys.calls, 0)
+        flow.setSession(MemberSessionInfo(id: "other", household: info.household, presenters: info.presenters, expiresAt: info.expiresAt)); XCTAssertTrue(flow.saved.isEmpty)
+    }
+    func testCancellingPreparedStatementClosesApprovalWithoutSigning() async throws {
+        let (flow, service, passkeys, detail, statement, _) = try flowSetup()
+        await flow.prepare(detail: detail, statement: statement, disputed: [])
+        await flow.cancelPrepared()
+        XCTAssertFalse(flow.canApprove); XCTAssertTrue(flow.notice.contains("cancelled"))
+        XCTAssertEqual(service.submissions, 0); XCTAssertEqual(passkeys.calls, 0)
+    }
+
+}

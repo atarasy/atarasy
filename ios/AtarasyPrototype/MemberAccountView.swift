@@ -26,7 +26,9 @@ struct MemberAccountSheet: View {
     var body: some View {
         NavigationStack {
             #if ATARASY_UI_TEST_FIXTURES
-            if ProcessInfo.processInfo.arguments.contains("--member-list-fixture") {
+            if ProcessInfo.processInfo.arguments.contains("--member-statement-fixture") {
+                MemberStatementFixtureView()
+            } else if ProcessInfo.processInfo.arguments.contains("--member-list-fixture") {
                 MemberProposalFixtureView()
             } else { configuredContent }
             #else
@@ -67,7 +69,10 @@ private struct ConfiguredMemberAccount: View {
                 let service = MemberClient(environment: environment, transport: transport, vault: vault)
                 let reference = window
                 let passkeys = NativePasskeyAuthoriser(environment: environment, anchor: { [weak reference] in reference?.window })
-                account = MemberAccount(service: service, passkeys: passkeys)
+                let directory = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true).appendingPathComponent("MemberOperations", isDirectory: true)
+                let store = try FileMemberOperationStore(directory: directory)
+                let statements = MemberStatementFlow(environment: environment, service: service, passkeys: passkeys, store: store)
+                account = MemberAccount(service: service, passkeys: passkeys, statements: statements)
             } catch { dismiss() }
         }
         .onChange(of: scenePhase) { _, phase in if phase == .active { account?.clearExpired(now: Int64(Date().timeIntervalSince1970 * 1000)) } }
@@ -92,7 +97,8 @@ private struct MemberAccountForm: View {
                     Text("Expires \(Date(timeIntervalSince1970: Double(session.expiresAt) / 1000).formatted())")
                     Button("Sign out") { perform { await account.signOut() } }.accessibilityIdentifier("memberSignOut")
                 }
-                MemberProposalSections(model: account.proposals)
+                MemberProposalSections(model: account.proposals, statements: account.statements)
+                if let statements = account.statements { SavedMemberOperationSections(flow: statements) }
             } else {
                 Section {
                     Button("Sign in with a passkey") { perform { await account.signIn() } }.accessibilityIdentifier("memberSignIn")

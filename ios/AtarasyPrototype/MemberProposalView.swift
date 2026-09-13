@@ -3,6 +3,7 @@ import AtarasyCore
 
 struct MemberProposalSections: View {
     @ObservedObject var model: MemberProposals
+    var statements: MemberStatementFlow? = nil
     var body: some View {
         Group {
         Section("Member proposals") {
@@ -21,7 +22,7 @@ struct MemberProposalSections: View {
                 case .available:
                     if source.offers.isEmpty { Text("No proposals from this source.").accessibilityIdentifier("memberSourceEmpty-" + source.presenter) }
                     ForEach(Array(source.offers.enumerated()), id: \.offset) { _, offer in
-                        NavigationLink { MemberOfferDetailView(model: model, selected: offer) } label: {
+                        NavigationLink { MemberOfferDetailView(model: model, selected: offer, statements: statements) } label: {
                         VStack(alignment: .leading, spacing: 5) {
                             Text(offer.binding == "physical" ? "Physical proposal" : "Digital proposal").font(.headline)
                             Text(offer.id).textSelection(.enabled)

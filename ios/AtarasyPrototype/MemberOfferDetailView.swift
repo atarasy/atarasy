@@ -5,6 +5,7 @@ import AtarasyCore
 struct MemberOfferDetailView: View {
     @ObservedObject var model: MemberProposals
     let selected: MemberOfferSummary
+    var statements: MemberStatementFlow? = nil
     private let clock = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     var body: some View {
         Form {
@@ -21,7 +22,15 @@ struct MemberOfferDetailView: View {
                             .disabled(model.reviewLoading).accessibilityIdentifier("loadMemberReview")
                     }
                     if model.reviewLoading { ProgressView("Loading review information") }
-                    else if let review = model.review { MemberReviewSections(review: review) }
+                    else if let review = model.review {
+                        MemberReviewSections(review: review)
+                        if case .statement(let statement) = review, let statements {
+                            Section {
+                                NavigationLink("Review and approve statement") { MemberStatementScreen(flow: statements, detail: detail, statement: statement) }
+                                    .accessibilityIdentifier("openStatementApproval")
+                            }
+                        }
+                    }
                     else if model.reviewUnavailable { Section { Text("Review information is unavailable or changed. Refresh to try again; no decision has been made.").accessibilityIdentifier("memberReviewUnavailable") } }
                     Section(detail.binding == "physical" ? "Collection proposal" : "Digital proposal") {
                         Text("Proposal: \(detail.id)")

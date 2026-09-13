@@ -86,6 +86,16 @@ public final class FileMemberOperationStore: MemberOperationStore, @unchecked Se
         }
     }
     public func load(id: String) throws -> MemberOperationHandle? { try lock.withLock { try read(id) } }
+    public func handles() throws -> [MemberOperationHandle] {
+        try lock.withLock {
+            let urls = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+            guard urls.count <= 10_000 else { throw MemberFailure.storage }
+            return try urls.filter { $0.pathExtension == "json" }.sorted { $0.lastPathComponent < $1.lastPathComponent }.map {
+                guard let handle = try read($0.deletingPathExtension().lastPathComponent) else { throw MemberFailure.storage }
+                return handle
+            }
+        }
+    }
     public func claim(_ handle: MemberOperationHandle) throws {
         try lock.withLock {
             guard let current = try read(handle.id), current == handle, !current.attempted else { throw MemberFailure.busy }
