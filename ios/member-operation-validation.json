@@ -1,0 +1,60 @@
+{
+  "app_baseline": "234c7b0de7a9976087480482826ab7d697f3defe",
+  "service_commit": "a6b2f17db800213c715c3e04a1428e666379d27c",
+  "swift_tests": {
+    "passed": 93,
+    "failed": 0,
+    "new_tests": 8
+  },
+  "ios_simulator_build": "passed; unsigned arm64/x86_64 build, not UI tests or native ceremony",
+  "service_strict_types": "passed",
+  "negative_controls": {
+    "attempt": {
+      "exit": 1,
+      "failed_tests": 1,
+      "assertion_failures": 3
+    },
+    "challenge": {
+      "exit": 1,
+      "failed_tests": 1,
+      "assertion_failures": 1
+    }
+  },
+  "sources": {
+    "ios/AtarasyCore/Sources/AtarasyCore/MemberClient.swift": "58fd37d7bdc73bf080140a84b43b4c68d3f70dc5c24fd1f5b5cab0a8a325c95a",
+    "ios/AtarasyCore/Sources/AtarasyCore/MemberOperation.swift": "789b42067956f58d1daf405afbc605acb48efb3b5ca69c4d39a9fa11356b1f5b",
+    "ios/AtarasyCore/Tests/AtarasyCoreTests/MemberOperationTransportTests.swift": "c84527466075e6e7040a50ea0edc867e20efe948562f32b2f1fe737c51ccdf43",
+    "ios/AtarasyCore/Tests/AtarasyCoreTests/Fixtures/member-operation-runtime.json": "70350791086d7671151e19545432286408e05d55701dfd0b4ce8ac8da4bfb6f6",
+    "ios/MEMBER_OPERATION_TRANSPORT.md": "3b5fbbc94ce6eda532948c083c61875719e3f5c075641029ca1b7c3da70eb792"
+  },
+  "logs": {
+    "tests": {
+      "path": "/Users/yoichirohara/Documents/atarasy-development/swift-operation-tests-20260913.log",
+      "sha256": "ba5bffabc535f44fcb13c375f60e66440f002804d6754976adb1927a0a3fbd88"
+    },
+    "ios-build": {
+      "path": "/Users/yoichirohara/Documents/atarasy-development/swift-operation-ios-build-20260913.log",
+      "sha256": "59f2b9a3485486197db8bfe9f108a384376ecfba94235f11159ea3a0ff12418e"
+    },
+    "service-types": {
+      "path": "/Users/yoichirohara/Documents/atarasy-development/swift-operation-service-types-20260913.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "negative-attempt": {
+      "path": "/Users/yoichirohara/Documents/atarasy-development/swift-operation-negative-attempt-20260913.log",
+      "sha256": "e0e15e64b1578e15510fa8488599819e6bfc4cf6b7d7cf2d7de47ff5128a8bd4"
+    },
+    "negative-challenge": {
+      "path": "/Users/yoichirohara/Documents/atarasy-development/swift-operation-negative-challenge-20260913.log",
+      "sha256": "65f8677ce7d72e96e17f13d076bc85e54a2ee9afda07c0957ad62540986a9c52"
+    }
+  },
+  "limits": [
+    "Core transport only; native review/signing/reconciliation UI remains",
+    "Single shared store per process; atomic file replacement, no power-loss or process-kill measurement",
+    "Restart reopening tested; host must retain operation ID; no discovery UI",
+    "Exact-session reconciliation; no cross-session recovery",
+    "Existing login/session composition required; no listener/live environment activation",
+    "Receipt is engine evidence, not provider payment"
+  ]
+}

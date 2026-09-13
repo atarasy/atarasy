@@ -1,0 +1,79 @@
+name: AtarasyPrototype
+options:
+  bundleIdPrefix: dev.atarasy
+configs:
+  Debug: debug
+  Release: release
+  UITesting: debug
+  Development: debug
+packages:
+  AtarasyCore:
+    path: AtarasyCore
+settings:
+  configs:
+    UITesting:
+      SWIFT_ACTIVE_COMPILATION_CONDITIONS: "DEBUG ATARASY_UI_TEST_FIXTURES"
+  base:
+    SWIFT_VERSION: '6.0'
+    CODE_SIGNING_ALLOWED: NO
+    TARGETED_DEVICE_FAMILY: '1,2'
+targets:
+  AtarasyPrototype:
+    type: application
+    platform: iOS
+    deploymentTarget: '17.0'
+    sources:
+      - path: AtarasyPrototype
+      - path: ../contracts/ios-first/fixtures.json
+        buildPhase: resources
+    dependencies:
+      - package: AtarasyCore
+    settings:
+      configs:
+        Development:
+          DEVELOPMENT_TEAM: 83W4J65UE6
+          GENERATE_INFOPLIST_FILE: NO
+          INFOPLIST_FILE: development/Info.plist
+          CODE_SIGN_ENTITLEMENTS: development/AtarasyDevelopment.entitlements
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.atarasy.prototype
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
+  AtarasyPrototypeUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: '17.0'
+    sources: [AtarasyPrototypeUITests]
+    dependencies:
+      - target: AtarasyPrototype
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  AtarasyPrototype:
+    build:
+      targets:
+        AtarasyPrototype: all
+    test:
+      targets: [AtarasyPrototypeUITests]
+  AtarasyMemberListTests:
+    build:
+      targets:
+        AtarasyPrototype: all
+    test:
+      config: UITesting
+      targets: [AtarasyPrototypeUITests]
+  AtarasyDevelopment:
+    build:
+      targets:
+        AtarasyPrototype: all
+    run:
+      config: Development
+    profile:
+      config: Development
+    analyze:
+      config: Development
+    archive:
+      config: Development

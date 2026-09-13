@@ -1,0 +1,54 @@
+{
+  "date": "2026-09-13",
+  "baseline_commit": "2cf44ad8c832eac9ead9d74844f41b0f8df029e2",
+  "source_hashes": {
+    "contracts/ios-first/AcknowledgementResponse.schema.json": "99d8260b981ff193b54d39417ce0d7058da0728ac59a911e0258e421fdfea932",
+    "contracts/ios-first/ConfigPublicationRequest.schema.json": "9beee4c57da5da8d156df5a9ea9648f9b08919020d7beba00be064584f233dd2",
+    "contracts/ios-first/ConfigResponse.schema.json": "43b12ed8cff1610e01f3a4142b4e8d4f424f6652023970cf918aed149890c4a9",
+    "contracts/ios-first/DisclosurePublicationRequest.schema.json": "9b4ef724e136b89d9e7b6bf4a86277c27a9c2684f93e8792c430b9369e4ff980",
+    "contracts/ios-first/MandateResponse.schema.json": "362d8f63851a51873127cc1bb4c2a2f7e4f07af51e9225507cc54eb69b964322",
+    "contracts/ios-first/OfferCreationRequest.schema.json": "4d11fbfb7d24e1d2e3aee1f0e89ee438bb39efee2c994b8cb34972eb4e78cf5e",
+    "contracts/ios-first/README.md": "3141fdf73d85f2fb09c035e17f238165bd3cd2bc592726104a6e20e1351957aa",
+    "contracts/ios-first/openapi.json": "3050b339a18eddf4115a3bcf2e54f924e9c66a23c01ddc7d0efcb8d7f6022049",
+    "contracts/ios-first/response-examples.json": "be432ecdc91abf7396cfaa7af9c84e3dd200c1ccb5b51a2001c5d84f8a60f3fb",
+    "ios/AtarasyCore/Sources/AtarasyCore/ReferenceResponses.swift": "49c8ede335859625e8161fcbc5936d37d688b26bea53a95dd1968bdcc29a8ed3",
+    "ios/AtarasyCore/Tests/AtarasyCoreTests/Fixtures/response-examples.json": "be432ecdc91abf7396cfaa7af9c84e3dd200c1ccb5b51a2001c5d84f8a60f3fb",
+    "ios/AtarasyCore/Tests/AtarasyCoreTests/MandateResponseTests.swift": "033a63b2f5da319b83f98045d8420731568e9445fd987de2045d49982b1e37f0",
+    "ios/README.md": "83457afbd1eac8a672428f84d44e57eb3892779b93d25d753f33252371bf5875",
+    "scripts/ios-first/capture-responses.ts": "e535e55caca48d3552294912b60703cbbdc6d185cd322c5a2bf337392dded396",
+    "scripts/ios-first/validate-contracts.py": "ae06a2ec03a772256625ff1f700d6cccd5c7703a03200cffbb3ccb6169ac57c3"
+  },
+  "results": {
+    "schemas": 19,
+    "reference_handler_responses": 44,
+    "response_negative_cases": 88,
+    "publication_request_cases": 5,
+    "prior_request_cases": 15,
+    "proposed_operation_cases": 5,
+    "swift_tests": 16,
+    "swift_failures": 0,
+    "ios_simulator_build": "passed"
+  },
+  "findings": [
+    "Pinned canonicalConfig omits physical eligibility; changed ambient flag accepted under original test signature"
+  ],
+  "limits": [
+    "In-process harness with ephemeral test keys and bare signatures",
+    "No production session, authenticator, HTTP transport or provider result",
+    "Existing native UI remains synthetic; earlier UI evidence not rerun"
+  ],
+  "logs": {
+    "publication-core-tests-20260913.log": {
+      "path": "/Users/yoichirohara/Documents/atarasy-development/publication-core-tests-20260913.log",
+      "sha256": "8e585c13835c9c90bb4eb10d4d5a9032f929e3b54641fa36e76a761e5d81524e"
+    },
+    "publication-schema-tests-20260913.log": {
+      "path": "/Users/yoichirohara/Documents/atarasy-development/publication-schema-tests-20260913.log",
+      "sha256": "bb612eba541207ea70c6437d5f699775b627d260f07b1a48d93216fd48019bc0"
+    },
+    "publication-ios-build-20260913.log": {
+      "path": "/Users/yoichirohara/Documents/atarasy-development/publication-ios-build-20260913.log",
+      "sha256": "643721265ce2bf5871588e02014e149e10a477dd6eb612ddfa424f6078c797fb"
+    }
+  }
+}

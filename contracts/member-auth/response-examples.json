@@ -1,0 +1,116 @@
+{
+  "serviceCommit": "5254b7cc74f993062a72d762b4f9dd4236278e45",
+  "transformations": [
+    "Issued synthetic token replaced with fixed valid-format fixture token."
+  ],
+  "cases": {
+    "registration-options": {
+      "path": "/auth/enrollment/options",
+      "status": 200,
+      "contentType": "application/json",
+      "cacheControl": "no-store",
+      "value": {
+        "id": "47607007-c4b9-46b8-810b-df23989eddeb",
+        "expiresAt": 2000,
+        "publicKey": {
+          "challenge": "ebT_yT9TVHf-Cr4T11XpUFaXMDeaWOr6YUMjAbV6Umc",
+          "rp": {
+            "name": "Atarasy fixture",
+            "id": "unit.example"
+          },
+          "user": {
+            "id": "6DbTGdIbybdXgemCh5vrlfIWiNyZd28Oix6Wz8TECGA",
+            "name": "member-Wz8TECGA",
+            "displayName": ""
+          },
+          "pubKeyCredParams": [
+            {
+              "alg": -7,
+              "type": "public-key"
+            }
+          ],
+          "timeout": 1000,
+          "attestation": "none",
+          "excludeCredentials": [],
+          "authenticatorSelection": {
+            "residentKey": "required",
+            "userVerification": "required",
+            "requireResidentKey": true
+          },
+          "extensions": {
+            "credProps": true
+          },
+          "hints": []
+        }
+      }
+    },
+    "registered": {
+      "path": "/auth/enrollment/verify",
+      "status": 201,
+      "contentType": "application/json",
+      "cacheControl": "no-store",
+      "value": {
+        "registered": true
+      }
+    },
+    "login-options": {
+      "path": "/auth/login/options",
+      "status": 200,
+      "contentType": "application/json",
+      "cacheControl": "no-store",
+      "value": {
+        "id": "2638e7c9-a994-49e6-ad4d-feecffff51fe",
+        "expiresAt": 2000,
+        "publicKey": {
+          "challenge": "MUPdpQntluk8hFJ8ef29Yt7V4x7s-TSzX_RRCNf3O4M",
+          "rpId": "unit.example",
+          "timeout": 1000,
+          "userVerification": "required",
+          "allowCredentials": []
+        }
+      }
+    },
+    "session-issued": {
+      "path": "/auth/login/verify",
+      "status": 200,
+      "contentType": "application/json",
+      "cacheControl": "no-store",
+      "value": {
+        "id": "6c6eeca5-458e-4c92-8203-39d773d5627b",
+        "token": "amr1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "expiresAt": 5000
+      }
+    },
+    "session-info": {
+      "path": "/auth/session",
+      "status": 200,
+      "contentType": "application/json",
+      "cacheControl": "no-store",
+      "value": {
+        "id": "6c6eeca5-458e-4c92-8203-39d773d5627b",
+        "household": "household-fixture",
+        "presenters": [
+          "presenter-fixture"
+        ],
+        "expiresAt": 5000
+      }
+    },
+    "logout": {
+      "path": "/auth/logout",
+      "status": 204,
+      "contentType": null,
+      "cacheControl": "no-store",
+      "value": null
+    },
+    "revoked": {
+      "path": "/auth/session",
+      "status": 401,
+      "contentType": "application/json",
+      "cacheControl": "no-store",
+      "value": {
+        "error": "request_unavailable",
+        "message": "Request unavailable."
+      }
+    }
+  }
+}

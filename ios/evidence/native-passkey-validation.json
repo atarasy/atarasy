@@ -1,0 +1,100 @@
+{
+  "date": "2026-09-13",
+  "applicationBaseline": "c3947713530956c24a9868c1b60f46855f99a9d4",
+  "serviceCommit": "5254b7cc74f993062a72d762b4f9dd4236278e45",
+  "toolchain": {
+    "swift": "6.4 (swiftlang-6.4.0.33.1 clang-2100.3.33.1)",
+    "macOS": "27.0",
+    "simulatorSDK": "27.0",
+    "deploymentFloor": "iOS 17.0"
+  },
+  "swiftPackage": {
+    "passed": 45,
+    "failed": 0,
+    "skipped": 0,
+    "prior": 33,
+    "nativeOptions": 6,
+    "accountLifecycle": 6
+  },
+  "simulatorUI": {
+    "phone": {
+      "passed": 5,
+      "failed": 0,
+      "device": "33797D78-555E-4DF5-8291-F6985EB6E3ED",
+      "mode": "test with build"
+    },
+    "tablet": {
+      "passed": 5,
+      "failed": 0,
+      "device": "1EA68F47-EC8C-4A19-97EB-5FACD12173B7",
+      "mode": "test-without-building using the phone-built product"
+    }
+  },
+  "configurationInventory": {
+    "bundleID": "dev.atarasy.prototype",
+    "memberEnvironmentInBuiltPlist": false,
+    "memberOriginInBuiltPlist": false,
+    "projectDevelopmentTeam": null,
+    "projectAssociatedDomains": null
+  },
+  "negativeControl": {
+    "path": "/Users/yoichirohara/Documents/atarasy-development/atarasy-native-uv-negative-hdr2f51h/AtarasyCore",
+    "replacement": {
+      "before": "request.userVerificationPreference = .required",
+      "after": "request.userVerificationPreference = .preferred",
+      "count": 2
+    },
+    "sourceSHA256": "b98cb0ce915477869b49f0f66a6791a104059f96b0fde0dad206a33c8429811d",
+    "mutatedSHA256": "c64e307797d37120af151755ea1792c961f6da89921f079a6dc5563e025ca728",
+    "testSHA256": "0f44b8aa0c498b136237500006358c8d7342c3bea943b639b603ec26e71e73e9",
+    "exitCode": 1,
+    "expectedFailures": 2
+  },
+  "sourceSHA256": {
+    "ios/AtarasyCore/Sources/AtarasyCore/NativePasskeys.swift": "b98cb0ce915477869b49f0f66a6791a104059f96b0fde0dad206a33c8429811d",
+    "ios/AtarasyCore/Sources/AtarasyCore/MemberAccount.swift": "0b39f59fe9d9afe108749932be4a1453e8c9464b95f2c7aa214df71746235fb6",
+    "ios/AtarasyCore/Sources/AtarasyCore/MemberClient.swift": "bef136a422caff0dda1df54ba1fd2695b059b2fa9d822d9ed0f1bc951cd35863",
+    "ios/AtarasyCore/Sources/AtarasyCore/MemberTransport.swift": "9e8631533afbbe46a784fb0171fd7f1950744b40c4234e93b185a025949a63ec",
+    "ios/AtarasyCore/Sources/AtarasyCore/MemberSessionVault.swift": "89a0b286c2a1fd48977329ccf1334e41cee6dee8430d7de9e629eb6a26f7094e",
+    "ios/AtarasyCore/Tests/AtarasyCoreTests/NativePasskeyTests.swift": "96040539c6b7fe372d6ece09755b3b3afc100d60da7dc3815ea5eecc79a67041",
+    "ios/AtarasyPrototype/App.swift": "b05757d7bf29d64873082338d0f8788ef836b8a8e645f0af306682273a892ade",
+    "ios/AtarasyPrototype/MemberAccountView.swift": "e723017f74ac5a3151af9aad99d47971d06d327e1d5f2b969e5629bc19ca0fd0",
+    "ios/AtarasyPrototypeUITests/PrototypeUITests.swift": "04149ea21b21e509bb91a9a8e9058258291e7022f94e021549f2064f7fa24db5",
+    "ios/AtarasyCore/Package.swift": "26f91ab0073046ad24bd823aa8e63c429718462da3e7c900958a98223213de76",
+    "ios/project.yml": "1423484829b89440007fd49b48066889649e5b3d07b43245ff2f35fb8ab279a2",
+    "ios/README.md": "2a2b153e698f43ba9876d329c0db646052a749ab918e544477cdbc78906dbbc4",
+    "ios/NATIVE_MEMBER_SETUP.md": "483098119b469435645a6bf98bf5487602c41d91bc8a1ff525fc6cce07bc275b"
+  },
+  "logs": {
+    "native-passkey-tests-20260913.log": {
+      "path": "/Users/yoichirohara/Documents/atarasy-development/native-passkey-tests-20260913.log",
+      "sha256": "2ed8a8a8216317fc4f697103bb4a35e355a8949b2358b8c735a6f1a4434cc1d9"
+    },
+    "native-passkey-phone-20260913.log": {
+      "path": "/Users/yoichirohara/Documents/atarasy-development/native-passkey-phone-20260913.log",
+      "sha256": "1fe3205b4f54c1b977f328981069bbeaa38b7993ba6d4c05875a98d0bc8b0e22"
+    },
+    "native-passkey-tablet-20260913.log": {
+      "path": "/Users/yoichirohara/Documents/atarasy-development/native-passkey-tablet-20260913.log",
+      "sha256": "d9bb68e66baba89b225fc0db2b287c1f8293d676be5e188e663a6335701683e2"
+    },
+    "native-passkey-negative-20260913.log": {
+      "path": "/Users/yoichirohara/Documents/atarasy-development/native-passkey-negative-20260913.log",
+      "sha256": "ad1dc1163d675d5670c951b256c714b83522b9fc9f70741ba94c7455c0b16979"
+    }
+  },
+  "resultBundles": [
+    "/Users/yoichirohara/Documents/atarasy-development/native-passkey-phone-20260913.xcresult",
+    "/Users/yoichirohara/Documents/atarasy-development/native-passkey-tablet-20260913.xcresult"
+  ],
+  "warnings": [
+    "Xcode emits AppIntents metadata-skipped warnings and debugger-version lookup notices; no Swift source warning in final test build."
+  ],
+  "limitations": [
+    "Request-object tests do not complete a system passkey ceremony.",
+    "Account model uses injected test service/authenticator seams; no configured network UI acceptance.",
+    "Simulator UI tests cover the unconfigured account sheet and four synthetic journeys on each device.",
+    "No actual Apple team/domain/AASA, device provisioning, deployed service or hardware credential acceptance.",
+    "Member proposals remain synthetic and are not yet connected to the authenticated account."
+  ]
+}

@@ -1,0 +1,104 @@
+{
+  "app_baseline": "946e6b4a037fd0f9cbefb8ee5656f5d04b1e9943",
+  "service_commit": "a919f44bd44a1c5e776d54a4bf93bc8dd3d38312",
+  "swift_tests": {
+    "passed": 99,
+    "failed": 0,
+    "new_tests": 6
+  },
+  "ui_tests": {
+    "unique_tests": 1,
+    "device_runs": 2,
+    "passed_runs": 2,
+    "failed_runs": 0,
+    "devices": [
+      {
+        "architecture": "arm64",
+        "deviceId": "1EA68F47-EC8C-4A19-97EB-5FACD12173B7",
+        "deviceName": "Atarasy Prototype tablet",
+        "modelName": "iPad Pro 11-inch (M5)",
+        "osBuildNumber": "24A5390f",
+        "osVersion": "27.0",
+        "platform": "iOS Simulator"
+      },
+      {
+        "architecture": "arm64",
+        "deviceId": "33797D78-555E-4DF5-8291-F6985EB6E3ED",
+        "deviceName": "Atarasy Prototype phone",
+        "modelName": "iPhone 17 Pro",
+        "osBuildNumber": "24A5390f",
+        "osVersion": "27.0",
+        "platform": "iOS Simulator"
+      }
+    ],
+    "runtime_warnings": []
+  },
+  "debug_simulator_build": "passed, unsigned arm64/x86_64",
+  "negative_controls": {
+    "selection": {
+      "exit": 1,
+      "failed_tests": 1,
+      "assertion_failures": 1
+    },
+    "credential": {
+      "exit": 1,
+      "failed_tests": 1,
+      "assertion_failures": 2
+    }
+  },
+  "sources": {
+    "ios/AtarasyCore/Sources/AtarasyCore/MemberAccount.swift": "c65ee5e9c2a3c3c0f7c785f7225ec406830fdfefa7d8d4e41a56df538a947409",
+    "ios/AtarasyCore/Sources/AtarasyCore/MemberOperation.swift": "b9a36b067c0273553b3374e2d8c1f8ad6db61a734d18742273cdba370882f90b",
+    "ios/AtarasyCore/Sources/AtarasyCore/NativePasskeys.swift": "d20e2aeb816233d43aef7ae71bacce114c4981fe4f46ef9ac48fb34368a94ad7",
+    "ios/AtarasyCore/Sources/AtarasyCore/MemberStatementFlow.swift": "1c1587cfc8772bc0a58b44271ca6b7f2152c8c4f9905f91b93545e1bd3f421bd",
+    "ios/AtarasyCore/Tests/AtarasyCoreTests/MemberOperationTransportTests.swift": "a02e16ff44fb368e1cfa3eb42466fca730b1679e436f256b2abcad0d2c53ce89",
+    "ios/AtarasyCore/Tests/AtarasyCoreTests/NativePasskeyTests.swift": "0fc8343914eb19b649d7aa70a8ebe11338fec3986bd8655b89af784f3ef98791",
+    "ios/AtarasyPrototype/MemberAccountView.swift": "6491a11b04d911befe1639ff6d9b617d825b4a83572fc117c968d82b8c68a407",
+    "ios/AtarasyPrototype/MemberOfferDetailView.swift": "66bb785921fab8e2fdc875d60def193fe5fb34e7d25b75e2d05c2d3336bf532b",
+    "ios/AtarasyPrototype/MemberProposalView.swift": "c284e845db7295bceeb23fcc5784ac89ae8d40130a8d4709674874dd11a8c759",
+    "ios/AtarasyPrototype/MemberReviewFixtureData.swift": "e2f237b8fa29419e842cb134a86ba89b3eae5bf02ca9643be1f2ac5e5fda3958",
+    "ios/AtarasyPrototype/MemberStatementFixture.swift": "a0394cf9fa9524c3b832dbd7e7591c85ab7e3a6932cac0c4ff18e05d7b495d42",
+    "ios/AtarasyPrototype/MemberStatementScreen.swift": "f954d116a8ed0a1f7fac609bbcf8a3fee74fabc01c22aeb04463fef8339aa861",
+    "ios/AtarasyPrototypeUITests/PrototypeUITests.swift": "1aba3e528bfe240c1db2dda378002c1fe24614dcb5455441440a63f345d96a8a",
+    "ios/NATIVE_STATEMENT_FLOW.md": "2e1a427dfa8a78bc315a84ca8cb8a044251de03e50799a6d87cb2393284d7287"
+  },
+  "screenshots": {
+    "ios/evidence/native-statement-phone-outcome.png": "3efb547af886032187206ddcd3d1fe9b4f44522d533c56de65273ace9154ddfb",
+    "ios/evidence/native-statement-phone-review.png": "18d739055e0a1a822bb3b7856936b0b066e8db580e60191511817bb5b8c140df",
+    "ios/evidence/native-statement-tablet-outcome.png": "1b3c38e6716231f46165d175a9594bb365dfbca93c6024888452d683b8290fac",
+    "ios/evidence/native-statement-tablet-review.png": "b97e8dae40bbdabc89b10502305017ae60e4a5a87110f94e11c80222da9d484b"
+  },
+  "logs": {
+    "tests": {
+      "path": "/Users/yoichirohara/Documents/atarasy-development/native-statement-tests-20260913.log",
+      "sha256": "30700bf8e8c192ff7bb4ccfee2c2e90a9f74845161f41b8ab3d9824a4d120f13"
+    },
+    "debug-build": {
+      "path": "/Users/yoichirohara/Documents/atarasy-development/native-statement-debug-build-20260913.log",
+      "sha256": "d4a1778eb1953a60eeddf977f55c0b2c3ed4275d86c74905dc1e792631dbe5f1"
+    },
+    "devices-ui": {
+      "path": "/Users/yoichirohara/Documents/atarasy-development/native-statement-devices-ui-20260913.log",
+      "sha256": "3fde3e66923b50af27322138fea8e7a6318f540d6da0ae814a20c55216bfc267"
+    },
+    "negative-selection": {
+      "path": "/Users/yoichirohara/Documents/atarasy-development/native-statement-negative-selection-20260913.log",
+      "sha256": "c1fcdd41eff276f62f6d272912cc41bb27b08ef236e8152db93e227888697329"
+    },
+    "negative-credential": {
+      "path": "/Users/yoichirohara/Documents/atarasy-development/native-statement-negative-credential-20260913.log",
+      "sha256": "09cc9ed357fdfee3671fab58ed9d8cd74fb96a2cea7d465aff4aa9e15426a2f1"
+    }
+  },
+  "ui_summary": {
+    "path": "/Users/yoichirohara/Documents/atarasy-development/native-statement-ui-summary-20260913.json",
+    "sha256": "fcdb715e50d4f8ee7fdccf6a90caee031238087bea1d207ceb0c8f67e9c30c44"
+  },
+  "limits": [
+    "Synthetic UI service/passkey adapters only in UITesting; no real ceremony",
+    "Actual platform request property tests, not credential issuance or AASA verification",
+    "Exact-session checkpoint restoration; no cross-session recovery or checkpoint garbage collection",
+    "No combined service listener or trusted environment activation",
+    "No new process-kill or power-loss measurement"
+  ]
+}

@@ -1,0 +1,105 @@
+import Foundation
+
+/// Durable correlation only. Contains neither bearer credentials nor assertions.
+public struct MemberOperationHandle: Codable, Equatable, Sendable {
+    public let id: String
+    public let environment: String
+    public let origin: URL
+    public let sessionID: String
+    public let household: String
+    public let presenter: String
+    public let offer: String
+    public let canonical: String
+    public let expiresAt: Int64
+    public let requestDigest: String
+    public let reviewedRevision: String
+    public let challenge: String
+    public let credentialID: String
+    public let attempted: Bool
+    func markedAttempted() -> Self {
+        Self(id: id, environment: environment, origin: origin, sessionID: sessionID, household: household, presenter: presenter, offer: offer, canonical: canonical, expiresAt: expiresAt, requestDigest: requestDigest, reviewedRevision: reviewedRevision, challenge: challenge, credentialID: credentialID, attempted: true)
+    }
+}
+public struct MemberPreparedOperation: Decodable, Sendable {
+    public let profile: String
+    public let operationID: String
+    public let requestDigest: String
+    public let reviewedRevision: String
+    public let expiresAt: Int64
+    public let canonical: String
+    public let review: MemberJSON
+    public let operationState: String
+    public let publicKey: [String: MemberJSON]
+    public let authorisation: String
+}
+public enum MemberOperationOutcome: Equatable, Sendable {
+    case committed(ProtocolSettlement)
+    case pending(String)
+    case unresolved
+}
+public protocol MemberOperationStore: Sendable {
+    func save(_ handle: MemberOperationHandle) throws
+    func load(id: String) throws -> MemberOperationHandle?
+    /// Atomically persists attempted=true or refuses an already attempted operation.
+    func claim(_ handle: MemberOperationHandle) throws
+}
+
+/// One shared store instance per app process. An app-private directory is required.
+/// Atomic replacement survives restart; this is not a multi-process dispatcher.
+public final class FileMemberOperationStore: MemberOperationStore, @unchecked Sendable {
+    private let directory: URL
+    private let lock = NSLock()
+    public init(directory: URL) throws {
+        guard directory.isFileURL else { throw MemberFailure.storage }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        let attributes = try FileManager.default.attributesOfItem(atPath: directory.path)
+        guard attributes[.type] as? FileAttributeType == .typeDirectory else { throw MemberFailure.storage }
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
+        self.directory = directory
+    }
+    private func path(_ id: String) throws -> URL {
+        guard UUID(uuidString: id)?.uuidString.lowercased() == id else { throw MemberFailure.invalidInput }
+        return directory.appendingPathComponent(id + ".json")
+    }
+    private func read(_ id: String) throws -> MemberOperationHandle? {
+        let url = try path(id)
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+        guard attributes[.type] as? FileAttributeType == .typeRegular,
+              (attributes[.size] as? NSNumber)?.intValue ?? Int.max <= 262_144 else { throw MemberFailure.storage }
+        let value = try JSONDecoder().decode(MemberOperationHandle.self, from: Data(contentsOf: url))
+        guard value.id == id else { throw MemberFailure.storage }
+        return value
+    }
+    private func write(_ handle: MemberOperationHandle) throws {
+        let data = try JSONEncoder().encode(handle)
+        guard data.count <= 262_144 else { throw MemberFailure.storage }
+        let url = try path(handle.id)
+        try data.write(to: url, options: .atomic)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+    }
+    public func save(_ handle: MemberOperationHandle) throws {
+        try lock.withLock {
+            if let existing = try read(handle.id) {
+                guard existing == handle else { throw MemberFailure.storage }
+            } else { try write(handle) }
+        }
+    }
+    public func load(id: String) throws -> MemberOperationHandle? { try lock.withLock { try read(id) } }
+    public func handles() throws -> [MemberOperationHandle] {
+        try lock.withLock {
+            let urls = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+            guard urls.count <= 10_000 else { throw MemberFailure.storage }
+            return try urls.filter { $0.pathExtension == "json" }.sorted { $0.lastPathComponent < $1.lastPathComponent }.map {
+                guard let handle = try read($0.deletingPathExtension().lastPathComponent) else { throw MemberFailure.storage }
+                return handle
+            }
+        }
+    }
+    public func claim(_ handle: MemberOperationHandle) throws {
+        try lock.withLock {
+            guard let current = try read(handle.id), current == handle, !current.attempted else { throw MemberFailure.busy }
+            try write(current.markedAttempted())
+        }
+    }
+}

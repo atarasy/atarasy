@@ -1,0 +1,282 @@
+{
+  "serviceCommit": "5254b7cc74f993062a72d762b4f9dd4236278e45",
+  "scope": "Actual engine handler and member read gate; test-only session/ownership adapters, in-memory engine and ephemeral helper keys. No native authentication or deployed transport.",
+  "cases": [
+    {
+      "name": "digital-presented",
+      "path": "/offers/e477b8bf-d37e-410c-9de4-1dfa09842d10",
+      "status": 200,
+      "contentType": "application/json",
+      "cacheControl": "no-store",
+      "value": {
+        "id": "e477b8bf-d37e-410c-9de4-1dfa09842d10",
+        "binding": "digital",
+        "household": "detail-house",
+        "presenter": "merchant-1",
+        "presenter_attested": true,
+        "purpose": "replenish",
+        "price_band": null,
+        "giver": null,
+        "config_version": "cfg-1",
+        "presented_at": 1789266042976,
+        "expires_at": 1789269642971,
+        "state": "presented",
+        "exploration_floor_met": true,
+        "mandate": "mandate-1",
+        "candidates": [
+          {
+            "id": "a247fc8b-1aea-4222-b613-b469c047727d",
+            "product": "tea-a",
+            "quantity": 2,
+            "unit_price": 1200,
+            "merchant": "maker-a",
+            "maker": "made-by-tea",
+            "ships": "carrier-a",
+            "category": null,
+            "predicted_conversion": 0.5,
+            "is_exploration": true,
+            "given_by": null,
+            "valence": "offered",
+            "decided_at": null,
+            "kept_as": null,
+            "lineage": null
+          },
+          {
+            "id": "d4b854cd-657e-4fa5-883a-8146f468f587",
+            "product": "tea-b",
+            "quantity": 1,
+            "unit_price": 900,
+            "merchant": "maker-a",
+            "maker": "made-by-tea",
+            "ships": "carrier-a",
+            "category": null,
+            "predicted_conversion": 0.5,
+            "is_exploration": true,
+            "given_by": "fixture-giver",
+            "valence": "offered",
+            "decided_at": null,
+            "kept_as": null,
+            "lineage": null
+          }
+        ],
+        "disclosures": [
+          {
+            "merchant": "maker-a",
+            "product": null,
+            "version": "d-1",
+            "items": [
+              {
+                "label": "payment",
+                "value": "charged when the household confirms"
+              },
+              {
+                "label": "delivery",
+                "value": "already placed"
+              },
+              {
+                "label": "returns",
+                "value": "as the merchant published"
+              }
+            ],
+            "signature": "gLNQ+rqF1ZPONWMEXvGknuCK6/KQOfQ/2Rii/yzajG/1dRLHwlruZLLEKjeYABXaWAmYOV+Edm3x2C2gfvJSDg=="
+          }
+        ]
+      }
+    },
+    {
+      "name": "physical-presented",
+      "path": "/offers/c9967476-aa3e-4eb8-98a1-cede677509ed",
+      "status": 200,
+      "contentType": "application/json",
+      "cacheControl": "no-store",
+      "value": {
+        "id": "c9967476-aa3e-4eb8-98a1-cede677509ed",
+        "binding": "physical",
+        "household": "detail-house",
+        "presenter": "merchant-1",
+        "presenter_attested": true,
+        "purpose": "replenish",
+        "price_band": null,
+        "giver": null,
+        "config_version": "cfg-1",
+        "presented_at": 1789266042978,
+        "expires_at": 1789269642978,
+        "state": "presented",
+        "exploration_floor_met": true,
+        "mandate": "mandate-1",
+        "candidates": [
+          {
+            "id": "c7011c25-6e83-4f28-9e9b-86d732a64264",
+            "product": "coffee-a",
+            "quantity": 2,
+            "unit_price": 1500,
+            "merchant": "maker-a",
+            "maker": "made-by-tea",
+            "ships": "carrier-a",
+            "category": null,
+            "predicted_conversion": 0.5,
+            "is_exploration": true,
+            "given_by": null,
+            "valence": "offered",
+            "decided_at": null,
+            "kept_as": null,
+            "lineage": null
+          },
+          {
+            "id": "ab86d4b0-4055-4ee6-a10e-0a1935788402",
+            "product": "miso-a",
+            "quantity": 1,
+            "unit_price": 700,
+            "merchant": "maker-a",
+            "maker": "made-by-tea",
+            "ships": "carrier-a",
+            "category": null,
+            "predicted_conversion": 0.5,
+            "is_exploration": true,
+            "given_by": "fixture-giver",
+            "valence": "offered",
+            "decided_at": null,
+            "kept_as": null,
+            "lineage": null
+          }
+        ],
+        "disclosures": [
+          {
+            "merchant": "maker-a",
+            "product": null,
+            "version": "d-1",
+            "items": [
+              {
+                "label": "payment",
+                "value": "charged when the household confirms"
+              },
+              {
+                "label": "delivery",
+                "value": "already placed"
+              },
+              {
+                "label": "returns",
+                "value": "as the merchant published"
+              }
+            ],
+            "signature": "gLNQ+rqF1ZPONWMEXvGknuCK6/KQOfQ/2Rii/yzajG/1dRLHwlruZLLEKjeYABXaWAmYOV+Edm3x2C2gfvJSDg=="
+          }
+        ]
+      }
+    },
+    {
+      "name": "physical-collected",
+      "path": "/offers/c9967476-aa3e-4eb8-98a1-cede677509ed",
+      "status": 200,
+      "contentType": "application/json",
+      "cacheControl": "no-store",
+      "value": {
+        "id": "c9967476-aa3e-4eb8-98a1-cede677509ed",
+        "binding": "physical",
+        "household": "detail-house",
+        "presenter": "merchant-1",
+        "presenter_attested": true,
+        "purpose": "replenish",
+        "price_band": null,
+        "giver": null,
+        "config_version": "cfg-1",
+        "presented_at": 1789266042978,
+        "expires_at": 1789269642978,
+        "state": "decided",
+        "exploration_floor_met": true,
+        "mandate": "mandate-1",
+        "candidates": [
+          {
+            "id": "c7011c25-6e83-4f28-9e9b-86d732a64264",
+            "product": "coffee-a",
+            "quantity": 2,
+            "unit_price": 1500,
+            "merchant": "maker-a",
+            "maker": "made-by-tea",
+            "ships": "carrier-a",
+            "category": null,
+            "predicted_conversion": 0.5,
+            "is_exploration": true,
+            "given_by": null,
+            "valence": "consumed",
+            "decided_at": 1789266042978,
+            "kept_as": null,
+            "lineage": null
+          },
+          {
+            "id": "ab86d4b0-4055-4ee6-a10e-0a1935788402",
+            "product": "miso-a",
+            "quantity": 1,
+            "unit_price": 700,
+            "merchant": "maker-a",
+            "maker": "made-by-tea",
+            "ships": "carrier-a",
+            "category": null,
+            "predicted_conversion": 0.5,
+            "is_exploration": true,
+            "given_by": "fixture-giver",
+            "valence": "consumed",
+            "decided_at": 1789266042978,
+            "kept_as": null,
+            "lineage": null
+          }
+        ],
+        "disclosures": [
+          {
+            "merchant": "maker-a",
+            "product": null,
+            "version": "d-1",
+            "items": [
+              {
+                "label": "payment",
+                "value": "charged when the household confirms"
+              },
+              {
+                "label": "delivery",
+                "value": "already placed"
+              },
+              {
+                "label": "returns",
+                "value": "as the merchant published"
+              }
+            ],
+            "signature": "gLNQ+rqF1ZPONWMEXvGknuCK6/KQOfQ/2Rii/yzajG/1dRLHwlruZLLEKjeYABXaWAmYOV+Edm3x2C2gfvJSDg=="
+          }
+        ]
+      }
+    },
+    {
+      "name": "foreign",
+      "path": "/offers/foreign",
+      "status": 404,
+      "contentType": "application/json",
+      "cacheControl": "no-store",
+      "value": {
+        "error": "resource_unavailable",
+        "message": "Resource unavailable."
+      }
+    },
+    {
+      "name": "missing",
+      "path": "/offers/missing",
+      "status": 404,
+      "contentType": "application/json",
+      "cacheControl": "no-store",
+      "value": {
+        "error": "resource_unavailable",
+        "message": "Resource unavailable."
+      }
+    },
+    {
+      "name": "revoked",
+      "path": "/offers/e477b8bf-d37e-410c-9de4-1dfa09842d10",
+      "status": 401,
+      "contentType": "application/json",
+      "cacheControl": "no-store",
+      "value": {
+        "error": "session_unavailable",
+        "message": "Session unavailable."
+      }
+    }
+  ]
+}

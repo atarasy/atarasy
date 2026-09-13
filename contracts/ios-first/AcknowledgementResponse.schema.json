@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AcknowledgementResponse",
+  "description": "Pinned client contract. Signatures, actor scope and semantic constraints require server verification; safe integers and required config signature are client constraints.",
+  "type": "object",
+  "properties": {
+    "ok": {
+      "const": true
+    }
+  },
+  "required": [
+    "ok"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,55 @@
+{
+  "date": "2026-09-13",
+  "applicationBaseline": "40ec2a4711b3cf170cf1f11303ef9e3358616861",
+  "serviceRuntimeCommit": "5254b7cc74f993062a72d762b4f9dd4236278e45",
+  "serviceContractCommit": "2690d6b0feaaec0a0f60934203896f80f7c9c463",
+  "swift": {
+    "passed": 85,
+    "failed": 0,
+    "skipped": 0,
+    "prior": 74,
+    "newStatementOperationTests": 11
+  },
+  "release": "Generic iOS Simulator BUILD SUCCEEDED, signing disabled",
+  "ui": "Not rerun: no UI change or newly exposed action in this increment. Prior simulator results remain historical.",
+  "capture": {
+    "responses": 12,
+    "scope": "Actual engine handler and member read gate; test-only session/ownership adapters, in-memory engine and ephemeral helper keys. Test-only bare-signature settlement setup. No native authentication, native signing or deployed transport."
+  },
+  "negativeControl": {
+    "target": "MemberStatementOperationTests/testDifferentConfirmationNeverConfirmsSameOfferAndAmounts",
+    "change": "Replace exact confirmation fingerprint match with non-empty confirmation check",
+    "originalSHA256": "96f0fa11c8e7b718e93b9369309671039d414d341fad9e06398f378a2eba58ab",
+    "mutatedSHA256": "f00784a0e2373db485b0501231daaa34026f391b3c70fefe0593d075318a78e1",
+    "exitCode": 1,
+    "failedTests": 1,
+    "failedAssertions": 1
+  },
+  "releaseImages": {
+    "/Users/yoichirohara/Documents/atarasy-development/member-detail-release-20260913/Build/Products/Release-iphonesimulator/AtarasyPrototype.app/AtarasyPrototype": "cf79e31f52c69e2a7dd9aa2426190d41707c79f18ec9ad48bc74ff4109b2d697"
+  },
+  "fixtureExclusion": "Captured physical offer ID and UI fixture launch argument absent from Release executable and dylibs",
+  "sourceSHA256": {
+    "ios/AtarasyCore/Sources/AtarasyCore/MemberStatementOperation.swift": "96f0fa11c8e7b718e93b9369309671039d414d341fad9e06398f378a2eba58ab",
+    "ios/AtarasyCore/Sources/AtarasyCore/MemberClient.swift": "a01cf1f197fbb792ef95320448c50169cfbb46153fa0737f6bbafc45aa1a12c1",
+    "ios/AtarasyCore/Tests/AtarasyCoreTests/MemberStatementOperationTests.swift": "e237661ead3d8a49bee596c6bd210bdb5f4eae4eb30c1043cd0acb17f44cb7df",
+    "ios/AtarasyCore/Tests/AtarasyCoreTests/Fixtures/member-transaction-responses.json": "9ffa6467e7960d150748e4c32cb9e964399e21c46f9b0e94d0eecd8adf27c934",
+    "scripts/member-transaction/capture.ts": "26f2cf949efb98a6d429cf013fd945324584b61501d12d67429d9e776a74dcb3",
+    "contracts/member-transaction/responses.json": "9ffa6467e7960d150748e4c32cb9e964399e21c46f9b0e94d0eecd8adf27c934",
+    "contracts/member-transaction/README.md": "7f4da38bccb22950a06a9023d7df8a8386e0a8673f9a631bd79e8f9b033b3b02",
+    "ios/README.md": "4831f86e0451bf9dde89082c4b5f6305173ffd8dad6d07063aa640be1b3a2024"
+  },
+  "logs": {
+    "/Users/yoichirohara/Documents/atarasy-development/member-transaction-swift-20260913.log": "62763549dcd2ea253231e2ab48fa66cf7893163fabcc3a46b436d9e0caf858a5",
+    "/Users/yoichirohara/Documents/atarasy-development/member-transaction-release-20260913.log": "97e285fe43eb6420df4c0f4aaad4985ae70e6922bc77498f9caeb087541c8dc6",
+    "/Users/yoichirohara/Documents/atarasy-development/member-transaction-negative-20260913.log": "8da24971e87d0305dae56ec66f1c43ba3a9f3bbecc4d76244c23e4d874eae3e6"
+  },
+  "notImplemented": [
+    "Login credential to engine mandate authority provisioning",
+    "Member write routes and transaction dispatcher",
+    "Durable operation journal and crash-safe external effects",
+    "Digital operation receipt",
+    "Native device transaction ceremony",
+    "Provider payment confirmation"
+  ]
+}

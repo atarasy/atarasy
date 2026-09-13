@@ -1,0 +1,18 @@
+{
+  "serviceCommit": "5254b7cc74f993062a72d762b4f9dd4236278e45",
+  "captureScript": "scripts/member-auth/capture.ts",
+  "serviceSources": [
+    "experiments/member-login/transport.ts",
+    "experiments/member-login/enrollment.ts",
+    "experiments/member-login/login.ts",
+    "experiments/member-read/authority.ts"
+  ],
+  "captureCount": 7,
+  "transformations": [
+    "Synthetic issued bearer token replaced with fixed test token; requests, invitation secrets and private keys omitted."
+  ],
+  "fixtureSHA256": "64d0e62e26692659581a9c5865ad9c09ba95c198cca34c3dd3e204d60538a389",
+  "limitations": [
+    "In-process handler capture using a synthetic authenticator; no network listener or native ceremony."
+  ]
+}

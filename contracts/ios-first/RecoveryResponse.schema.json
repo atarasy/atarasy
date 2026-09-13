@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RecoveryResponse",
+  "description": "Pinned reference projection. Safe-integer limits and closed fields are native contract checks, not authenticated service guarantees.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "offer": {
+      "type": "string"
+    },
+    "due_at": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "grace_days": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "collected_at": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "returned": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "consumed": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "offer",
+    "due_at",
+    "grace_days",
+    "collected_at",
+    "returned",
+    "consumed"
+  ]
+}

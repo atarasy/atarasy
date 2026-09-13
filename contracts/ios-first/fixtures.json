@@ -1,0 +1,113 @@
+{
+  "synthetic": true,
+  "households": [
+    "household-fixture-a",
+    "household-fixture-b"
+  ],
+  "merchants": [
+    "merchant-fixture-a",
+    "merchant-fixture-b"
+  ],
+  "offers": [
+    {
+      "id": "digital-a",
+      "household": "household-fixture-a",
+      "presenter": "merchant-fixture-a",
+      "title": "Pantry proposal",
+      "binding": "digital",
+      "arrived": 30,
+      "carriage": 0,
+      "lines": [
+        {
+          "id": "cart-a",
+          "name": "Roasted tea",
+          "maker": "Fixture Tea Maker",
+          "price": 600,
+          "givenBy": null,
+          "verdict": "offered"
+        },
+        {
+          "id": "cart-b",
+          "name": "Oat biscuits",
+          "maker": "Fixture Bakery",
+          "price": 400,
+          "givenBy": null,
+          "verdict": "offered"
+        }
+      ]
+    },
+    {
+      "id": "physical-a",
+      "household": "household-fixture-a",
+      "presenter": "merchant-fixture-b",
+      "title": "Collection statement",
+      "binding": "physical",
+      "arrived": 20,
+      "carriage": 200,
+      "lines": [
+        {
+          "id": "physical-a",
+          "name": "Roasted tea",
+          "maker": "Fixture Tea Maker",
+          "price": 600,
+          "givenBy": null,
+          "verdict": "consumed"
+        },
+        {
+          "id": "physical-b",
+          "name": "Oat biscuits",
+          "maker": "Fixture Bakery",
+          "price": 400,
+          "givenBy": "Fixture Bakery",
+          "verdict": "consumed"
+        },
+        {
+          "id": "physical-c",
+          "name": "Fruit preserve",
+          "maker": "Fixture Preserves",
+          "price": 800,
+          "givenBy": null,
+          "verdict": "kept"
+        }
+      ]
+    },
+    {
+      "id": "digital-b",
+      "household": "household-fixture-a",
+      "presenter": "merchant-fixture-b",
+      "title": "Another proposal",
+      "binding": "digital",
+      "arrived": 40,
+      "carriage": 0,
+      "lines": [
+        {
+          "id": "cart-c",
+          "name": "Herbal tea",
+          "maker": "Fixture Herb Maker",
+          "price": 500,
+          "givenBy": null,
+          "verdict": "offered"
+        }
+      ]
+    },
+    {
+      "id": "private-b",
+      "household": "household-fixture-b",
+      "presenter": "merchant-fixture-a",
+      "title": "Other household fixture",
+      "binding": "digital",
+      "arrived": 50,
+      "carriage": 0,
+      "lines": [
+        {
+          "id": "private-line",
+          "name": "Not visible to household A",
+          "maker": "Fixture Maker",
+          "price": 100,
+          "givenBy": null,
+          "verdict": "offered"
+        }
+      ]
+    }
+  ]
+}
