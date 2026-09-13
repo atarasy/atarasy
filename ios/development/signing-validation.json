@@ -1,0 +1,10 @@
+{
+  "applicationIdentifier": "83W4J65UE6.dev.atarasy.prototype",
+  "teamIdentifier": "83W4J65UE6",
+  "associatedDomain": "webcredentials:api-dev.vox.delivery",
+  "signedEntitlementsMatch": true,
+  "provisioningProfileMatches": true,
+  "profileUnexpired": true,
+  "codesignVerified": true,
+  "nativeDeviceCeremonyVerified": false
+}

@@ -26,4 +26,4 @@ For a signed device build, export its entitlements with `codesign -d --entitleme
 
 ## Verification status
 
-On 2026-09-13 the local resolver could not resolve `api-dev.vox.delivery`. No DNS record, HTTPS deployment, signed provisioning or physical-device ceremony has been completed by this change. The root website was not modified. The combined service remains an independent work in progress; local client configuration must not be read as deployment readiness.
+On 2026-09-13 the dedicated Vercel API and Neon member runtime were deployed to `https://api-dev.vox.delivery`. A signed Development device build succeeded. Signature verification, the provisioning profile and exported entitlements matched `83W4J65UE6.dev.atarasy.prototype` and `webcredentials:api-dev.vox.delivery`; see [signing validation](signing-validation.json). Published AASA GET and HEAD returned 200 with JSON and no redirect; unauthenticated `/auth/session` returned 401. Physical-device association, registration, login and statement approval remain unverified. No real member or mandate has been provisioned. The root website was not modified.
