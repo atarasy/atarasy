@@ -1,0 +1,742 @@
+{
+  "serviceCommit": "5254b7cc74f993062a72d762b4f9dd4236278e45",
+  "scope": "Actual engine handler and member read gate; test-only session/ownership adapters, in-memory engine and ephemeral helper keys. Test-only bare-signature settlement setup. No native authentication, native signing or deployed transport.",
+  "cases": [
+    {
+      "name": "digital-missing-deliberation",
+      "path": "/offers/e97f942f-ce16-47c9-b7e7-9b5ac9d7b024/approval",
+      "status": 422,
+      "contentType": "application/json",
+      "cacheControl": "no-store",
+      "value": {
+        "error": "no_deliberation",
+        "message": "Read refused."
+      }
+    },
+    {
+      "name": "digital-detail",
+      "path": "/offers/e97f942f-ce16-47c9-b7e7-9b5ac9d7b024",
+      "status": 200,
+      "contentType": "application/json",
+      "cacheControl": "no-store",
+      "value": {
+        "id": "e97f942f-ce16-47c9-b7e7-9b5ac9d7b024",
+        "binding": "digital",
+        "household": "detail-house",
+        "presenter": "merchant-1",
+        "presenter_attested": true,
+        "purpose": "replenish",
+        "price_band": null,
+        "giver": null,
+        "config_version": "cfg-1",
+        "presented_at": 1789269276331,
+        "expires_at": 1789272876327,
+        "state": "presented",
+        "exploration_floor_met": true,
+        "mandate": "mandate-1",
+        "candidates": [
+          {
+            "id": "f30073d0-1aad-4b39-8a09-aea30b6716ad",
+            "product": "tea-a",
+            "quantity": 2,
+            "unit_price": 1200,
+            "merchant": "maker-a",
+            "maker": "made-by-tea",
+            "ships": "carrier-a",
+            "category": null,
+            "predicted_conversion": 0.5,
+            "is_exploration": true,
+            "given_by": null,
+            "valence": "offered",
+            "decided_at": null,
+            "kept_as": null,
+            "lineage": null
+          },
+          {
+            "id": "bb406be3-70a4-4c85-b9c9-8284f6a109d4",
+            "product": "tea-b",
+            "quantity": 1,
+            "unit_price": 900,
+            "merchant": "maker-a",
+            "maker": "made-by-tea",
+            "ships": "carrier-a",
+            "category": null,
+            "predicted_conversion": 0.5,
+            "is_exploration": true,
+            "given_by": "fixture-giver",
+            "valence": "offered",
+            "decided_at": null,
+            "kept_as": null,
+            "lineage": null
+          }
+        ],
+        "disclosures": [
+          {
+            "merchant": "maker-a",
+            "product": null,
+            "version": "d-1",
+            "items": [
+              {
+                "label": "payment",
+                "value": "charged when the household confirms"
+              },
+              {
+                "label": "delivery",
+                "value": "already placed"
+              },
+              {
+                "label": "returns",
+                "value": "as the merchant published"
+              }
+            ],
+            "signature": "59kc+mdK0/njBzlDQjm8CFlWfbHNaRDxGpVFL0gbaFwenJ1MJ3mVcpmBGdEC6U2ZygO58b9oa71aoOWHdh4MAQ=="
+          },
+          {
+            "merchant": "maker-a",
+            "product": "tea-b",
+            "version": "d-1-tea-b",
+            "items": [
+              {
+                "label": "payment",
+                "value": "charged when the household confirms"
+              },
+              {
+                "label": "delivery",
+                "value": "already placed"
+              },
+              {
+                "label": "returns",
+                "value": "as the merchant published"
+              }
+            ],
+            "signature": "gdw8zzHUmBGzRwmInk1FJR7jqHrTt30RkP/3JpoURqb2fwdxThEy8JnGb3AHAzjyQGqSph2oIhD3r+PqwJxwCA=="
+          }
+        ]
+      }
+    },
+    {
+      "name": "digital-unknown-carriage",
+      "path": "/offers/e97f942f-ce16-47c9-b7e7-9b5ac9d7b024/approval",
+      "status": 200,
+      "contentType": "application/json",
+      "cacheControl": "no-store",
+      "value": {
+        "offer": "e97f942f-ce16-47c9-b7e7-9b5ac9d7b024",
+        "presenter": "merchant-1",
+        "expires_at": 1789272876327,
+        "carriage": null,
+        "reminded": false,
+        "mandate": {
+          "kind": "standing",
+          "scope": "Household supplies",
+          "lapses_at": 1789272876327
+        },
+        "price_band": null,
+        "disclosures": [
+          {
+            "merchant": "maker-a",
+            "product": null,
+            "version": "d-1",
+            "items": [
+              {
+                "label": "payment",
+                "value": "charged when the household confirms"
+              },
+              {
+                "label": "delivery",
+                "value": "already placed"
+              },
+              {
+                "label": "returns",
+                "value": "as the merchant published"
+              }
+            ],
+            "signature": "59kc+mdK0/njBzlDQjm8CFlWfbHNaRDxGpVFL0gbaFwenJ1MJ3mVcpmBGdEC6U2ZygO58b9oa71aoOWHdh4MAQ=="
+          },
+          {
+            "merchant": "maker-a",
+            "product": "tea-b",
+            "version": "d-1-tea-b",
+            "items": [
+              {
+                "label": "payment",
+                "value": "charged when the household confirms"
+              },
+              {
+                "label": "delivery",
+                "value": "already placed"
+              },
+              {
+                "label": "returns",
+                "value": "as the merchant published"
+              }
+            ],
+            "signature": "gdw8zzHUmBGzRwmInk1FJR7jqHrTt30RkP/3JpoURqb2fwdxThEy8JnGb3AHAzjyQGqSph2oIhD3r+PqwJxwCA=="
+          }
+        ],
+        "candidates": [
+          {
+            "id": "f30073d0-1aad-4b39-8a09-aea30b6716ad",
+            "product": "tea-a",
+            "quantity": 2,
+            "unit_price": 1200,
+            "merchant": "maker-a",
+            "maker": "made-by-tea",
+            "given_by": null,
+            "ships": "carrier-a",
+            "is_exploration": true,
+            "valence": "offered",
+            "alternatives": [
+              "Keep existing supplies",
+              "Choose a smaller quantity"
+            ],
+            "argument_against": "Existing supplies may already be sufficient.",
+            "disclosure": {
+              "merchant": "maker-a",
+              "product": null
+            }
+          },
+          {
+            "id": "bb406be3-70a4-4c85-b9c9-8284f6a109d4",
+            "product": "tea-b",
+            "quantity": 1,
+            "unit_price": 900,
+            "merchant": "maker-a",
+            "maker": "made-by-tea",
+            "given_by": "fixture-giver",
+            "ships": "carrier-a",
+            "is_exploration": true,
+            "valence": "offered",
+            "alternatives": [
+              "Keep existing supplies",
+              "Choose a smaller quantity"
+            ],
+            "argument_against": "Existing supplies may already be sufficient.",
+            "disclosure": {
+              "merchant": "maker-a",
+              "product": "tea-b"
+            }
+          }
+        ],
+        "excluded": [
+          {
+            "product": "excluded-example",
+            "reason": "auto_renewal"
+          }
+        ]
+      }
+    },
+    {
+      "name": "digital-known-carriage",
+      "path": "/offers/e97f942f-ce16-47c9-b7e7-9b5ac9d7b024/approval",
+      "status": 200,
+      "contentType": "application/json",
+      "cacheControl": "no-store",
+      "value": {
+        "offer": "e97f942f-ce16-47c9-b7e7-9b5ac9d7b024",
+        "presenter": "merchant-1",
+        "expires_at": 1789272876327,
+        "carriage": 0,
+        "reminded": false,
+        "mandate": {
+          "kind": "standing",
+          "scope": "Household supplies",
+          "lapses_at": 1789272876327
+        },
+        "price_band": null,
+        "disclosures": [
+          {
+            "merchant": "maker-a",
+            "product": null,
+            "version": "d-1",
+            "items": [
+              {
+                "label": "payment",
+                "value": "charged when the household confirms"
+              },
+              {
+                "label": "delivery",
+                "value": "already placed"
+              },
+              {
+                "label": "returns",
+                "value": "as the merchant published"
+              }
+            ],
+            "signature": "59kc+mdK0/njBzlDQjm8CFlWfbHNaRDxGpVFL0gbaFwenJ1MJ3mVcpmBGdEC6U2ZygO58b9oa71aoOWHdh4MAQ=="
+          },
+          {
+            "merchant": "maker-a",
+            "product": "tea-b",
+            "version": "d-1-tea-b",
+            "items": [
+              {
+                "label": "payment",
+                "value": "charged when the household confirms"
+              },
+              {
+                "label": "delivery",
+                "value": "already placed"
+              },
+              {
+                "label": "returns",
+                "value": "as the merchant published"
+              }
+            ],
+            "signature": "gdw8zzHUmBGzRwmInk1FJR7jqHrTt30RkP/3JpoURqb2fwdxThEy8JnGb3AHAzjyQGqSph2oIhD3r+PqwJxwCA=="
+          }
+        ],
+        "candidates": [
+          {
+            "id": "f30073d0-1aad-4b39-8a09-aea30b6716ad",
+            "product": "tea-a",
+            "quantity": 2,
+            "unit_price": 1200,
+            "merchant": "maker-a",
+            "maker": "made-by-tea",
+            "given_by": null,
+            "ships": "carrier-a",
+            "is_exploration": true,
+            "valence": "offered",
+            "alternatives": [
+              "Keep existing supplies",
+              "Choose a smaller quantity"
+            ],
+            "argument_against": "Existing supplies may already be sufficient.",
+            "disclosure": {
+              "merchant": "maker-a",
+              "product": null
+            }
+          },
+          {
+            "id": "bb406be3-70a4-4c85-b9c9-8284f6a109d4",
+            "product": "tea-b",
+            "quantity": 1,
+            "unit_price": 900,
+            "merchant": "maker-a",
+            "maker": "made-by-tea",
+            "given_by": "fixture-giver",
+            "ships": "carrier-a",
+            "is_exploration": true,
+            "valence": "offered",
+            "alternatives": [
+              "Keep existing supplies",
+              "Choose a smaller quantity"
+            ],
+            "argument_against": "Existing supplies may already be sufficient.",
+            "disclosure": {
+              "merchant": "maker-a",
+              "product": "tea-b"
+            }
+          }
+        ],
+        "excluded": [
+          {
+            "product": "excluded-example",
+            "reason": "auto_renewal"
+          }
+        ]
+      }
+    },
+    {
+      "name": "physical-detail",
+      "path": "/offers/0b0549a1-887f-4bd0-a96e-91617f16c006",
+      "status": 200,
+      "contentType": "application/json",
+      "cacheControl": "no-store",
+      "value": {
+        "id": "0b0549a1-887f-4bd0-a96e-91617f16c006",
+        "binding": "physical",
+        "household": "detail-house",
+        "presenter": "merchant-1",
+        "presenter_attested": true,
+        "purpose": "replenish",
+        "price_band": null,
+        "giver": null,
+        "config_version": "cfg-1",
+        "presented_at": 1789269276335,
+        "expires_at": 1789272876335,
+        "state": "decided",
+        "exploration_floor_met": true,
+        "mandate": "mandate-1",
+        "candidates": [
+          {
+            "id": "961f0f60-9b65-4d43-bfd9-36f108dbf78f",
+            "product": "coffee-a",
+            "quantity": 2,
+            "unit_price": 1500,
+            "merchant": "maker-a",
+            "maker": "made-by-tea",
+            "ships": "carrier-a",
+            "category": null,
+            "predicted_conversion": 0.5,
+            "is_exploration": true,
+            "given_by": null,
+            "valence": "consumed",
+            "decided_at": 1789269276335,
+            "kept_as": null,
+            "lineage": null
+          },
+          {
+            "id": "966e4a8e-e51f-4eb8-834e-597e5a8a4962",
+            "product": "miso-a",
+            "quantity": 1,
+            "unit_price": 700,
+            "merchant": "maker-a",
+            "maker": "made-by-tea",
+            "ships": "carrier-a",
+            "category": null,
+            "predicted_conversion": 0.5,
+            "is_exploration": true,
+            "given_by": "fixture-giver",
+            "valence": "consumed",
+            "decided_at": 1789269276335,
+            "kept_as": null,
+            "lineage": null
+          }
+        ],
+        "disclosures": [
+          {
+            "merchant": "maker-a",
+            "product": null,
+            "version": "d-1",
+            "items": [
+              {
+                "label": "payment",
+                "value": "charged when the household confirms"
+              },
+              {
+                "label": "delivery",
+                "value": "already placed"
+              },
+              {
+                "label": "returns",
+                "value": "as the merchant published"
+              }
+            ],
+            "signature": "59kc+mdK0/njBzlDQjm8CFlWfbHNaRDxGpVFL0gbaFwenJ1MJ3mVcpmBGdEC6U2ZygO58b9oa71aoOWHdh4MAQ=="
+          },
+          {
+            "merchant": "maker-a",
+            "product": "miso-a",
+            "version": "d-1-miso-a",
+            "items": [
+              {
+                "label": "payment",
+                "value": "charged when the household confirms"
+              },
+              {
+                "label": "delivery",
+                "value": "already placed"
+              },
+              {
+                "label": "returns",
+                "value": "as the merchant published"
+              }
+            ],
+            "signature": "mDjs7uc5fp4ZkQk3Wl2E3cS9qsphDe4R6JWEjxV5JeMgZEwx7uD5y1Ez4TNeFmVFvGGdPYpzqdRH39yHAY2ICQ=="
+          }
+        ]
+      }
+    },
+    {
+      "name": "physical-unknown-carriage",
+      "path": "/offers/0b0549a1-887f-4bd0-a96e-91617f16c006/statement",
+      "status": 200,
+      "contentType": "application/json",
+      "cacheControl": "no-store",
+      "value": {
+        "offer": "0b0549a1-887f-4bd0-a96e-91617f16c006",
+        "household": "detail-house",
+        "expires_at": 1789272876335,
+        "lines": [
+          {
+            "candidate": "961f0f60-9b65-4d43-bfd9-36f108dbf78f",
+            "product": "coffee-a",
+            "merchant": "maker-a",
+            "maker": "made-by-tea",
+            "ships": "carrier-a",
+            "given_by": null,
+            "valence": "consumed",
+            "quantity": 2,
+            "unit_price": 1500,
+            "amount": 3000,
+            "disclosure": {
+              "merchant": "maker-a",
+              "product": null
+            }
+          },
+          {
+            "candidate": "966e4a8e-e51f-4eb8-834e-597e5a8a4962",
+            "product": "miso-a",
+            "merchant": "maker-a",
+            "maker": "made-by-tea",
+            "ships": "carrier-a",
+            "given_by": "fixture-giver",
+            "valence": "consumed",
+            "quantity": 1,
+            "unit_price": 700,
+            "amount": 0,
+            "disclosure": {
+              "merchant": "maker-a",
+              "product": "miso-a"
+            }
+          }
+        ],
+        "disclosures": [
+          {
+            "merchant": "maker-a",
+            "product": null,
+            "version": "d-1",
+            "items": [
+              {
+                "label": "payment",
+                "value": "charged when the household confirms"
+              },
+              {
+                "label": "delivery",
+                "value": "already placed"
+              },
+              {
+                "label": "returns",
+                "value": "as the merchant published"
+              }
+            ],
+            "signature": "59kc+mdK0/njBzlDQjm8CFlWfbHNaRDxGpVFL0gbaFwenJ1MJ3mVcpmBGdEC6U2ZygO58b9oa71aoOWHdh4MAQ=="
+          },
+          {
+            "merchant": "maker-a",
+            "product": "miso-a",
+            "version": "d-1-miso-a",
+            "items": [
+              {
+                "label": "payment",
+                "value": "charged when the household confirms"
+              },
+              {
+                "label": "delivery",
+                "value": "already placed"
+              },
+              {
+                "label": "returns",
+                "value": "as the merchant published"
+              }
+            ],
+            "signature": "mDjs7uc5fp4ZkQk3Wl2E3cS9qsphDe4R6JWEjxV5JeMgZEwx7uD5y1Ez4TNeFmVFvGGdPYpzqdRH39yHAY2ICQ=="
+          }
+        ],
+        "carriage": null,
+        "challenge": "t5oGTrvthhD72tPVIMtiI654BzAaS1qc099_c_TT23I"
+      }
+    },
+    {
+      "name": "physical-known-carriage",
+      "path": "/offers/0b0549a1-887f-4bd0-a96e-91617f16c006/statement",
+      "status": 200,
+      "contentType": "application/json",
+      "cacheControl": "no-store",
+      "value": {
+        "offer": "0b0549a1-887f-4bd0-a96e-91617f16c006",
+        "household": "detail-house",
+        "expires_at": 1789272876335,
+        "lines": [
+          {
+            "candidate": "961f0f60-9b65-4d43-bfd9-36f108dbf78f",
+            "product": "coffee-a",
+            "merchant": "maker-a",
+            "maker": "made-by-tea",
+            "ships": "carrier-a",
+            "given_by": null,
+            "valence": "consumed",
+            "quantity": 2,
+            "unit_price": 1500,
+            "amount": 3000,
+            "disclosure": {
+              "merchant": "maker-a",
+              "product": null
+            }
+          },
+          {
+            "candidate": "966e4a8e-e51f-4eb8-834e-597e5a8a4962",
+            "product": "miso-a",
+            "merchant": "maker-a",
+            "maker": "made-by-tea",
+            "ships": "carrier-a",
+            "given_by": "fixture-giver",
+            "valence": "consumed",
+            "quantity": 1,
+            "unit_price": 700,
+            "amount": 0,
+            "disclosure": {
+              "merchant": "maker-a",
+              "product": "miso-a"
+            }
+          }
+        ],
+        "disclosures": [
+          {
+            "merchant": "maker-a",
+            "product": null,
+            "version": "d-1",
+            "items": [
+              {
+                "label": "payment",
+                "value": "charged when the household confirms"
+              },
+              {
+                "label": "delivery",
+                "value": "already placed"
+              },
+              {
+                "label": "returns",
+                "value": "as the merchant published"
+              }
+            ],
+            "signature": "59kc+mdK0/njBzlDQjm8CFlWfbHNaRDxGpVFL0gbaFwenJ1MJ3mVcpmBGdEC6U2ZygO58b9oa71aoOWHdh4MAQ=="
+          },
+          {
+            "merchant": "maker-a",
+            "product": "miso-a",
+            "version": "d-1-miso-a",
+            "items": [
+              {
+                "label": "payment",
+                "value": "charged when the household confirms"
+              },
+              {
+                "label": "delivery",
+                "value": "already placed"
+              },
+              {
+                "label": "returns",
+                "value": "as the merchant published"
+              }
+            ],
+            "signature": "mDjs7uc5fp4ZkQk3Wl2E3cS9qsphDe4R6JWEjxV5JeMgZEwx7uD5y1Ez4TNeFmVFvGGdPYpzqdRH39yHAY2ICQ=="
+          }
+        ],
+        "carriage": 550,
+        "challenge": "MnOJT190zNqBlhfxLznk4MH8QLDjdthPg7Ktyd5Xj9U"
+      }
+    },
+    {
+      "name": "physical-no-settlement",
+      "path": "/offers/0b0549a1-887f-4bd0-a96e-91617f16c006/settlement",
+      "status": 404,
+      "contentType": "application/json",
+      "cacheControl": "no-store",
+      "value": {
+        "error": "resource_unavailable",
+        "message": "Resource unavailable."
+      }
+    },
+    {
+      "name": "physical-settlement",
+      "path": "/offers/0b0549a1-887f-4bd0-a96e-91617f16c006/settlement",
+      "status": 200,
+      "contentType": "application/json",
+      "cacheControl": "no-store",
+      "value": {
+        "offer": "0b0549a1-887f-4bd0-a96e-91617f16c006",
+        "settled_at": 1789269276337,
+        "kept_amount": 0,
+        "consumed_amount": 0,
+        "disputed_amount": 3000,
+        "lost_amount": 0,
+        "charged": 0,
+        "lines": [
+          {
+            "candidate": "961f0f60-9b65-4d43-bfd9-36f108dbf78f",
+            "product": "coffee-a",
+            "merchant": "maker-a",
+            "maker": "made-by-tea",
+            "ships": "carrier-a",
+            "valence": "consumed",
+            "amount": 3000,
+            "disputed": true
+          },
+          {
+            "candidate": "966e4a8e-e51f-4eb8-834e-597e5a8a4962",
+            "product": "miso-a",
+            "merchant": "maker-a",
+            "maker": "made-by-tea",
+            "ships": "carrier-a",
+            "valence": "consumed",
+            "amount": 0,
+            "disputed": false
+          }
+        ],
+        "confirmation": "Q7LLOVtj0SSO25TEHXYfhTsv0lxwdUEqps0fzkG5Yso7vwMGnV9QJw/HYxBjrc+R8IeC40hTuOp34gQ0BixrCQ==",
+        "payer": "detail-house",
+        "signed_by": "merchant-1",
+        "signed_as": "agent",
+        "receipt": "6d093e77c7fb9792634c3f50ecb9defce00e5f1f4ae9405d866275a1561775d9"
+      }
+    },
+    {
+      "name": "physical-settlement-read-again",
+      "path": "/offers/0b0549a1-887f-4bd0-a96e-91617f16c006/settlement",
+      "status": 200,
+      "contentType": "application/json",
+      "cacheControl": "no-store",
+      "value": {
+        "offer": "0b0549a1-887f-4bd0-a96e-91617f16c006",
+        "settled_at": 1789269276337,
+        "kept_amount": 0,
+        "consumed_amount": 0,
+        "disputed_amount": 3000,
+        "lost_amount": 0,
+        "charged": 0,
+        "lines": [
+          {
+            "candidate": "961f0f60-9b65-4d43-bfd9-36f108dbf78f",
+            "product": "coffee-a",
+            "merchant": "maker-a",
+            "maker": "made-by-tea",
+            "ships": "carrier-a",
+            "valence": "consumed",
+            "amount": 3000,
+            "disputed": true
+          },
+          {
+            "candidate": "966e4a8e-e51f-4eb8-834e-597e5a8a4962",
+            "product": "miso-a",
+            "merchant": "maker-a",
+            "maker": "made-by-tea",
+            "ships": "carrier-a",
+            "valence": "consumed",
+            "amount": 0,
+            "disputed": false
+          }
+        ],
+        "confirmation": "Q7LLOVtj0SSO25TEHXYfhTsv0lxwdUEqps0fzkG5Yso7vwMGnV9QJw/HYxBjrc+R8IeC40hTuOp34gQ0BixrCQ==",
+        "payer": "detail-house",
+        "signed_by": "merchant-1",
+        "signed_as": "agent",
+        "receipt": "6d093e77c7fb9792634c3f50ecb9defce00e5f1f4ae9405d866275a1561775d9"
+      }
+    },
+    {
+      "name": "foreign-statement",
+      "path": "/offers/foreign/statement",
+      "status": 404,
+      "contentType": "application/json",
+      "cacheControl": "no-store",
+      "value": {
+        "error": "resource_unavailable",
+        "message": "Resource unavailable."
+      }
+    },
+    {
+      "name": "revoked-approval",
+      "path": "/offers/e97f942f-ce16-47c9-b7e7-9b5ac9d7b024/approval",
+      "status": 401,
+      "contentType": "application/json",
+      "cacheControl": "no-store",
+      "value": {
+        "error": "session_unavailable",
+        "message": "Session unavailable."
+      }
+    }
+  ]
+}

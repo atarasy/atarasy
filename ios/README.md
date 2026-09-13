@@ -74,3 +74,7 @@ Member proposal rows now open independently decoded native details. The screen p
 Member details now load binding-specific review sections after refreshing the owned offer. Digital review preserves alternatives, arguments against, exclusions and mandate terms. Physical review independently checks goods amounts and the statement challenge, including gift goods at zero. Both distinguish unknown carriage from zero and show relevant standing/product disclosures without claiming signature verification. Refresh stays in the navigation toolbar for access from long forms.
 
 [Review contracts and lifecycle](../contracts/member-review/README.md) explains cross-projection checks and the test-only response rebinding. [Review validation](evidence/member-review-validation.json) records this increment. Signature controls, transaction authority, actual native/device authentication and deployed transport remain separate work.
+
+## Transaction preparation and read-back increment
+
+The core can now prepare scoped physical statement bytes and compare a subsequent settlement to the exact attempted confirmation and complete expected receipt. Unknown carriage, unresolved candidates and invalid disputes block preparation; unavailable read-back never triggers an automatic write. This is an in-memory core foundation, with no signing control, dispatch route or durable operation journal. [Transaction boundaries](../contracts/member-transaction/README.md) and [validation](evidence/member-transaction-validation.json) record the implementation and remaining authority requirements.

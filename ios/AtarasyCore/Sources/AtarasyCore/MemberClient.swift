@@ -173,6 +173,21 @@ public actor MemberClient {
         guard reply.contentType?.split(separator: ";").first?.trimmingCharacters(in: .whitespaces).lowercased() == "application/json" else { throw MemberFailure.malformed }
         return try detail.binding == "physical" ? .statement(MemberStatement.decode(reply.data, detail: detail)) : .approval(MemberApproval.decode(reply.data, detail: detail))
     }
+    /// Read-only reconciliation. No failure here authorises a retry of a write.
+    public func reconcile(_ pending: PendingMemberStatement) async -> MemberStatementReadback {
+        guard !Task.isCancelled else { return .unresolved }
+        guard let session = active?.info, pending.permits(environment: environment, session: session, now: now()) else { return .sessionUnavailable }
+        do {
+            let (reply, current) = try await read("/offers/" + pending.prepared.offer + "/settlement")
+            guard pending.permits(environment: environment, session: current, now: now()) else { return .sessionUnavailable }
+            let receipt = try ReferenceResponseReader.settlement(status: reply.status, contentType: reply.contentType, data: reply.data, expectedOffer: pending.prepared.offer)
+            guard !Task.isCancelled else { return .unresolved }
+            return pending.inspect(receipt)
+        } catch {
+            if active == nil || error as? MemberFailure == .expired || error as? MemberFailure == .superseded { return .sessionUnavailable }
+            return .unresolved
+        }
+    }
     public func settlement(offerID: String) async throws -> ProtocolSettlement {
         try identifier(offerID); let (reply, _) = try await read("/offers/" + offerID + "/settlement")
         return try ReferenceResponseReader.settlement(status: reply.status, contentType: reply.contentType, data: reply.data, expectedOffer: offerID)
