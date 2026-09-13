@@ -1,0 +1,56 @@
+{
+  "date": "2026-09-13",
+  "applicationBaseline": "2600a2cc84725ad0a0a5b3d15688d6224506db4c",
+  "serviceCommit": "5254b7cc74f993062a72d762b4f9dd4236278e45",
+  "toolchain": {
+    "swift": "6.4 (swiftlang-6.4.0.33.1 clang-2100.3.33.1)",
+    "macOS": "27.0",
+    "simulatorSDK": "27.0",
+    "bun": "1.2.19"
+  },
+  "swiftTests": {
+    "passed": 33,
+    "failed": 0,
+    "skipped": 0,
+    "existing": 16,
+    "memberClient": 13,
+    "memberPlatform": 4
+  },
+  "simulatorBuild": "BUILD SUCCEEDED; CODE_SIGNING_ALLOWED=NO; generic iOS Simulator",
+  "authCaptures": 7,
+  "negativeEvidence": "Reserved query regression failed before the literal plus encoding fix and passed in the final suite.",
+  "sourceSHA256": {
+    "contracts/member-auth/README.md": "48f8ee7d21fbf5f9be665415fb6d476e38cc1d9a956dd724b0cea8fe7063bd3b",
+    "contracts/member-auth/manifest.json": "e62976a52774af01f9e5a590bca9dd8ff351c129542c80690650639d433086d2",
+    "contracts/member-auth/response-examples.json": "64d0e62e26692659581a9c5865ad9c09ba95c198cca34c3dd3e204d60538a389",
+    "ios/AtarasyCore/Sources/AtarasyCore/MemberClient.swift": "bef136a422caff0dda1df54ba1fd2695b059b2fa9d822d9ed0f1bc951cd35863",
+    "ios/AtarasyCore/Sources/AtarasyCore/MemberSessionVault.swift": "89a0b286c2a1fd48977329ccf1334e41cee6dee8430d7de9e629eb6a26f7094e",
+    "ios/AtarasyCore/Sources/AtarasyCore/MemberTransport.swift": "9e8631533afbbe46a784fb0171fd7f1950744b40c4234e93b185a025949a63ec",
+    "ios/AtarasyCore/Tests/AtarasyCoreTests/Fixtures/member-auth-responses.json": "64d0e62e26692659581a9c5865ad9c09ba95c198cca34c3dd3e204d60538a389",
+    "ios/AtarasyCore/Tests/AtarasyCoreTests/MemberClientTests.swift": "1e849a656382d8a6545a3aa95448596a0ab11422c9fe0a52a7326fb3641594db",
+    "ios/AtarasyCore/Tests/AtarasyCoreTests/MemberPlatformTests.swift": "d3eff18fe9d2837cded3e4b6495daa9035582de9678ce0936c55a1dd9bec9209",
+    "ios/README.md": "4ef0d5349d00df6cb02653131fe565042f48709ff47fc952305397176058f36d",
+    "scripts/member-auth/capture.ts": "96dfb838a1e303b5bd16f7e79a4069cd6adfc4016f2916f8553d2c1028a0ea82"
+  },
+  "logs": {
+    "swift-member-client-tests-20260913.log": {
+      "path": "/Users/yoichirohara/Documents/atarasy-development/swift-member-client-tests-20260913.log",
+      "sha256": "ceae4fc105419f910dfcf29a7778b2e161074f4233a3a69ab93df5bec8a0adb2"
+    },
+    "swift-member-client-build-20260913.log": {
+      "path": "/Users/yoichirohara/Documents/atarasy-development/swift-member-client-build-20260913.log",
+      "sha256": "0ee0209abd0e9f637c5aedd312ec1dc2df99b07c458704c01085911b0f133bf4"
+    },
+    "swift-member-query-before-20260913.log": {
+      "path": "/Users/yoichirohara/Documents/atarasy-development/swift-member-query-before-20260913.log",
+      "sha256": "1b254ef93155a9c17a99eedbb0325fa688aa0b2670dbdf828221e6e80f69e735"
+    }
+  },
+  "limitations": [
+    "No AuthenticationServices ceremony or live UI composition.",
+    "URLSession tests use controlled URLProtocol responses, not network TLS.",
+    "Redirect test verifies delegate refusal and no second request; host Foundation may surface URLError after denial.",
+    "Host Keychain save/load/remove and scope isolation passed; no hardware or device-lock evidence.",
+    "No deployment, provider integration or production invitation delivery."
+  ]
+}

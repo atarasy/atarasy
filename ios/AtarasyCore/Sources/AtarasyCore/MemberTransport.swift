@@ -1,0 +1,107 @@
+import Foundation
+
+public enum MemberFailure: Error, Equatable, Sendable {
+    case invalidInput, malformed, scopeMismatch, expired, superseded, busy, storage
+    case unavailable, uncertainVerification, remoteLogoutUnconfirmed
+    case http(Int)
+}
+public struct MemberEnvironment: Sendable, Equatable {
+    public let name: String
+    public let origin: URL
+    public init(name: String, origin: URL) throws {
+        guard name.range(of: "^[A-Za-z0-9_-]+\\z", options: .regularExpression) != nil,
+              var c = URLComponents(url: origin, resolvingAgainstBaseURL: false), c.scheme == "https", c.host?.isEmpty == false,
+              c.user == nil, c.password == nil, c.query == nil, c.fragment == nil, ["", "/"].contains(c.path) else { throw MemberFailure.invalidInput }
+        c.path = ""; if c.port == 443 { c.port = nil }
+        guard let canonical = c.url else { throw MemberFailure.invalidInput }
+        self.name = name; self.origin = canonical
+    }
+}
+public struct MemberHTTPReply: Sendable {
+    public let url: URL; public let status: Int; public let contentType: String?; public let cacheControl: String?; public let data: Data
+    public init(url: URL, status: Int, contentType: String?, cacheControl: String?, data: Data) {
+        self.url = url; self.status = status; self.contentType = contentType; self.cacheControl = cacheControl; self.data = data
+    }
+}
+public protocol MemberHTTPTransport: Sendable { func send(_ request: URLRequest) async throws -> MemberHTTPReply }
+final class DenyMemberRedirects: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    let observer: (@Sendable () -> Void)?
+    init(observer: (@Sendable () -> Void)? = nil) { self.observer = observer }
+    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest, completionHandler: @escaping @Sendable (URLRequest?) -> Void) { observer?(); completionHandler(nil) }
+}
+public final class URLSessionMemberTransport: MemberHTTPTransport, @unchecked Sendable {
+    private let session: URLSession
+    private let limit: Int
+    public convenience init(timeout: TimeInterval, maximumResponseBytes: Int) throws {
+        try self.init(timeout: timeout, maximumResponseBytes: maximumResponseBytes, protocolClasses: nil)
+    }
+    // Internal protocol injection is only for controlled URLSession tests.
+    init(timeout: TimeInterval, maximumResponseBytes: Int, protocolClasses: [AnyClass]?, redirectObserver: (@Sendable () -> Void)? = nil) throws {
+        guard timeout.isFinite, timeout > 0, maximumResponseBytes > 0 else { throw MemberFailure.invalidInput }
+        let c = URLSessionConfiguration.ephemeral
+        c.httpShouldSetCookies = false; c.httpCookieStorage = nil; c.urlCache = nil; c.urlCredentialStorage = nil
+        c.requestCachePolicy = .reloadIgnoringLocalCacheData
+        c.timeoutIntervalForRequest = timeout; c.timeoutIntervalForResource = timeout; c.protocolClasses = protocolClasses
+        session = URLSession(configuration: c, delegate: DenyMemberRedirects(observer: redirectObserver), delegateQueue: nil); limit = maximumResponseBytes
+    }
+    deinit { session.invalidateAndCancel() }
+    public func send(_ request: URLRequest) async throws -> MemberHTTPReply {
+        guard request.url?.scheme == "https" else { throw MemberFailure.invalidInput }
+        let (bytes, response) = try await session.bytes(for: request)
+        defer { bytes.task.cancel() }
+        guard let http = response as? HTTPURLResponse, let url = http.url, url == request.url else { throw MemberFailure.scopeMismatch }
+        if http.expectedContentLength > Int64(limit) { throw MemberFailure.malformed }
+        var data = Data()
+        for try await byte in bytes {
+            try Task.checkCancellation()
+            guard data.count < limit else { throw MemberFailure.malformed }
+            data.append(byte)
+        }
+        return MemberHTTPReply(url: url, status: http.statusCode, contentType: http.value(forHTTPHeaderField: "Content-Type"), cacheControl: http.value(forHTTPHeaderField: "Cache-Control"), data: data)
+    }
+}
+
+public enum MemberJSON: Codable, Equatable, Sendable {
+    case string(String), integer(Int64), bool(Bool), array([MemberJSON]), object([String: MemberJSON]), null
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.singleValueContainer()
+        if c.decodeNil() { self = .null }
+        else if let v = try? c.decode(Bool.self) { self = .bool(v) }
+        else if let v = try? c.decode(Int64.self) { self = .integer(v) }
+        else if let v = try? c.decode(String.self) { self = .string(v) }
+        else if let v = try? c.decode([MemberJSON].self) { self = .array(v) }
+        else { self = .object(try c.decode([String: MemberJSON].self)) }
+    }
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.singleValueContainer()
+        switch self {
+        case .string(let v): try c.encode(v)
+        case .integer(let v): try c.encode(v)
+        case .bool(let v): try c.encode(v)
+        case .array(let v): try c.encode(v)
+        case .object(let v): try c.encode(v)
+        case .null: try c.encodeNil()
+        }
+    }
+}
+public struct MemberCeremony: Decodable, Sendable {
+    public let id: String; public let expiresAt: Int64; public let publicKey: [String: MemberJSON]
+}
+public struct MemberPasskeyResponse: Encodable, Sendable {
+    public let id: String; public let rawId: String
+    public let type = "public-key"
+    public let clientExtensionResults: [String: MemberJSON] = [:]
+    public let response: [String: MemberJSON]
+    public static func assertion(id: String, clientDataJSON: String, authenticatorData: String, signature: String, userHandle: String) -> Self {
+        Self(id: id, rawId: id, response: ["clientDataJSON": .string(clientDataJSON), "authenticatorData": .string(authenticatorData), "signature": .string(signature), "userHandle": .string(userHandle)])
+    }
+    public static func registration(id: String, clientDataJSON: String, attestationObject: String) -> Self {
+        Self(id: id, rawId: id, response: ["clientDataJSON": .string(clientDataJSON), "attestationObject": .string(attestationObject)])
+    }
+}
+public struct MemberSessionInfo: Codable, Equatable, Sendable {
+    public let id: String; public let household: String; public let presenters: [String]; public let expiresAt: Int64
+}
+public struct MemberOfferSummary: Decodable, Equatable, Sendable {
+    public let id: String; public let household: String; public let presenter: String; public let binding: String; public let state: String
+}

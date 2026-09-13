@@ -35,7 +35,7 @@ UI tests exercise household filtering, arrival ordering, partial-source display,
 
 ## What remains
 
-Dials/co-signer UI, account enrollment, actual AuthenticationServices, private keys/storage, host migration, operator workbench and the production coordinator are not implemented here. The schemas are an executable native request/statement subset, not all IC-01–08. The proposed integration envelope has no deployed endpoint. The separate contract README and manifest retain those distinctions.
+Dials/co-signer UI, native account enrollment presentation, actual AuthenticationServices, private-node key storage, host migration, operator workbench and the production coordinator are not implemented here. The schemas are an executable native request/statement subset, not all IC-01–08. The proposed integration envelope has no deployed endpoint. The separate contract README and manifest retain those distinctions.
 
 Measured results and screenshots are retained in [the validation record](evidence/validation.json).
 
@@ -44,3 +44,9 @@ Measured results and screenshots are retained in [the validation record](evidenc
 The core now also decodes the pinned engine's settlement read response and preserves HTTP/refusal distinctions without treating a receipt as provider-paid. [The response pack](../contracts/ios-first/README.md) records 27 actual in-process handler responses and source provenance. The native UI still uses its original synthetic presentation model; transport, credentials and authenticated integration remain separate work. The first UI screenshots/validation record describe the earlier prototype commit, not a fresh device test of this decoder increment.
 
 The publication increment adds mandate response validation, including household/ID binding and null/zero handling. Its current tests and source/log hashes are in [the publication validation record](evidence/publication-validation.json). The earlier evidence files remain historical checkpoints. Native screens still use synthetic data.
+
+## Member client increment
+
+The opt-in Swift core now includes typed enrollment/session requests, authenticated member reads, an ephemeral URLSession transport and scoped Keychain session storage. The session actor inspects server grants before persistence and rejects stale, expired or differently scoped results. It clears local credentials before attempting remote logout and preserves uncertain outcomes. The prototype UI remains synthetic and does not compose this client or present AuthenticationServices.
+
+[The separate auth contract](../contracts/member-auth/README.md) pins seven captured responses from Valence 5254b7c. [The member client validation](evidence/member-client-validation.json) records 33 passing Swift tests and a successful iOS Simulator build. Controlled URLProtocol tests exercise the real URLSession adapter; the host Keychain test checks save/load/remove and scope separation. These are not network TLS, device-lock, hardware passkey or live UI acceptance evidence.
