@@ -24,6 +24,16 @@ struct MemberAccountSheet: View {
     @Environment(\.dismiss) private var dismiss
     var body: some View {
         NavigationStack {
+            #if ATARASY_UI_TEST_FIXTURES
+            if ProcessInfo.processInfo.arguments.contains("--member-list-fixture") {
+                MemberProposalFixtureView()
+            } else { configuredContent }
+            #else
+            configuredContent
+            #endif
+        }
+    }
+    @ViewBuilder private var configuredContent: some View {
             if let environment = configuredMemberEnvironment() {
                 ConfiguredMemberAccount(environment: environment)
             } else {
@@ -32,7 +42,6 @@ struct MemberAccountSheet: View {
                     .navigationTitle("Member account")
                     .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() }.accessibilityIdentifier("memberDone") } }
             }
-        }
     }
 }
 private struct ConfiguredMemberAccount: View {
@@ -79,9 +88,9 @@ private struct MemberAccountForm: View {
                 Section("Your session") {
                     Text(session.household).textSelection(.enabled)
                     Text("Expires \(Date(timeIntervalSince1970: Double(session.expiresAt) / 1000).formatted())")
-                    Text("Member proposals are not connected to this screen yet.").font(.footnote)
                     Button("Sign out") { perform { await account.signOut() } }.accessibilityIdentifier("memberSignOut")
                 }
+                MemberProposalSections(model: account.proposals)
             } else {
                 Section {
                     Button("Sign in with a passkey") { perform { await account.signIn() } }.accessibilityIdentifier("memberSignIn")

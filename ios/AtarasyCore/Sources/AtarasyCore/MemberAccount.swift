@@ -1,7 +1,7 @@
 import Foundation
 import Combine
 
-public protocol MemberAccountService: Sendable {
+public protocol MemberAccountService: MemberProposalService {
     func registrationOptions(invitation: String) async throws -> MemberCeremony
     func loginOptions() async throws -> MemberCeremony
     func register(ceremony: MemberCeremony, response: MemberPasskeyResponse) async throws
@@ -15,16 +15,23 @@ extension MemberClient: MemberAccountService {}
     @Published public private(set) var session: MemberSessionInfo?
     @Published public private(set) var busy = false
     @Published public private(set) var notice = ""
+    public let proposals: MemberProposals
     private let service: any MemberAccountService
     private let passkeys: any MemberPasskeyAuthorising
     private var generation: UInt64 = 0
     public init(service: any MemberAccountService, passkeys: any MemberPasskeyAuthorising) {
         self.service = service; self.passkeys = passkeys
+        proposals = MemberProposals(service: service)
+        proposals.onSessionUnavailable = { [weak self] in
+            guard let self else { return }
+            self.generation &+= 1; self.session = nil
+            self.notice = "Your session is no longer available. Sign in again."
+        }
     }
     // Closing hides late results. A verification already sent can still complete on the service.
-    public func close() { generation &+= 1; session = nil; notice = "" }
+    public func close() { generation &+= 1; session = nil; proposals.setSession(nil); notice = "" }
     public func clearExpired(now: Int64) {
-        if let session, session.expiresAt <= now { self.session = nil; notice = "Your session expired. Sign in again." }
+        if let session, session.expiresAt <= now { self.session = nil; proposals.setSession(nil); notice = "Your session expired. Sign in again." }
     }
     private func message(_ error: Error) -> String {
         switch error {
@@ -66,7 +73,7 @@ extension MemberClient: MemberAccountService {}
             try Task.checkCancellation(); guard started == generation else { return }
             let info = try await service.login(ceremony: ceremony, response: response)
             guard started == generation else { return }
-            session = info; notice = "Signed in."
+            session = info; proposals.setSession(info); notice = "Signed in."
         }
     }
     public func restore(household: String) async {
@@ -75,12 +82,12 @@ extension MemberClient: MemberAccountService {}
             let started = generation
             let info = try await service.restore(household: household)
             guard started == generation else { return }
-            session = info; notice = info == nil ? "No saved session was found for this household." : "Saved session verified."
+            session = info; proposals.setSession(info); notice = info == nil ? "No saved session was found for this household." : "Saved session verified."
         }
     }
     public func signOut() async {
         await run {
-            session = nil
+            session = nil; proposals.setSession(nil)
             let started = generation
             let result = try await service.logout()
             guard started == generation else { return }

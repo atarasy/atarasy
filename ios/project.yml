@@ -1,10 +1,17 @@
 name: AtarasyPrototype
 options:
   bundleIdPrefix: dev.atarasy
+configs:
+  Debug: debug
+  Release: release
+  UITesting: debug
 packages:
   AtarasyCore:
     path: AtarasyCore
 settings:
+  configs:
+    UITesting:
+      SWIFT_ACTIVE_COMPILATION_CONDITIONS: "DEBUG ATARASY_UI_TEST_FIXTURES"
   base:
     SWIFT_VERSION: '6.0'
     CODE_SIGNING_ALLOWED: NO
@@ -43,4 +50,11 @@ schemes:
       targets:
         AtarasyPrototype: all
     test:
+      targets: [AtarasyPrototypeUITests]
+  AtarasyMemberListTests:
+    build:
+      targets:
+        AtarasyPrototype: all
+    test:
+      config: UITesting
       targets: [AtarasyPrototypeUITests]

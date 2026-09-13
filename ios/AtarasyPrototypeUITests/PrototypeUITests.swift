@@ -32,6 +32,28 @@ final class PrototypeUITests: XCTestCase {
         app.buttons["memberDone"].tap()
         XCTAssertTrue(app.navigationBars["Overtures"].waitForExistence(timeout: 3))
     }
+    #if ATARASY_UI_TEST_FIXTURES
+    @MainActor func testMemberProposalPartialFailureIsNotAnEmptyInbox() {
+        let app = launch("--member-list-fixture")
+        tap("memberAccount", app)
+        XCTAssertTrue(app.staticTexts["memberListFixtureLabel"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["memberSourcesIncomplete"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["fixture-member-offer"].exists)
+        for _ in 0..<4 {
+            if app.staticTexts["memberSourceEmpty-Empty source"].isHittable { break }
+            app.swipeUp()
+        }
+        XCTAssertTrue(app.staticTexts["memberSourceUnavailable-Unavailable source"].exists)
+        XCTAssertTrue(app.staticTexts["memberSourceEmpty-Empty source"].exists)
+        XCTAssertFalse(app.buttons["reviewButton"].exists)
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Member proposal source states (test fixture)"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        tap("refreshMemberProposals", app)
+        XCTAssertTrue(app.staticTexts["memberSourcesIncomplete"].waitForExistence(timeout: 5))
+    }
+    #endif
     @MainActor func testInboxScopeAndPartialSource() {
         let app=launch("--inbox")
         let row = { (id:String) in app.descendants(matching:.any).matching(identifier:"offer-"+id).firstMatch }

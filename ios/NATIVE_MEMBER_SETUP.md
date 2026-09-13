@@ -1,6 +1,6 @@
 # Native member account setup and acceptance
 
-The native account sheet is opt-in. The checked-in simulator build contains no member service origin or environment and offers no registration/login controls. Opening Member account makes no auth request in that build. The sample Overtures inbox remains synthetic even in a build with member account configuration.
+The native account sheet is opt-in. The checked-in simulator build contains no member service origin or environment and offers no registration/login controls. Opening Member account makes no auth request in that build. The sample Overtures inbox remains synthetic even in a build with member account configuration. The account now has a separate authenticated summary list, described in [member proposals](MEMBER_PROPOSALS.md).
 
 ## Trusted configuration
 
@@ -37,7 +37,7 @@ The sheet disables concurrent actions and ordinary dismissal while work is pendi
 4. Sign in using the system picker. Confirm household and expiry originate from session inspection. Check that a different household's saved-session lookup does not grant access. Close/reopen and restore the expected record; inspect the session again.
 5. Exercise platform cancellation, failed association, expired challenge, session expiry while backgrounded, offline restoration and a lost verification response. Confirm no stale signed-in screen or repeated verification request.
 6. Sign out with a working connection and confirm subsequent server access is refused. Repeat with the revocation response lost and confirm the local record is absent while remote status remains unconfirmed. Test a locked-device storage failure separately; do not treat a host Keychain test as that evidence.
-7. Keep one record per device with OS/build identifiers, app/service commits, RP and app association checks, observed screen outcomes and redacted server request counts. Report native, service and deployment failures separately. Authenticated proposals, transaction approval and private-node recovery are later integration gates.
+7. Keep one record per device with OS/build identifiers, app/service commits, RP and app association checks, observed screen outcomes and redacted server request counts. Report native, service and deployment failures separately. Authenticated proposal device acceptance, transaction approval and private-node recovery remain separate integration gates.
 
 ## Current measurement boundary
 

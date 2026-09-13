@@ -90,6 +90,7 @@ func capturedCeremony(_ name: String) throws -> MemberCeremony {
         if let failure { throw failure }; return info
     }
     func restore(household: String) async throws -> MemberSessionInfo? { calls.append("restore:" + household); if let failure { throw failure }; return info }
+    func offers(presenter: String) async throws -> [MemberOfferSummary] { [] }
     func logout() async throws -> MemberLogoutOutcome { calls.append("logout"); if let failure { throw failure }; return .revoked }
 }
 @MainActor private final class AccountPasskeys: MemberPasskeyAuthorising {
@@ -110,6 +111,15 @@ func capturedCeremony(_ name: String) throws -> MemberCeremony {
         XCTAssertEqual(model.session?.household, "server-household")
         XCTAssertEqual(service.calls, ["registration-options", "register", "login-options", "login"])
         XCTAssertEqual(passkeys.kinds.count, 2)
+    }
+    func testProposalExpiryAlsoClearsAccount() async {
+        let model = MemberAccount(service: AccountService(), passkeys: AccountPasskeys())
+        await model.signIn()
+        XCTAssertNotNil(model.proposals.sessionIdentity)
+        // The fixture expires at 5 seconds after the epoch; the live screen clock rejects it.
+        await model.proposals.refresh()
+        XCTAssertNil(model.session); XCTAssertNil(model.proposals.sessionIdentity)
+        XCTAssertTrue(model.notice.contains("no longer available"))
     }
     func testCancelAndPlatformFailureNeverSubmitVerification() async {
         for error in [NativePasskeyFailure.cancelled, .unavailable] {

@@ -56,3 +56,9 @@ The opt-in Swift core now includes typed enrollment/session requests, authentica
 Member account now opens a separate sheet. The configured flow connects system passkey registration/assertions to the typed member client, with session restoration, expiry and logout handling. The checked-in build has no service configuration, so the sheet explains that sign-in is unavailable and sends no auth request. The sample inbox remains synthetic.
 
 See [native setup and acceptance](NATIVE_MEMBER_SETUP.md) for the trusted Info.plist keys, device identity/domain prerequisites, lifecycle behaviour and separate device checks. [Native validation](evidence/native-passkey-validation.json) records this increment's measurements; earlier evidence remains historical.
+
+## Authenticated proposal list increment
+
+The configured member account now loads read-only summaries from its server-derived presenter grants. Each source remains visibly loading, checked or unavailable. Refresh, logout, expiry and account switching invalidate stale results. The sample inbox remains separate; authenticated detail and approval are not yet connected.
+
+[Proposal behaviour and test configurations](MEMBER_PROPOSALS.md) describe the four-request concurrency bound, incomplete-source handling, test-only fixture scheme and next integration steps. [Proposal validation](evidence/member-proposals-validation.json) retains current measurements without replacing earlier checkpoints.
