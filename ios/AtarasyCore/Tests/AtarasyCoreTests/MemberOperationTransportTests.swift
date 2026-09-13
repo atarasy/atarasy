@@ -1,0 +1,151 @@
+import Foundation
+import XCTest
+@testable import AtarasyCore
+
+private struct RuntimeVault: MemberSessionVault {
+    let info: MemberSessionInfo
+    func load(environment: MemberEnvironment, household: String) throws -> StoredMemberSession? { .init(token: "amr1_" + String(repeating: "A", count: 43), info: info) }
+    func save(_ session: StoredMemberSession, environment: MemberEnvironment) throws {}
+    func remove(environment: MemberEnvironment, household: String) throws {}
+}
+private actor RuntimeTransport: MemberHTTPTransport {
+    let info: MemberSessionInfo
+    var replies: [Data?]
+    var requests: [URLRequest] = []
+    init(info: MemberSessionInfo, replies: [Data?]) { self.info = info; self.replies = replies }
+    func send(_ request: URLRequest) async throws -> MemberHTTPReply {
+        requests.append(request)
+        let data: Data
+        if request.url!.path == "/auth/session" { data = try JSONEncoder().encode(info) }
+        else {
+            guard !replies.isEmpty, let next = replies.removeFirst() else { throw URLError(.networkConnectionLost) }
+            data = next
+        }
+        return .init(url: request.url!, status: 200, contentType: "application/json", cacheControl: "no-store", data: data)
+    }
+}
+private struct RefusingOperationStore: MemberOperationStore {
+    func save(_ handle: MemberOperationHandle) throws { throw MemberFailure.storage }
+    func load(id: String) throws -> MemberOperationHandle? { nil }
+    func claim(_ handle: MemberOperationHandle) throws { throw MemberFailure.storage }
+}
+@MainActor final class MemberOperationTransportTests: XCTestCase {
+    let info = MemberSessionInfo(id: "session", household: "house", presenters: ["merchant-1"], expiresAt: 1_800_000_010_000)
+    func fixture(_ name: String) throws -> [String: Any] {
+        let url = Bundle.module.url(forResource: "member-operation-runtime", withExtension: "json", subdirectory: "Fixtures")!
+        return (try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: Any])[name] as! [String: Any]
+    }
+    func data(_ object: [String: Any]) throws -> Data { try JSONSerialization.data(withJSONObject: object) }
+    func handle() throws -> MemberOperationHandle {
+        let p = try fixture("prepared"), key = p["publicKey"] as! [String: Any], credential = (key["allowCredentials"] as! [[String: Any]])[0]
+        let receipt = try fixture("committed")["receipt"] as! [String: Any]
+        return .init(id: p["operationID"] as! String, environment: "test", origin: URL(string: "https://unit.example")!, sessionID: info.id, household: info.household, presenter: "merchant-1", offer: receipt["offer"] as! String, canonical: p["canonical"] as! String, expiresAt: (p["expiresAt"] as! NSNumber).int64Value, requestDigest: p["requestDigest"] as! String, reviewedRevision: p["reviewedRevision"] as! String, challenge: key["challenge"] as! String, credentialID: credential["id"] as! String, attempted: false)
+    }
+    private func client(_ replies: [Data?], environment: String = "test") async throws -> (MemberClient, RuntimeTransport) {
+        let transport = RuntimeTransport(info: info, replies: replies)
+        let client = MemberClient(environment: try .init(name: environment, origin: URL(string: "https://unit.example")!), transport: transport, vault: RuntimeVault(info: info), now: { 1_800_000_000_003 })
+        _ = try await client.restore(household: info.household)
+        return (client, transport)
+    }
+    func store() throws -> (FileMemberOperationStore, URL) {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        addTeardownBlock { try FileManager.default.removeItem(at: directory) }
+        return (try FileMemberOperationStore(directory: directory), directory)
+    }
+    func assertion(_ h: MemberOperationHandle) throws -> MemberPasskeyResponse {
+        let bytes = try data(["type":"webauthn.get", "challenge":h.challenge, "origin":h.origin.absoluteString])
+        let encoded = bytes.base64EncodedString().replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: "")
+        // Transport-only assertion placeholder; never offered as native cryptographic evidence.
+        return .assertion(id: h.credentialID, clientDataJSON: encoded, authenticatorData: "YQ", signature: "YQ", userHandle: "YQ")
+    }
+    func testActualServiceChallengeAndReceiptDecodeWithoutResubmission() async throws {
+        let h = try handle(), (c, t) = try await client([data(fixture("prepared")), data(fixture("pending")), data(fixture("committed"))])
+        let review = try await c.operationReview(h); XCTAssertEqual(review.publicKey["challenge"], .string(h.challenge))
+        let pending = await c.operationOutcome(h); XCTAssertEqual(pending, .pending("prepared"))
+        let outcome = await c.operationOutcome(h)
+        guard case .committed(let receipt) = outcome else { return XCTFail("Actual service receipt was not decoded") }
+        XCTAssertEqual(receipt.charged, 1200)
+        let requests = await t.requests; XCTAssertTrue(requests.allSatisfy { $0.httpMethod == "GET" && $0.httpBody == nil })
+    }
+    func testLostSubmissionPersistsAttemptAndRestartCannotSendAgain() async throws {
+        let h = try handle(), (s, directory) = try store(); try s.save(h)
+        let (c, t) = try await client([nil, data(fixture("committed"))])
+        let first = try await c.submitStatement(h, assertion: assertion(h), store: s); XCTAssertEqual(first, .unresolved)
+        let reopened = try FileMemberOperationStore(directory: directory), loaded = try XCTUnwrap(reopened.load(id: h.id)); XCTAssertTrue(loaded.attempted)
+        do { _ = try await c.submitStatement(h, assertion: assertion(h), store: reopened); XCTFail() } catch { XCTAssertEqual(error as? MemberFailure, .busy) }
+        let outcome = await c.operationOutcome(loaded); guard case .committed = outcome else { return XCTFail() }
+        let requests = await t.requests; XCTAssertEqual(requests.filter { $0.httpMethod == "POST" }.count, 1)
+        let checkpoint = try String(contentsOf: directory.appendingPathComponent(h.id + ".json"), encoding: .utf8)
+        XCTAssertFalse(checkpoint.contains("amr1_")); XCTAssertFalse(checkpoint.contains("clientDataJSON"))
+    }
+    func testPersistenceFailurePreventsDispatch() async throws {
+        let h = try handle(), (c, t) = try await client([])
+        do { _ = try await c.submitStatement(h, assertion: assertion(h), store: RefusingOperationStore()); XCTFail() } catch { XCTAssertEqual(error as? MemberFailure, .storage) }
+        let requests = await t.requests; XCTAssertEqual(requests.count, 1)
+    }
+    func testDifferentEnvironmentAndCorruptReceiptRemainUnresolved() async throws {
+        let h = try handle(), (foreign, transport) = try await client([], environment: "other")
+        let refused = await foreign.operationOutcome(h); XCTAssertEqual(refused, .unresolved)
+        let requests = await transport.requests; XCTAssertEqual(requests.count, 1)
+        var outcome = try fixture("committed"), receipt = outcome["receipt"] as! [String: Any]; receipt["charged"] = 99; outcome["receipt"] = receipt
+        let (c, _) = try await client([data(outcome)]); let bad = await c.operationOutcome(h); XCTAssertEqual(bad, .unresolved)
+    }
+    func testChangedChallengeOrRevisionCannotReplaceReview() async throws {
+        for field in ["challenge", "reviewedRevision"] {
+            var p = try fixture("prepared")
+            if field == "challenge" { var key = p["publicKey"] as! [String: Any]; key[field] = "wrong"; p["publicKey"] = key }
+            else { p[field] = String(repeating: "a", count: 64) }
+            let (c, _) = try await client([data(p)])
+            do { _ = try await c.operationReview(handle()); XCTFail() } catch { XCTAssertEqual(error as? MemberFailure, .scopeMismatch) }
+        }
+    }
+    func testCancellationRouteAndCheckpointCannotBeReset() async throws {
+        let h = try handle(), (s, _) = try store(); try s.save(h); try s.claim(h)
+        XCTAssertThrowsError(try s.save(h)); XCTAssertThrowsError(try s.claim(h))
+        let (c, t) = try await client([data(["id":h.id,"state":"cancelled"])])
+        try await c.cancelOperation(h)
+        let request = await t.requests.last!; XCTAssertEqual(request.url?.path, "/member/operations/" + h.id + "/cancel"); XCTAssertEqual(request.httpBody, Data("{}".utf8))
+    }
+    func testPreparationSavesHandleAndStorageFailureDoesNotReturnApproval() async throws {
+        let url = Bundle.module.url(forResource: "member-transaction-responses", withExtension: "json", subdirectory: "Fixtures")!
+        let cases = (try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: Any])["cases"] as! [[String: Any]]
+        func value(_ name: String) -> [String: Any] { cases.first { $0["name"] as? String == name }!["value"] as! [String: Any] }
+        let detailValue = value("physical-detail"), statementValue = value("physical-known-carriage")
+        let detail = try MemberOfferDetail.decode(data(detailValue), expectedID: detailValue["id"] as! String, household: "detail-house")
+        let statement = try MemberStatement.decode(data(statementValue), detail: detail)
+        let localInfo = MemberSessionInfo(id: "session", household: "detail-house", presenters: ["merchant-1"], expiresAt: 5000)
+        let environment = try MemberEnvironment(name: "test", origin: URL(string: "https://unit.example")!)
+        let local = try PreparedMemberStatement(environment: environment, session: localInfo, detail: detail, statement: statement, disputed: [], now: 1000)
+        var reply = try fixture("prepared"), review = reply["review"] as! [String: Any]
+        var serverStatement = statementValue; serverStatement.removeValue(forKey: "challenge")
+        review["statement"] = serverStatement; review["disputed"] = [] as [String]
+        var mandate = review["mandate"] as! [String: Any]; mandate["household"] = localInfo.household; review["mandate"] = mandate
+        reply["review"] = review; reply["canonical"] = local.canonical; reply["expiresAt"] = 2000
+        // Scope and digest inputs are unchanged, preserving the independently generated service challenge.
+        for fails in [false, true] {
+            let transport = RuntimeTransport(info: localInfo, replies: [try data(reply)])
+            let client = MemberClient(environment: environment, transport: transport, vault: RuntimeVault(info: localInfo), now: { 1000 })
+            _ = try await client.restore(household: localInfo.household)
+            let (storage, _) = try store()
+            do {
+                let (handle, _) = try await client.prepareStatement(local, store: fails ? RefusingOperationStore() : storage)
+                XCTAssertFalse(fails); XCTAssertEqual(try storage.load(id: handle.id), handle)
+            } catch { XCTAssertTrue(fails); XCTAssertEqual(error as? MemberFailure, .storage) }
+            let request = await transport.requests.last!
+            XCTAssertEqual(request.url?.path, "/member/statements/prepare")
+            XCTAssertEqual(Set((try JSONSerialization.jsonObject(with: request.httpBody!) as! [String: Any]).keys), ["offer", "disputed"])
+        }
+    }
+
+    func testMatchingTamperedCheckpointAndResponseStillNeedValidContextualChallenge() async throws {
+        let h = try handle()
+        var saved = try JSONSerialization.jsonObject(with: JSONEncoder().encode(h)) as! [String: Any]
+        saved["challenge"] = "tampered"
+        let altered = try JSONDecoder().decode(MemberOperationHandle.self, from: data(saved))
+        var reply = try fixture("prepared"), key = reply["publicKey"] as! [String: Any]
+        key["challenge"] = "tampered"; reply["publicKey"] = key
+        let (c, _) = try await client([data(reply)])
+        do { _ = try await c.operationReview(altered); XCTFail() } catch { XCTAssertEqual(error as? MemberFailure, .scopeMismatch) }
+    }
+
+}
