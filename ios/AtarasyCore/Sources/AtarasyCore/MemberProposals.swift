@@ -3,6 +3,10 @@ import Combine
 
 public protocol MemberProposalService: Sendable {
     func offers(presenter: String) async throws -> [MemberOfferSummary]
+    func offerDetail(id: String) async throws -> MemberOfferDetail
+}
+public extension MemberProposalService {
+    func offerDetail(id: String) async throws -> MemberOfferDetail { throw MemberFailure.unavailable }
 }
 public struct MemberProposalSource: Identifiable, Sendable {
     public enum Status: Sendable { case loading, available, unavailable }
@@ -18,6 +22,10 @@ private enum ProposalRead: Sendable {
     @Published public private(set) var sources: [MemberProposalSource] = []
     @Published public private(set) var loading = false
     @Published public private(set) var sessionIdentity: UUID?
+    @Published public private(set) var detail: MemberOfferDetail?
+    @Published public private(set) var detailLoading = false
+    @Published public private(set) var detailUnavailable = false
+    private var detailGeneration: UInt64 = 0
     public var incomplete: Bool { sources.contains { $0.status == .unavailable } }
     var onSessionUnavailable: (() -> Void)?
     private let service: any MemberProposalService
@@ -28,14 +36,38 @@ private enum ProposalRead: Sendable {
         self.service = service; self.now = now
     }
     public func setSession(_ session: MemberSessionInfo?) {
-        generation &+= 1; self.session = session; sources = []; loading = false
+        generation &+= 1; self.session = session; sources = []; loading = false; clearDetail()
         sessionIdentity = session == nil ? nil : UUID()
     }
     private func invalidate() { setSession(nil); onSessionUnavailable?() }
+    public func clearDetail() {
+        detailGeneration &+= 1; detail = nil; detailLoading = false; detailUnavailable = false
+    }
+    public func checkExpiry() { if let session, session.expiresAt <= now() { invalidate() } }
+    public func loadDetail(_ selected: MemberOfferSummary) async {
+        clearDetail()
+        guard let session else { return }
+        guard session.expiresAt > now() else { invalidate(); return }
+        guard Data(selected.household.utf8) == Data(session.household.utf8), session.presenters.contains(where: { Data($0.utf8) == Data(selected.presenter.utf8) }) else { detailUnavailable = true; return }
+        let started = generation, selectedGeneration = detailGeneration
+        detailLoading = true
+        defer { if detailGeneration == selectedGeneration { detailLoading = false } }
+        do {
+            let value = try await service.offerDetail(id: selected.id)
+            guard generation == started, detailGeneration == selectedGeneration, !Task.isCancelled else { return }
+            guard session.expiresAt > now() else { invalidate(); return }
+            guard Data(value.id.utf8) == Data(selected.id.utf8), Data(value.household.utf8) == Data(session.household.utf8), Data(value.presenter.utf8) == Data(selected.presenter.utf8), value.binding == selected.binding else { throw MemberFailure.scopeMismatch }
+            detail = value
+        } catch {
+            guard generation == started, detailGeneration == selectedGeneration else { return }
+            if error as? MemberFailure == .http(401) || error as? MemberFailure == .expired { invalidate() }
+            else { detailUnavailable = true }
+        }
+    }
     public func refresh() async {
         guard !loading, let session else { return }
         guard session.expiresAt > now() else { invalidate(); return }
-        generation &+= 1; let started = generation
+        generation &+= 1; let started = generation; clearDetail()
         var seen = Set<Data>()
         let presenters = session.presenters.filter { seen.insert(Data($0.utf8)).inserted }
         sources = presenters.map { MemberProposalSource(presenter: $0, status: .loading, offers: []) }

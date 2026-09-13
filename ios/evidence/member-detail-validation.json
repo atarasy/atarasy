@@ -1,0 +1,127 @@
+{
+  "date": "2026-09-13",
+  "applicationBaseline": "7e7b00ff67241f012bad0c365168ad58de796ca9",
+  "serviceCommit": "5254b7cc74f993062a72d762b4f9dd4236278e45",
+  "toolchain": {
+    "swift": "6.4",
+    "macOS": "27.0",
+    "simulatorSDK": "27.0",
+    "deploymentFloor": "iOS 17.0"
+  },
+  "swiftPackage": {
+    "passed": 64,
+    "failed": 0,
+    "skipped": 0,
+    "prior": 54,
+    "newDetailTests": 10
+  },
+  "simulatorUI": {
+    "phone": {
+      "passed": 8,
+      "failed": 0,
+      "scope": "Full UITesting suite including digital and physical detail."
+    },
+    "tablet": {
+      "passed": 2,
+      "failed": 0,
+      "scope": "Targeted digital and physical detail."
+    }
+  },
+  "normalReleaseBuild": "BUILD SUCCEEDED; generic iOS Simulator, signing disabled",
+  "responseCapture": {
+    "count": 6,
+    "scope": "Actual handler/read gate with test-only session/ownership adapters; in-memory engine."
+  },
+  "negativeControl": {
+    "path": "/Users/yoichirohara/Documents/atarasy-development/atarasy-detail-negative-pi_fhwl1/AtarasyCore",
+    "replacement": {
+      "before": "same(value.household, household)",
+      "after": "true"
+    },
+    "originalSHA256": "0292c2262cfd8df63d0934deb5789a86c66a3e40f5dd0eb2a0e9a728bcdcaa15",
+    "mutatedSHA256": "0ab855e7bef7c6720d37f49c2b101a9e07dc4c0efeee73ee8e0a7253e5b2860f",
+    "exitCode": 1,
+    "failedTests": 1,
+    "failedAssertions": 1
+  },
+  "binaryInspection": {
+    "markers": [
+      "memberListFixtureLabel",
+      "--member-list-fixture",
+      "First 64 bytes of captured base64 payload"
+    ],
+    "testCodeSHA256": {
+      "/Users/yoichirohara/Documents/atarasy-development/member-detail-derived-20260913/Build/Products/UITesting-iphonesimulator/AtarasyPrototype.app/AtarasyPrototype": "e3438f616e694d31a7a431bc077adf395c05180b30a09cfdad7d020ccc64f2d2",
+      "/Users/yoichirohara/Documents/atarasy-development/member-detail-derived-20260913/Build/Products/UITesting-iphonesimulator/AtarasyPrototype.app/__preview.dylib": "6332ea47542bd7213276e231554f58a00da644bb91fea2f86ed206ed06ed786e",
+      "/Users/yoichirohara/Documents/atarasy-development/member-detail-derived-20260913/Build/Products/UITesting-iphonesimulator/AtarasyPrototype.app/AtarasyPrototype.debug.dylib": "19e269df8803c67bebd03b7087aa118370867fabd77a93c5554b795a8a9cb915"
+    },
+    "releaseCodeSHA256": {
+      "/Users/yoichirohara/Documents/atarasy-development/member-detail-release-20260913/Build/Products/Release-iphonesimulator/AtarasyPrototype.app/AtarasyPrototype": "72740748d11a9b75027bf14c78851ec800d85850a52ebdd09e99dce3718ffeaa"
+    },
+    "result": "All three markers present in UITesting and absent from Release code images."
+  },
+  "sourceSHA256": {
+    "contracts/member-detail/README.md": "6f358ceb9767d4076e35522a1cddb84cec525558404f5230151d7489a4a14baa",
+    "contracts/member-detail/manifest.json": "e0b776a194bbff0a3f2f4b67f52ae56db599f9e089512ad44ab89ed7b5517622",
+    "contracts/member-detail/responses.json": "ae3a895c58ed2a2bd9893048ce0b6bd3f256fe0f13a420db6a72312a1732823e",
+    "ios/AtarasyCore/Sources/AtarasyCore/MemberClient.swift": "728d4db763c94e045b5fda80750790437be3117ab93ee57fc365a8c58d2c4e21",
+    "ios/AtarasyCore/Sources/AtarasyCore/MemberOfferDetail.swift": "0292c2262cfd8df63d0934deb5789a86c66a3e40f5dd0eb2a0e9a728bcdcaa15",
+    "ios/AtarasyCore/Sources/AtarasyCore/MemberProposals.swift": "8f11aff6227f1862bdc7a39fe6eea3a14dbd816761588c2e878566a375210031",
+    "ios/AtarasyCore/Tests/AtarasyCoreTests/Fixtures/member-detail-responses.json": "ae3a895c58ed2a2bd9893048ce0b6bd3f256fe0f13a420db6a72312a1732823e",
+    "ios/AtarasyCore/Tests/AtarasyCoreTests/MemberDetailTests.swift": "6e7b0a05f76e970601b9dea0d53ecf5d11eedfc7e314b3cfd495985222178999",
+    "ios/AtarasyPrototype/MemberAccountView.swift": "14479152ab18f11cab681c3a93d39f7f9dba17e07826ef3fb705b833adbfff6b",
+    "ios/AtarasyPrototype/MemberDetailFixtureData.swift": "c963f7758982322753c43dcb2dd3fc064f089472d3bcf77c3b2a9f86555ffcd2",
+    "ios/AtarasyPrototype/MemberOfferDetailView.swift": "bcfa90d0ba60cd35b01ca9e0afdf3aa5a8b06d85db92f7249a608d0000185343",
+    "ios/AtarasyPrototype/MemberProposalFixture.swift": "3fa330847471e7ef8afab213918150751b01475f7cb45773dad4d6abbb4ae0ec",
+    "ios/AtarasyPrototype/MemberProposalView.swift": "be8521713bebb48fce9d07757148df91a8263deb1f6fe2a23306817713abc55d",
+    "ios/AtarasyPrototypeUITests/PrototypeUITests.swift": "b68828d51a5523d56a9d060f50fe659595448180f713e3972c6020c1d77f6b24",
+    "ios/MEMBER_DETAIL.md": "0033b9030e5920ba82315886e7a7fc6478a5e269d254690976db0b4af4a5a281",
+    "ios/MEMBER_PROPOSALS.md": "50477cc67c8c38b942c53a0a2025904482f3fe511681b2a67d6a422ed6af4ffa",
+    "ios/README.md": "908e5088077d94141d69461f782d836c30f94ed3c5dff7080263c06f6fd7c492",
+    "ios/evidence/member-detail-phone-digital.png": "d09eec88e47e6d9f711c53bcf2613629da9db129e1f11a7d092b1f990ad42e12",
+    "ios/evidence/member-detail-tablet-physical.png": "5a627bf90f20d6a6b52158ec8829a8adcee33668c2e7cf83d0395b12bae4f06e",
+    "scripts/member-detail/capture.ts": "10547b183855c9b41ec10cbd3ed02c98cc97373a4776bb2ec26944a3d883e1eb",
+    "scripts/member-detail/sync-fixture.py": "13ea76e9c85aaabbeedadcd749230602cfe5aa89bb032bb56ea6f9665a102ba9"
+  },
+  "logs": {
+    "member-detail-tests-20260913.log": {
+      "path": "/Users/yoichirohara/Documents/atarasy-development/member-detail-tests-20260913.log",
+      "sha256": "706782ed0b068c689b1fd51d1b3c2a35bff01f6a5c74b2dcee7255504a99f7f1"
+    },
+    "member-detail-phone-20260913.log": {
+      "path": "/Users/yoichirohara/Documents/atarasy-development/member-detail-phone-20260913.log",
+      "sha256": "bf018d7e2a67ffa618051231e7fc1d26f2cdf402059ece61e5b5c9ff712ef408"
+    },
+    "member-detail-tablet-20260913.log": {
+      "path": "/Users/yoichirohara/Documents/atarasy-development/member-detail-tablet-20260913.log",
+      "sha256": "113b77c629389f69895d0ad48bedcacede2b59ce3e1c95056defe847b14f4df8"
+    },
+    "member-detail-release-20260913.log": {
+      "path": "/Users/yoichirohara/Documents/atarasy-development/member-detail-release-20260913.log",
+      "sha256": "1341cf01ab4d8453a7abe879ed475d008774791b1ded82bad7613e4e03e0795e"
+    },
+    "member-detail-negative-20260913.log": {
+      "path": "/Users/yoichirohara/Documents/atarasy-development/member-detail-negative-20260913.log",
+      "sha256": "5f8c4002c2ee4a4e4779145b61e1b488d00209ecce2d49aa189f9902f4d43cd5"
+    }
+  },
+  "screenshots": [
+    "member-detail-phone-digital.png",
+    "member-detail-tablet-physical.png"
+  ],
+  "visualReview": "Scrolled digital gift and physical reported-consumption fixtures inspected; text is legible and merchant/maker/carrier/gift distinctions preserved.",
+  "resultBundles": [
+    "/Users/yoichirohara/Documents/atarasy-development/member-detail-phone-20260913.xcresult",
+    "/Users/yoichirohara/Documents/atarasy-development/member-detail-tablet-20260913.xcresult"
+  ],
+  "limitations": [
+    "No real native login or configured network/device acceptance.",
+    "No statement/approval projection, signing, transaction submission or provider verification.",
+    "No currency, amount payable, actual collection timestamp or recovery grace period in this detail projection.",
+    "Disclosure signatures are not independently verified by the native reader.",
+    "UI fixture identity fields are rebound to the test-list session; normal Release excludes the fixture payload."
+  ],
+  "toolingNotices": [
+    "AppIntents metadata extraction skipped; Xcode debugger lookup notices; tablet runtime duplicate accessibility-class notice. All selected tests passed; no Swift source warning in final builds."
+  ]
+}

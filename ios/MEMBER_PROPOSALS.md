@@ -20,6 +20,8 @@ From the repository root, regenerate the project with `xcodegen generate --spec 
 
 The test-only list is compiled out by its source condition and entry condition in normal builds. The validation record includes a normal Release compilation and binary inspection, as well as test-configuration UI results. Fixture screenshots are design/test evidence, not authenticated network or physical-device evidence.
 
+The full offer-detail projection and native navigation described in steps 1 and 2 follow in [member detail](MEMBER_DETAIL.md), with their own validation and remaining approval boundaries.
+
 ## Next integration
 
 1. Pin a full offer-detail projection from the member service and map it into a separate authenticated detail model. Preserve missing fields and refusal states; do not reuse synthetic totals or signing responses.

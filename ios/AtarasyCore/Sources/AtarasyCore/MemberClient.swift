@@ -156,6 +156,14 @@ public actor MemberClient {
         guard same(offer.id, id), same(offer.household, session.household), session.presenters.contains(where: { same($0, offer.presenter) }) else { throw MemberFailure.scopeMismatch }
         return offer
     }
+    public func offerDetail(id: String) async throws -> MemberOfferDetail {
+        try identifier(id); let (reply, session) = try await read("/offers/" + id)
+        guard reply.status == 200 else { throw MemberFailure.http(reply.status) }
+        guard reply.contentType?.split(separator: ";").first?.trimmingCharacters(in: .whitespaces).lowercased() == "application/json" else { throw MemberFailure.malformed }
+        let value = try MemberOfferDetail.decode(reply.data, expectedID: id, household: session.household)
+        guard session.presenters.contains(where: { same($0, value.presenter) }) else { throw MemberFailure.scopeMismatch }
+        return value
+    }
     public func settlement(offerID: String) async throws -> ProtocolSettlement {
         try identifier(offerID); let (reply, _) = try await read("/offers/" + offerID + "/settlement")
         return try ReferenceResponseReader.settlement(status: reply.status, contentType: reply.contentType, data: reply.data, expectedOffer: offerID)

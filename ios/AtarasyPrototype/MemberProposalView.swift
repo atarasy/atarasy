@@ -21,10 +21,12 @@ struct MemberProposalSections: View {
                 case .available:
                     if source.offers.isEmpty { Text("No proposals from this source.").accessibilityIdentifier("memberSourceEmpty-" + source.presenter) }
                     ForEach(Array(source.offers.enumerated()), id: \.offset) { _, offer in
+                        NavigationLink { MemberOfferDetailView(model: model, selected: offer) } label: {
                         VStack(alignment: .leading, spacing: 5) {
                             Text(offer.binding == "physical" ? "Physical proposal" : "Digital proposal").font(.headline)
                             Text(offer.id).textSelection(.enabled)
                             Text("Service state: \(offer.state)").font(.caption)
+                        }
                         }.accessibilityIdentifier("memberProposal-" + offer.id)
                     }
                 }

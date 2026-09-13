@@ -4,10 +4,11 @@ import AtarasyCore
 
 // Compiled only by the dedicated UI-testing configuration, never Debug or Release.
 private actor ProposalFixtureService: MemberProposalService {
+    func offerDetail(id: String) async throws -> MemberOfferDetail { try MemberDetailFixtureData.detail(id: id) }
     func offers(presenter: String) async throws -> [MemberOfferSummary] {
         if presenter == "Unavailable source" { throw MemberFailure.unavailable }
         if presenter == "Empty source" { return [] }
-        let data = Data(#"[{"id":"fixture-member-offer","household":"test-household","presenter":"Available source","binding":"digital","state":"presented"}]"#.utf8)
+        let data = Data(#"[{"id":"fixture-member-offer","household":"test-household","presenter":"Available source","binding":"digital","state":"presented"},{"id":"fixture-member-physical","household":"test-household","presenter":"Available source","binding":"physical","state":"expired"}]"#.utf8)
         return try JSONDecoder().decode([MemberOfferSummary].self, from: data)
     }
 }

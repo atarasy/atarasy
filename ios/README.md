@@ -62,3 +62,9 @@ See [native setup and acceptance](NATIVE_MEMBER_SETUP.md) for the trusted Info.p
 The configured member account now loads read-only summaries from its server-derived presenter grants. Each source remains visibly loading, checked or unavailable. Refresh, logout, expiry and account switching invalidate stale results. The sample inbox remains separate; authenticated detail and approval are not yet connected.
 
 [Proposal behaviour and test configurations](MEMBER_PROPOSALS.md) describe the four-request concurrency bound, incomplete-source handling, test-only fixture scheme and next integration steps. [Proposal validation](evidence/member-proposals-validation.json) retains current measurements without replacing earlier checkpoints.
+
+## Authenticated detail increment
+
+Member proposal rows now open independently decoded native details. The screen preserves product references, quantities, merchant/maker/carrier identity, gifts and disclosure text, and distinguishes physical reported outcomes from digital choice status. It does not invent currency, totals, recovery facts or signing results.
+
+[Detail behaviour and lifecycle](MEMBER_DETAIL.md) describes validation, navigation and remaining statement/approval work. [Detail validation](evidence/member-detail-validation.json) keeps this increment's measurements separate from sample and device evidence.

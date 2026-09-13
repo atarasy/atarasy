@@ -1,0 +1,15 @@
+{
+  "serviceCommit": "5254b7cc74f993062a72d762b4f9dd4236278e45",
+  "captureCount": 6,
+  "responseSHA256": "ae3a895c58ed2a2bd9893048ce0b6bd3f256fe0f13a420db6a72312a1732823e",
+  "serviceSourceSHA256": {
+    "engine/src/http.ts": "5b7223de33e16a96960a5ca57b8a920713793cf5f86980123f5ed868d36b64d0",
+    "engine/src/common/types.ts": "dc327dc8bd49094c2e8d624b2d8fa2290c6c297b85d3747506726b8916ee5f25",
+    "experiments/member-read/gate.ts": "607c5a12c70c1d2937470a032add318ba45ba877a3f95e512a770998d90ce12f",
+    "experiments/member-read/projection.ts": "f4d7953e3bb34eaeb2be1d499b3f4cebbdae482236e3c9639193e9342848a225",
+    "engine/test/helpers.ts": "7abae33b52dbe41634026634f14f4881cd02790c732d2137d2af111a1beac2c3"
+  },
+  "capture": "scripts/member-detail/capture.ts",
+  "fixtureSync": "scripts/member-detail/sync-fixture.py",
+  "scope": "In-process HTTP handler and member read gate with test-only session/ownership adapters. No real native login or deployed transport."
+}

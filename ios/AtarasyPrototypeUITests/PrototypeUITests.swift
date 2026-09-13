@@ -38,7 +38,7 @@ final class PrototypeUITests: XCTestCase {
         tap("memberAccount", app)
         XCTAssertTrue(app.staticTexts["memberListFixtureLabel"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["memberSourcesIncomplete"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["fixture-member-offer"].exists)
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "memberProposal-fixture-member-offer").firstMatch.exists)
         for _ in 0..<4 {
             if app.staticTexts["memberSourceEmpty-Empty source"].isHittable { break }
             app.swipeUp()
@@ -52,6 +52,29 @@ final class PrototypeUITests: XCTestCase {
         add(screenshot)
         tap("refreshMemberProposals", app)
         XCTAssertTrue(app.staticTexts["memberSourcesIncomplete"].waitForExistence(timeout: 5))
+    }
+    @MainActor func testDigitalMemberDetailPreservesGiftAndReturnsToList() {
+        let app = launch("--member-list-fixture")
+        tap("memberAccount", app); tap("memberProposal-fixture-member-offer", app)
+        XCTAssertTrue(app.navigationBars["Digital proposal"].waitForExistence(timeout: 5))
+        for _ in 0..<8 { if app.staticTexts["detailGift"].isHittable { break }; app.swipeUp() }
+        XCTAssertTrue(app.staticTexts["detailGift"].exists)
+        XCTAssertFalse(app.buttons["signButton"].exists)
+        let screenshot = XCTAttachment(screenshot: app.screenshot()); screenshot.name = "Digital member detail (test fixture)"; screenshot.lifetime = .keepAlways; add(screenshot)
+        app.navigationBars["Digital proposal"].buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(app.navigationBars["Member proposal test"].waitForExistence(timeout: 5))
+        tap("memberProposal-fixture-member-offer", app)
+        XCTAssertTrue(app.navigationBars["Digital proposal"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["detailSessionEnded"].exists)
+    }
+    @MainActor func testPhysicalMemberDetailShowsReportedConsumption() {
+        let app = launch("--member-list-fixture")
+        tap("memberAccount", app); tap("memberProposal-fixture-member-physical", app)
+        XCTAssertTrue(app.navigationBars["Physical proposal"].waitForExistence(timeout: 5))
+        for _ in 0..<8 { if app.staticTexts["Reported outcome: consumed"].firstMatch.isHittable { break }; app.swipeUp() }
+        XCTAssertTrue(app.staticTexts["Reported outcome: consumed"].firstMatch.exists)
+        XCTAssertFalse(app.buttons["reviewButton"].exists)
+        let screenshot = XCTAttachment(screenshot: app.screenshot()); screenshot.name = "Physical member detail (test fixture)"; screenshot.lifetime = .keepAlways; add(screenshot)
     }
     #endif
     @MainActor func testInboxScopeAndPartialSource() {

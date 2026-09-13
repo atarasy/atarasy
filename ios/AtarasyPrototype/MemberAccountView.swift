@@ -21,6 +21,7 @@ private struct MemberWindowReader: UIViewRepresentable {
     func updateUIView(_ uiView: Probe, context: Context) { uiView.reference = reference }
 }
 struct MemberAccountSheet: View {
+    @State private var account: MemberAccount?
     @Environment(\.dismiss) private var dismiss
     var body: some View {
         NavigationStack {
@@ -32,10 +33,11 @@ struct MemberAccountSheet: View {
             configuredContent
             #endif
         }
+        .onDisappear { account?.close() }
     }
     @ViewBuilder private var configuredContent: some View {
             if let environment = configuredMemberEnvironment() {
-                ConfiguredMemberAccount(environment: environment)
+                ConfiguredMemberAccount(environment: environment, account: $account)
             } else {
                 ContentUnavailableView("Member sign-in unavailable", systemImage: "person.crop.circle.badge.exclamationmark", description: Text("This build is not connected to a member service. You can continue exploring the sample proposals."))
                     .accessibilityIdentifier("memberUnconfigured")
@@ -49,7 +51,7 @@ private struct ConfiguredMemberAccount: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var window = MemberWindow()
-    @State private var account: MemberAccount?
+    @Binding var account: MemberAccount?
     var body: some View {
         Group {
             if let account { MemberAccountForm(account: account) }
@@ -115,6 +117,6 @@ private struct MemberAccountForm: View {
         .interactiveDismissDisabled(account.busy || action != nil)
         .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() }.disabled(account.busy || action != nil) } }
         .onReceive(clock) { date in account.clearExpired(now: Int64(date.timeIntervalSince1970 * 1000)) }
-        .onDisappear { invitation = ""; household = ""; action?.cancel(); account.close() }
+        .onDisappear { invitation = ""; household = ""; action?.cancel() }
     }
 }
