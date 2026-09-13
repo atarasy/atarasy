@@ -41,4 +41,4 @@ The sheet disables concurrent actions and ordinary dismissal while work is pendi
 
 ## Current measurement boundary
 
-The package tests create real AuthenticationServices request objects and exercise the account model through injected service/authenticator seams. They do not present a successful system credential ceremony. The simulator UI checks cover the unconfigured account sheet and the existing synthetic journeys. No physical-device, configured network UI, RP/AASA, deployed TLS or hardware storage result is claimed here.
+The package tests create real AuthenticationServices request objects and exercise the account model through injected service/authenticator seams. They do not present a successful system credential ceremony. The simulator UI checks cover the unconfigured account sheet and the existing synthetic journeys. The later [development setup record](development/README.md) records deployed TLS/AASA checks, signature verification and physical-device installation. Successful native passkey ceremonies, configured account UI interaction and hardware storage behaviour remain unverified.
