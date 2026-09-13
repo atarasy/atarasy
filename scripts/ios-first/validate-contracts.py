@@ -30,3 +30,9 @@ for example in responses['cases']:
     negative_count+=2
 assert (pack/'response-examples.json').read_bytes()==(root/'ios/AtarasyCore/Tests/AtarasyCoreTests/Fixtures/response-examples.json').read_bytes()
 print(json.dumps({'reference_responses':len(responses['cases']),'negative_response_cases':negative_count,'source_commit':responses['source']['commit'],'limits':'In-process reference handler; no transport, native credential, provider or deployed access-control verification'},indent=2))
+
+publication_requests=responses.get('requests',[])
+for example in publication_requests:
+    validator=Draft202012Validator(schemas[example['schema']])
+    assert validator.is_valid(example['value'])==example['valid'],example['id']
+print(json.dumps({'publication_request_cases':len(publication_requests)},indent=2))

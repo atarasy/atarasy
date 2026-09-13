@@ -42,3 +42,5 @@ Measured results and screenshots are retained in [the validation record](evidenc
 ## Reference response increment
 
 The core now also decodes the pinned engine's settlement read response and preserves HTTP/refusal distinctions without treating a receipt as provider-paid. [The response pack](../contracts/ios-first/README.md) records 27 actual in-process handler responses and source provenance. The native UI still uses its original synthetic presentation model; transport, credentials and authenticated integration remain separate work. The first UI screenshots/validation record describe the earlier prototype commit, not a fresh device test of this decoder increment.
+
+The publication increment adds mandate response validation, including household/ID binding and null/zero handling. Its current tests and source/log hashes are in [the publication validation record](evidence/publication-validation.json). The earlier evidence files remain historical checkpoints. Native screens still use synthetic data.

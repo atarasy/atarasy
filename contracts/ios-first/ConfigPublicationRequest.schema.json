@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ConfigPublicationRequest",
+  "description": "Pinned client contract. Signatures, actor scope and semantic constraints require server verification; safe integers and required config signature are client constraints.",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "presenter": {
+      "type": "string",
+      "minLength": 1
+    },
+    "products": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "merchant": {
+            "type": "string",
+            "minLength": 1
+          },
+          "maker": {
+            "type": "string",
+            "minLength": 1
+          },
+          "ships": {
+            "type": "string",
+            "minLength": 1
+          },
+          "price": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "category": {
+            "type": "string",
+            "minLength": 1
+          },
+          "physical": {
+            "type": "object",
+            "properties": {
+              "ambient": {
+                "type": "boolean"
+              },
+              "keeps_for_days": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "fits_ten_per_container": {
+                "type": "boolean"
+              },
+              "regulated": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "ambient",
+              "keeps_for_days",
+              "fits_ten_per_container",
+              "regulated"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "merchant",
+          "maker",
+          "ships",
+          "price"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "signature": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "version",
+    "presenter",
+    "products",
+    "signature"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DisclosurePublicationRequest",
+  "description": "Pinned client contract. Signatures, actor scope and semantic constraints require server verification; safe integers and required config signature are client constraints.",
+  "type": "object",
+  "properties": {
+    "merchant": {
+      "type": "string",
+      "minLength": 1
+    },
+    "product": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "minLength": 1
+          },
+          "value": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "label",
+          "value"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "signature": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "merchant",
+    "version",
+    "items",
+    "signature"
+  ],
+  "additionalProperties": false
+}
