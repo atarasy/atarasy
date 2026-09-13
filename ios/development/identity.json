@@ -1,0 +1,9 @@
+{
+  "environment": "development",
+  "origin": "https://api-dev.vox.delivery",
+  "rpID": "api-dev.vox.delivery",
+  "teamID": "83W4J65UE6",
+  "bundleID": "dev.atarasy.prototype",
+  "candidateApplicationIdentifierPrefix": "83W4J65UE6",
+  "signedApplicationIdentifierVerified": false
+}
