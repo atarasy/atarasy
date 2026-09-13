@@ -13,6 +13,7 @@ struct InboxView: View {
     }()
     @State private var selected: String?
     @State private var partial = false
+    @State private var memberAccount = false
     var body: some View {
         NavigationSplitView {
             List(selection:$selected) {
@@ -29,12 +30,14 @@ struct InboxView: View {
                         }
                     }
                 }
+                Section { Button("Member account") { memberAccount = true }.accessibilityIdentifier("memberAccount") }
                 Section("Prototype scope") { Text("No real signing, network requests or payment. Dials and account recovery are specified but not interactive in this build.").font(.footnote).foregroundStyle(.secondary) }
             }.navigationTitle("Overtures")
         } detail: {
             if let offer=fixtures.offers.first(where:{$0.id == selected}) { OfferView(offer:offer).id(offer.id) }
             else { ContentUnavailableView("Choose a proposal",systemImage:"tray",description:Text("Digital choices and physical statements remain separate.")) }
         }
+        .sheet(isPresented: $memberAccount) { MemberAccountSheet() }
         .onAppear { if ProcessInfo.processInfo.arguments.contains("--physical") { selected="physical-a" }; if ProcessInfo.processInfo.arguments.contains("--digital") { selected="digital-a" } }
     }
 }

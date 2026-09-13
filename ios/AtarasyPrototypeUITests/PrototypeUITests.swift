@@ -22,6 +22,16 @@ final class PrototypeUITests: XCTestCase {
         for _ in 0..<8 { if act() { return }; app.swipeDown() }
         XCTFail("Cannot reach \(id)")
     }
+    @MainActor func testMemberAccountWithoutConfigurationMakesNoLoginAvailable() {
+        let app = launch("--inbox")
+        tap("memberAccount", app)
+        XCTAssertTrue(app.staticTexts["Member sign-in unavailable"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["memberSignIn"].exists)
+        XCTAssertFalse(app.buttons["memberEnrol"].exists)
+        XCTAssertFalse(app.buttons["memberRestore"].exists)
+        app.buttons["memberDone"].tap()
+        XCTAssertTrue(app.navigationBars["Overtures"].waitForExistence(timeout: 3))
+    }
     @MainActor func testInboxScopeAndPartialSource() {
         let app=launch("--inbox")
         let row = { (id:String) in app.descendants(matching:.any).matching(identifier:"offer-"+id).firstMatch }

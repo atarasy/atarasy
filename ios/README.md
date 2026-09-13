@@ -1,6 +1,6 @@
 # Atarasy Swift design prototype
 
-This isolated development branch contains the first native iPhone/iPad interaction prototype and a small independently implemented Swift canonical codec. It does not connect to a host, use a passkey, contact a payment provider or claim production privacy. Every record is synthetic.
+This isolated development branch contains the first native iPhone/iPad interaction prototype and a small independently implemented Swift canonical codec. The default sample inbox does not connect to a host or contact a payment provider, and its records are synthetic. The separate member account flow is enabled only by trusted service configuration; no production privacy or deployed integration is claimed.
 
 ## Run
 
@@ -35,7 +35,7 @@ UI tests exercise household filtering, arrival ordering, partial-source display,
 
 ## What remains
 
-Dials/co-signer UI, native account enrollment presentation, actual AuthenticationServices, private-node key storage, host migration, operator workbench and the production coordinator are not implemented here. The schemas are an executable native request/statement subset, not all IC-01–08. The proposed integration envelope has no deployed endpoint. The separate contract README and manifest retain those distinctions.
+Dials/co-signer UI, private-node key storage, host migration, operator workbench and the production coordinator are not implemented here. Native account presentation and AuthenticationServices request handling are now implemented, with device acceptance still outstanding. The schemas are an executable native request/statement subset, not all IC-01–08. The proposed integration envelope has no deployed endpoint. The separate contract README and manifest retain those distinctions.
 
 Measured results and screenshots are retained in [the validation record](evidence/validation.json).
 
@@ -47,6 +47,12 @@ The publication increment adds mandate response validation, including household/
 
 ## Member client increment
 
-The opt-in Swift core now includes typed enrollment/session requests, authenticated member reads, an ephemeral URLSession transport and scoped Keychain session storage. The session actor inspects server grants before persistence and rejects stale, expired or differently scoped results. It clears local credentials before attempting remote logout and preserves uncertain outcomes. The prototype UI remains synthetic and does not compose this client or present AuthenticationServices.
+The opt-in Swift core now includes typed enrollment/session requests, authenticated member reads, an ephemeral URLSession transport and scoped Keychain session storage. The session actor inspects server grants before persistence and rejects stale, expired or differently scoped results. It clears local credentials before attempting remote logout and preserves uncertain outcomes. At that checkpoint, the prototype UI remained synthetic and did not compose the client or present AuthenticationServices; the native account increment below adds that composition.
 
 [The separate auth contract](../contracts/member-auth/README.md) pins seven captured responses from Valence 5254b7c. [The member client validation](evidence/member-client-validation.json) records 33 passing Swift tests and a successful iOS Simulator build. Controlled URLProtocol tests exercise the real URLSession adapter; the host Keychain test checks save/load/remove and scope separation. These are not network TLS, device-lock, hardware passkey or live UI acceptance evidence.
+
+## Native passkey and account increment
+
+Member account now opens a separate sheet. The configured flow connects system passkey registration/assertions to the typed member client, with session restoration, expiry and logout handling. The checked-in build has no service configuration, so the sheet explains that sign-in is unavailable and sends no auth request. The sample inbox remains synthetic.
+
+See [native setup and acceptance](NATIVE_MEMBER_SETUP.md) for the trusted Info.plist keys, device identity/domain prerequisites, lifecycle behaviour and separate device checks. [Native validation](evidence/native-passkey-validation.json) records this increment's measurements; earlier evidence remains historical.
