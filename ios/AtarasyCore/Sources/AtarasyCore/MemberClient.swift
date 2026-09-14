@@ -167,6 +167,13 @@ public actor MemberClient {
     public func review(detail: MemberOfferDetail) async throws -> MemberReview {
         try identifier(detail.id)
         guard ["physical", "digital"].contains(detail.binding) else { throw MemberFailure.invalidInput }
+        if detail.binding == "physical" && detail.state == "settled" {
+            let (reply, session) = try await read("/offers/" + detail.id + "/settlement")
+            guard same(session.household, detail.household), session.presenters.contains(where: { same($0, detail.presenter) }) else { throw MemberFailure.scopeMismatch }
+            let receipt = try ReferenceResponseReader.settlement(status: reply.status, contentType: reply.contentType, data: reply.data, expectedOffer: detail.id)
+            guard same(receipt.payer, detail.household), same(receipt.signedBy, detail.presenter) else { throw MemberFailure.scopeMismatch }
+            return .settlement(receipt)
+        }
         let (reply, session) = try await read("/offers/" + detail.id + (detail.binding == "physical" ? "/statement" : "/approval"))
         guard Data(session.household.utf8) == Data(detail.household.utf8), session.presenters.contains(where: { Data($0.utf8) == Data(detail.presenter.utf8) }) else { throw MemberFailure.scopeMismatch }
         guard reply.status == 200 else { throw MemberFailure.http(reply.status) }
@@ -200,7 +207,9 @@ public actor MemberClient {
         guard UUID(uuidString: handle.id)?.uuidString.lowercased() == handle.id,
               let session = active?.info, live(session.expiresAt),
               same(handle.environment, environment.name), handle.origin == environment.origin,
-              same(handle.sessionID, session.id), same(handle.household, session.household),
+              // Not the session id: the journal lets a new sign-in by the same credential read its
+              // own history, and binding to the session stranded a result after signing in again.
+              same(handle.household, session.household),
               session.presenters.contains(where: { same($0, handle.presenter) }) else { throw MemberFailure.scopeMismatch }
     }
     private func preparedOperation(_ reply: MemberHTTPReply, canonical: String, household: String, offer: String) throws -> MemberPreparedOperation {
@@ -282,6 +291,12 @@ public actor MemberClient {
             return StatementLine(candidate: line.candidate, valence: line.valence, amount: line.amount, disputed: line.disputed)
         }
         guard same(try Canonical.statement(offer: handle.offer, carriage: carriage, lines: lines), handle.canonical) else { throw MemberFailure.scopeMismatch }
+        // The receipt names the signature that settled the offer. Matching lines do not show it was
+        // this device's: another device, or a second attempt, signs the same statement.
+        guard handle.attempted else { return .settledElsewhere(receipt) }
+        if let fingerprint = handle.confirmationFingerprint {
+            guard let confirmation = receipt.confirmation, same(Canonical.digest(confirmation), fingerprint) else { return .settledElsewhere(receipt) }
+        }
         return .committed(receipt)
     }
     /// A failed read never establishes that dispatch had no effect.
@@ -301,16 +316,17 @@ public actor MemberClient {
         guard let bytes = Data(base64Encoded: base64 + String(repeating: "=", count: (4 - base64.count % 4) % 4)),
               let clientData = try JSONSerialization.jsonObject(with: bytes) as? [String: Any],
               clientData["type"] as? String == "webauthn.get", clientData["challenge"] as? String == handle.challenge,
-              clientData["origin"] as? String == environment.origin.absoluteString else { throw MemberFailure.scopeMismatch }
+              clientData["origin"] as? String == environment.origin.absoluteString,
+              case .string(let signature) = assertion.response["signature"], !signature.isEmpty else { throw MemberFailure.scopeMismatch }
         struct Input: Encodable { let assertion: MemberPasskeyResponse }
         let body = try JSONEncoder().encode(Input(assertion: assertion))
         guard body.count <= 16_384 else { throw MemberFailure.invalidInput }
         // No suspension between checking the session and claiming the durable attempt.
-        try store.claim(handle)
+        try store.claim(handle, confirmation: signature)
         do {
             let (reply, _) = try await read("/member/operations/" + handle.id + "/submit", body: body)
             try Task.checkCancellation()
-            return try operationOutcome(reply, handle: handle)
+            return try operationOutcome(reply, handle: handle.markedAttempted(confirmation: signature))
         } catch { return .unresolved }
     }
     public func cancelOperation(_ handle: MemberOperationHandle) async throws {

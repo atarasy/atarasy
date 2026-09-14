@@ -1,6 +1,7 @@
 import Foundation
 
-/// Durable correlation only. Contains neither bearer credentials nor assertions.
+/// Durable correlation only. Contains neither bearer credentials nor assertions: what was
+/// signed is kept as a digest, so a read-back can tell this device's settlement from another's.
 public struct MemberOperationHandle: Codable, Equatable, Sendable {
     public let id: String
     public let environment: String
@@ -16,8 +17,11 @@ public struct MemberOperationHandle: Codable, Equatable, Sendable {
     public let challenge: String
     public let credentialID: String
     public let attempted: Bool
-    func markedAttempted() -> Self {
-        Self(id: id, environment: environment, origin: origin, sessionID: sessionID, household: household, presenter: presenter, offer: offer, canonical: canonical, expiresAt: expiresAt, requestDigest: requestDigest, reviewedRevision: reviewedRevision, challenge: challenge, credentialID: credentialID, attempted: true)
+    /// SHA-256 of the assertion signature this device submitted. Nil before a submission, and
+    /// on handles saved by builds that did not record it.
+    public private(set) var confirmationFingerprint: String? = nil
+    func markedAttempted(confirmation: String) -> Self {
+        Self(id: id, environment: environment, origin: origin, sessionID: sessionID, household: household, presenter: presenter, offer: offer, canonical: canonical, expiresAt: expiresAt, requestDigest: requestDigest, reviewedRevision: reviewedRevision, challenge: challenge, credentialID: credentialID, attempted: true, confirmationFingerprint: Canonical.digest(confirmation))
     }
 }
 public struct MemberPreparedOperation: Decodable, Sendable {
@@ -34,14 +38,17 @@ public struct MemberPreparedOperation: Decodable, Sendable {
 }
 public enum MemberOperationOutcome: Equatable, Sendable {
     case committed(ProtocolSettlement)
+    /// A settlement stands for this offer, but not by the signature this device submitted.
+    case settledElsewhere(ProtocolSettlement)
     case pending(String)
     case unresolved
 }
 public protocol MemberOperationStore: Sendable {
     func save(_ handle: MemberOperationHandle) throws
     func load(id: String) throws -> MemberOperationHandle?
-    /// Atomically persists attempted=true or refuses an already attempted operation.
-    func claim(_ handle: MemberOperationHandle) throws
+    /// Atomically persists attempted=true with the digest of the signature about to be sent,
+    /// or refuses an already attempted operation.
+    func claim(_ handle: MemberOperationHandle, confirmation: String) throws
 }
 
 /// One shared store instance per app process. An app-private directory is required.
@@ -96,10 +103,10 @@ public final class FileMemberOperationStore: MemberOperationStore, @unchecked Se
             }
         }
     }
-    public func claim(_ handle: MemberOperationHandle) throws {
+    public func claim(_ handle: MemberOperationHandle, confirmation: String) throws {
         try lock.withLock {
             guard let current = try read(handle.id), current == handle, !current.attempted else { throw MemberFailure.busy }
-            try write(current.markedAttempted())
+            try write(current.markedAttempted(confirmation: confirmation))
         }
     }
 }

@@ -72,7 +72,7 @@ public struct FrozenMemberStatement: Sendable {
         do {
             saved = try store.handles().filter {
                 Data($0.environment.utf8) == Data(environment.name.utf8) && $0.origin == environment.origin &&
-                Data($0.sessionID.utf8) == Data(session.id.utf8) && Data($0.household.utf8) == Data(session.household.utf8) &&
+                Data($0.household.utf8) == Data(session.household.utf8) &&
                 session.presenters.contains($0.presenter)
             }
         } catch { saved = []; notice = "Saved operations could not be read. Do not repeat an earlier submission." }
@@ -137,6 +137,7 @@ public struct FrozenMemberStatement: Sendable {
     private func show(_ outcome: MemberOperationOutcome) {
         switch outcome {
         case .committed(let receipt): notice = "Statement recorded. Goods amount: \(receipt.charged). This record does not confirm provider payment."
+        case .settledElsewhere(let receipt): notice = "This box has settled, but not by the approval this device sent. Goods amount of the settlement that stands: \(receipt.charged). Nothing was resubmitted."
         case .pending(let state): notice = "No committed result is reported. Current state: \(state). Nothing was resubmitted."
         case .unresolved: notice = "The result is still unknown. Check again later; do not repeat the submission."
         }

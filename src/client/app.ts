@@ -631,7 +631,13 @@ async function approval(member: Member, offerId: string, binding?: "digital" | "
       ...(decidable ? [] : [el("p", { class: "muted" },
         c.valence === "consumed"
           ? "The route found this used, so it is not yours to decide here. It comes back on the statement you sign."
-          : `Already ${c.valence}. Nothing on this screen changes it.`)]),
+          : c.valence === "lost"
+            // Question 46. The statement says "not in the box", but this read
+            // cannot tell a collection's missing record from a deadline loss,
+            // so the card names both rather than asserting the wrong one. The
+            // iOS detail screen carries the same words.
+            ? "Not returned: the collection did not find it in the box, or it was not collected by the deadline. Never charged to you."
+            : `Already ${c.valence}. Nothing on this screen changes it.`)]),
       ...(c.is_exploration ? [el("p", { class: "exploration" }, "Something you have not been offered before (§5).")] : []),
       // Clauses 54 and 59. **These are the presenter's words, and the screen
       // says so.** The alternatives and the argument against are free text the
@@ -902,7 +908,7 @@ async function statement(member: Member, offerId: string) {
             `/offers/${encodeURIComponent(st.offer)}/settlement`
           );
           if (stood.status === 200) {
-            show(el("h1", {}, "Atarasy"), receipt(stood.body, true, true), back(member));
+            show(el("h1", {}, "Atarasy"), receipt(stood.body, "refused"), back(member));
             return;
           }
         }
@@ -918,7 +924,14 @@ async function statement(member: Member, offerId: string) {
             `/offers/${encodeURIComponent(st.offer)}/settlement`
           );
           if (stood.status === 200) {
-            show(el("h1", {}, "Atarasy"), receipt(stood.body, true, false), back(member));
+            // §6.5. The settlement records the signature that made it, so
+            // whether it is this member's is read rather than guessed. A
+            // second tab or device signs the same statement, so matching lines
+            // alone do not say it.
+            const mine = typeof stood.body.confirmation === "string"
+              ? stood.body.confirmation === assertion.signature ? "unanswered-mine" : "unanswered-other"
+              : "unanswered-unknown";
+            show(el("h1", {}, "Atarasy"), receipt(stood.body, mine), back(member));
             return;
           }
         }
@@ -929,7 +942,7 @@ async function statement(member: Member, offerId: string) {
       if (typeof settled.body.charged !== "number") {
         throw new Error("The answer came back in a form this screen could not read, so it cannot say whether this settled. Open the list again before signing a second time.");
       }
-      show(el("h1", {}, "Atarasy"), receipt(settled.body, false), back(member));
+      show(el("h1", {}, "Atarasy"), receipt(settled.body, "signed"), back(member));
     } catch (e) {
       status.textContent = (e as Error).message;
       sign.disabled = false;
@@ -972,7 +985,16 @@ async function statement(member: Member, offerId: string) {
 }
 
 /** §6.5. What a settlement came to, as the member reads it. */
-type Receipt = { charged?: number; disputed_amount?: number; settled_at?: number };
+type Receipt = { charged?: number; disputed_amount?: number; settled_at?: number; confirmation?: string | null };
+
+/**
+ * How the screen reached a receipt. `signed` is a settle that answered;
+ * `refused` is `already_settled`, where the engine said this signature did not
+ * settle the box; the `unanswered` three are a settle with no answer followed
+ * by a read of the settlement, told apart by whether its confirmation is the
+ * signature just sent.
+ */
+type ReceiptPath = "signed" | "refused" | "unanswered-mine" | "unanswered-other" | "unanswered-unknown";
 
 /**
  * §6.5. What was charged.
@@ -993,7 +1015,8 @@ type Receipt = { charged?: number; disputed_amount?: number; settled_at?: number
  * signature is what settled the box is the thing the engine's refusal exists
  * to prevent. So the sentence says what the engine said.
  */
-function receipt(r: Receipt, stood: boolean, refused = false): Node {
+function receipt(r: Receipt, path: ReceiptPath): Node {
+  const stood = path !== "signed";
   const amount = typeof r.charged === "number" ? yen(r.charged) : null;
   return el("div", { class: "card" },
     el("p", {},
@@ -1012,9 +1035,12 @@ function receipt(r: Receipt, stood: boolean, refused = false): Node {
     // answer at all it very probably was. Saying "what you just signed did not
     // settle it" on the second is the opposite of the truth.
     ...(stood
-      ? [el("p", { class: "muted" }, refused
-          ? "What you just signed is not what settled it. This is the settlement that stands, and nothing was charged twice."
-          : "The answer to your signature never came back, and this is the settlement that stands. It is almost certainly yours, and nothing was charged twice.")]
+      ? [el("p", { class: "muted" }, {
+          refused: "What you just signed is not what settled it. This is the settlement that stands, and nothing was charged twice.",
+          "unanswered-mine": "The answer to your signature never came back, but this settlement carries the signature you just gave. Nothing was charged twice.",
+          "unanswered-other": "The answer to your signature never came back, and the settlement that stands carries a different signature, so what you just signed is not what settled it. Nothing was charged twice.",
+          "unanswered-unknown": "The answer to your signature never came back, and this is the settlement that stands. This screen could not read which signature made it. Nothing was charged twice.",
+        }[path as Exclude<ReceiptPath, "signed">])]
       : []),
     ...(r.disputed_amount
       ? [el("p", { class: "muted" }, `${yen(r.disputed_amount)} was disputed and is not charged here. What is owed for it, if anything, is between you and the seller.`)]

@@ -3,6 +3,9 @@ import Foundation
 public enum MemberReview: Equatable, Sendable {
     case approval(MemberApproval)
     case statement(MemberStatement)
+    /// A physical box that has already settled. There is nothing left to sign, so the
+    /// settlement that stands is shown instead of a statement to prepare.
+    case settlement(ProtocolSettlement)
 }
 public struct MemberDisclosureReference: Decodable, Equatable, Sendable {
     public let merchant: String; public let product: String?
