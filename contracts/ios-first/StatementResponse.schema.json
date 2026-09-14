@@ -58,7 +58,8 @@
             "enum": [
               "kept",
               "defaulted",
-              "consumed"
+              "consumed",
+              "lost"
             ]
           },
           "quantity": {
@@ -99,6 +100,17 @@
               "product"
             ],
             "additionalProperties": false
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -112,7 +124,8 @@
           "quantity",
           "unit_price",
           "amount",
-          "disclosure"
+          "disclosure",
+          "note"
         ],
         "additionalProperties": false
       }
