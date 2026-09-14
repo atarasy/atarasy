@@ -11,11 +11,17 @@ struct MemberStatementScreen: View {
     @State private var acknowledged = false
     private let clock = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     private func perform(_ work: @escaping @MainActor () async -> Void) { guard action == nil else { return }; action = Task { await work(); action = nil } }
+    /// Same wording as the web statement screen (`src/client/app.ts`).
+    static let missingAttestation = "Signing shows you were told which items the collection did not find. It is not you agreeing they are missing or taking responsibility for them; you are never charged for them, and you can dispute any you had."
     var body: some View {
         Form {
             if let frozen = flow.review {
                 FrozenMemberStatementSections(value: frozen)
                 Section("Approval") {
+                    // Question 46. What a signature over missing lines attests, beside the button that makes it.
+                    if frozen.statement.lines.contains(where: { $0.valence == "lost" }) {
+                        Text(MemberStatementScreen.missingAttestation).font(.footnote).accessibilityIdentifier("missingAttestation")
+                    }
                     Toggle("I have reviewed this statement and the mandate", isOn: $acknowledged).accessibilityIdentifier("acknowledgeFrozenStatement")
                     Button("Approve with passkey") { perform { await flow.approve() } }
                         .disabled(!acknowledged || !flow.canApprove).accessibilityIdentifier("approveMemberStatement")
@@ -40,6 +46,7 @@ struct MemberStatementScreen: View {
                     }
                 }
                 Section {
+                    if !missing.isEmpty { Text(MemberStatementScreen.missingAttestation).font(.footnote) }
                     Button("Prepare statement for review") { acknowledged = false; perform { await flow.prepare(detail: detail, statement: statement, disputed: Array(disputed)) } }
                         .accessibilityIdentifier("prepareMemberStatement")
                 }
