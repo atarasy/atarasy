@@ -27,7 +27,7 @@ private actor RuntimeTransport: MemberHTTPTransport {
 private struct RefusingOperationStore: MemberOperationStore {
     func save(_ handle: MemberOperationHandle) throws { throw MemberFailure.storage }
     func load(id: String) throws -> MemberOperationHandle? { nil }
-    func claim(_ handle: MemberOperationHandle) throws { throw MemberFailure.storage }
+    func claim(_ handle: MemberOperationHandle, confirmation: String) throws { throw MemberFailure.storage }
 }
 @MainActor final class MemberOperationTransportTests: XCTestCase {
     let info = MemberSessionInfo(id: "session", household: "house", presenters: ["merchant-1"], expiresAt: 1_800_000_010_000)
@@ -36,10 +36,14 @@ private struct RefusingOperationStore: MemberOperationStore {
         return (try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: Any])[name] as! [String: Any]
     }
     func data(_ object: [String: Any]) throws -> Data { try JSONSerialization.data(withJSONObject: object) }
-    func handle(canonical override: String? = nil) throws -> MemberOperationHandle {
+    /// The signature the committed fixture's receipt names as its confirmation.
+    func fixtureSignature() throws -> String { (try fixture("committed")["receipt"] as! [String: Any])["confirmation"] as! String }
+    /// `submitted` is the signature this device claims to have sent; nil is a handle never submitted.
+    func handle(canonical override: String? = nil, submitted: String? = nil) throws -> MemberOperationHandle {
         let p = try fixture("prepared"), key = p["publicKey"] as! [String: Any], credential = (key["allowCredentials"] as! [[String: Any]])[0]
         let receipt = try fixture("committed")["receipt"] as! [String: Any]
-        return .init(id: p["operationID"] as! String, environment: "test", origin: URL(string: "https://unit.example")!, sessionID: info.id, household: info.household, presenter: "merchant-1", offer: receipt["offer"] as! String, canonical: override ?? p["canonical"] as! String, expiresAt: (p["expiresAt"] as! NSNumber).int64Value, requestDigest: p["requestDigest"] as! String, reviewedRevision: p["reviewedRevision"] as! String, challenge: key["challenge"] as! String, credentialID: credential["id"] as! String, attempted: false)
+        let fresh = MemberOperationHandle(id: p["operationID"] as! String, environment: "test", origin: URL(string: "https://unit.example")!, sessionID: info.id, household: info.household, presenter: "merchant-1", offer: receipt["offer"] as! String, canonical: override ?? p["canonical"] as! String, expiresAt: (p["expiresAt"] as! NSNumber).int64Value, requestDigest: p["requestDigest"] as! String, reviewedRevision: p["reviewedRevision"] as! String, challenge: key["challenge"] as! String, credentialID: credential["id"] as! String, attempted: false)
+        return submitted.map { fresh.markedAttempted(confirmation: $0) } ?? fresh
     }
     private func client(_ replies: [Data?], environment: String = "test") async throws -> (MemberClient, RuntimeTransport) {
         let transport = RuntimeTransport(info: info, replies: replies)
@@ -52,14 +56,14 @@ private struct RefusingOperationStore: MemberOperationStore {
         addTeardownBlock { try FileManager.default.removeItem(at: directory) }
         return (try FileMemberOperationStore(directory: directory), directory)
     }
-    func assertion(_ h: MemberOperationHandle) throws -> MemberPasskeyResponse {
+    func assertion(_ h: MemberOperationHandle, signature: String = "YQ") throws -> MemberPasskeyResponse {
         let bytes = try data(["type":"webauthn.get", "challenge":h.challenge, "origin":h.origin.absoluteString])
         let encoded = bytes.base64EncodedString().replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: "")
         // Transport-only assertion placeholder; never offered as native cryptographic evidence.
-        return .assertion(id: h.credentialID, clientDataJSON: encoded, authenticatorData: "YQ", signature: "YQ", userHandle: "YQ")
+        return .assertion(id: h.credentialID, clientDataJSON: encoded, authenticatorData: "YQ", signature: signature, userHandle: "YQ")
     }
     func testActualServiceChallengeAndReceiptDecodeWithoutResubmission() async throws {
-        let h = try handle(), (c, t) = try await client([data(fixture("prepared")), data(fixture("pending")), data(fixture("committed"))])
+        let h = try handle(submitted: fixtureSignature()), (c, t) = try await client([data(fixture("prepared")), data(fixture("pending")), data(fixture("committed"))])
         let review = try await c.operationReview(h); XCTAssertEqual(review.publicKey["challenge"], .string(h.challenge))
         let pending = await c.operationOutcome(h); XCTAssertEqual(pending, .pending("prepared"))
         let outcome = await c.operationOutcome(h)
@@ -85,7 +89,7 @@ private struct RefusingOperationStore: MemberOperationStore {
             let header = parts.prefix(3), body = parts.dropFirst(3).sorted { $0.utf16.lexicographicallyPrecedes($1.utf16) }
             parts = Array(header) + body
         }
-        return (try handle(canonical: parts.joined(separator: "\n")), try data(outcome))
+        return (try handle(canonical: parts.joined(separator: "\n"), submitted: fixtureSignature()), try data(outcome))
     }
     func testSignedMissingLineReadsBackAsCommitted() async throws {
         var failures: [String] = []
@@ -118,10 +122,58 @@ private struct RefusingOperationStore: MemberOperationStore {
             XCTAssertEqual(outcome, .unresolved, name)
         }
     }
+    /// A receipt whose lines match what this device signed, but whose confirmation is another
+    /// signature, is a settlement that stands and not this device's approval.
+    func testReceiptSettledByAnotherSignatureIsNotReportedAsThisDevices() async throws {
+        let cases: [(String, MemberOperationHandle)] = [
+            ("different signature", try handle(submitted: "another-signature")),
+            ("never submitted from this device", try handle()),
+        ]
+        for (name, h) in cases {
+            let (c, _) = try await client([data(fixture("committed"))])
+            let outcome = await c.operationOutcome(h)
+            guard case .settledElsewhere(let receipt) = outcome else { XCTFail(name); continue }
+            XCTAssertEqual(receipt.charged, 1200, name)
+        }
+    }
+    /// A handle saved before this build recorded signatures still settles, but is not called this device's.
+    func testLegacyAttemptedHandleWithoutFingerprintIsNotReportedAsThisDevices() async throws {
+        var saved = try JSONSerialization.jsonObject(with: JSONEncoder().encode(handle())) as! [String: Any]
+        saved["attempted"] = true; saved.removeValue(forKey: "confirmationFingerprint")
+        let legacy = try JSONDecoder().decode(MemberOperationHandle.self, from: data(saved))
+        XCTAssertTrue(legacy.attempted); XCTAssertNil(legacy.confirmationFingerprint)
+        let (c, _) = try await client([data(fixture("committed"))])
+        let outcome = await c.operationOutcome(legacy)
+        guard case .settledUnverified(let receipt) = outcome else { return XCTFail("A legacy handle read back as this device's approval") }
+        XCTAssertEqual(receipt.charged, 1200)
+    }
+    /// Signing in again and preparing the same box returns the same operation, which a new session id must not refuse.
+    func testSavingTheSameOperationFromANewSessionKeepsTheStoredHandle() throws {
+        let h = try handle(), (s, _) = try store(); try s.save(h)
+        var fields = try JSONSerialization.jsonObject(with: JSONEncoder().encode(h)) as! [String: Any]
+        fields["sessionID"] = "a-later-session"
+        let later = try JSONDecoder().decode(MemberOperationHandle.self, from: data(fields))
+        XCTAssertNoThrow(try s.save(later)); XCTAssertEqual(try s.load(id: h.id), h)
+        fields["canonical"] = "changed"
+        XCTAssertThrowsError(try s.save(JSONDecoder().decode(MemberOperationHandle.self, from: data(fields))))
+    }
+    /// A result read after signing in again, from the same household.
+    func testOutcomeReadsAfterANewSessionForTheSameHousehold() async throws {
+        let saved = try JSONSerialization.jsonObject(with: JSONEncoder().encode(handle(submitted: fixtureSignature()))) as! [String: Any]
+        var earlier = saved; earlier["sessionID"] = "an-earlier-session"
+        let h = try JSONDecoder().decode(MemberOperationHandle.self, from: data(earlier))
+        let (c, _) = try await client([data(fixture("committed"))])
+        let outcome = await c.operationOutcome(h); guard case .committed = outcome else { return XCTFail("A new sign-in could not read its own result") }
+        var foreign = saved; foreign["household"] = "another-house"
+        let other = try JSONDecoder().decode(MemberOperationHandle.self, from: data(foreign))
+        let (c2, t2) = try await client([data(fixture("committed"))])
+        let refused = await c2.operationOutcome(other); XCTAssertEqual(refused, .unresolved)
+        let requests = await t2.requests; XCTAssertEqual(requests.count, 1)
+    }
     func testLostSubmissionPersistsAttemptAndRestartCannotSendAgain() async throws {
         let h = try handle(), (s, directory) = try store(); try s.save(h)
         let (c, t) = try await client([nil, data(fixture("committed"))])
-        let first = try await c.submitStatement(h, assertion: assertion(h), store: s); XCTAssertEqual(first, .unresolved)
+        let first = try await c.submitStatement(h, assertion: assertion(h, signature: fixtureSignature()), store: s); XCTAssertEqual(first, .unresolved)
         let reopened = try FileMemberOperationStore(directory: directory), loaded = try XCTUnwrap(reopened.load(id: h.id)); XCTAssertTrue(loaded.attempted)
         do { _ = try await c.submitStatement(h, assertion: assertion(h), store: reopened); XCTFail() } catch { XCTAssertEqual(error as? MemberFailure, .busy) }
         let outcome = await c.operationOutcome(loaded); guard case .committed = outcome else { return XCTFail() }
@@ -135,7 +187,7 @@ private struct RefusingOperationStore: MemberOperationStore {
         let requests = await t.requests; XCTAssertEqual(requests.count, 1)
     }
     func testDifferentEnvironmentAndCorruptReceiptRemainUnresolved() async throws {
-        let h = try handle(), (foreign, transport) = try await client([], environment: "other")
+        let h = try handle(submitted: fixtureSignature()), (foreign, transport) = try await client([], environment: "other")
         let refused = await foreign.operationOutcome(h); XCTAssertEqual(refused, .unresolved)
         let requests = await transport.requests; XCTAssertEqual(requests.count, 1)
         var outcome = try fixture("committed"), receipt = outcome["receipt"] as! [String: Any]; receipt["charged"] = 99; outcome["receipt"] = receipt
@@ -151,8 +203,8 @@ private struct RefusingOperationStore: MemberOperationStore {
         }
     }
     func testCancellationRouteAndCheckpointCannotBeReset() async throws {
-        let h = try handle(), (s, _) = try store(); try s.save(h); try s.claim(h)
-        XCTAssertThrowsError(try s.save(h)); XCTAssertThrowsError(try s.claim(h))
+        let h = try handle(), (s, _) = try store(); try s.save(h); try s.claim(h, confirmation: "YQ")
+        XCTAssertThrowsError(try s.save(h)); XCTAssertThrowsError(try s.claim(h, confirmation: "YQ"))
         let (c, t) = try await client([data(["id":h.id,"state":"cancelled"])])
         try await c.cancelOperation(h)
         let request = await t.requests.last!; XCTAssertEqual(request.url?.path, "/member/operations/" + h.id + "/cancel"); XCTAssertEqual(request.httpBody, Data("{}".utf8))
@@ -188,6 +240,35 @@ private struct RefusingOperationStore: MemberOperationStore {
         }
     }
 
+    /// Signing in again and preparing the same box must hand back the handle already stored, or the
+    /// claim before submission refuses it as busy and the approval is stranded.
+    func testPreparingAgainAfterANewSignInReturnsTheStoredHandleSoItCanBeClaimed() async throws {
+        let url = Bundle.module.url(forResource: "member-transaction-responses", withExtension: "json", subdirectory: "Fixtures")!
+        let cases = (try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: Any])["cases"] as! [[String: Any]]
+        func value(_ name: String) -> [String: Any] { cases.first { $0["name"] as? String == name }!["value"] as! [String: Any] }
+        let detailValue = value("physical-detail"), statementValue = value("physical-known-carriage")
+        let detail = try MemberOfferDetail.decode(data(detailValue), expectedID: detailValue["id"] as! String, household: "detail-house")
+        let statement = try MemberStatement.decode(data(statementValue), detail: detail)
+        let environment = try MemberEnvironment(name: "test", origin: URL(string: "https://unit.example")!)
+        let (storage, _) = try store()
+        var stored: MemberOperationHandle?
+        for sessionID in ["earlier-session", "later-session"] {
+            let localInfo = MemberSessionInfo(id: sessionID, household: "detail-house", presenters: ["merchant-1"], expiresAt: 5000)
+            let local = try PreparedMemberStatement(environment: environment, session: localInfo, detail: detail, statement: statement, disputed: [], now: 1000)
+            var reply = try fixture("prepared"), review = reply["review"] as! [String: Any]
+            var serverStatement = statementValue; serverStatement.removeValue(forKey: "challenge")
+            review["statement"] = serverStatement; review["disputed"] = [] as [String]
+            var mandate = review["mandate"] as! [String: Any]; mandate["household"] = localInfo.household; review["mandate"] = mandate
+            reply["review"] = review; reply["canonical"] = local.canonical; reply["expiresAt"] = 2000
+            let transport = RuntimeTransport(info: localInfo, replies: [try data(reply)])
+            let client = MemberClient(environment: environment, transport: transport, vault: RuntimeVault(info: localInfo), now: { 1000 })
+            _ = try await client.restore(household: localInfo.household)
+            let (handle, _) = try await client.prepareStatement(local, store: storage)
+            if let stored { XCTAssertEqual(handle, stored) } else { stored = handle }
+        }
+        XCTAssertEqual(stored?.sessionID, "earlier-session")
+        XCTAssertNoThrow(try storage.claim(XCTUnwrap(stored), confirmation: "YQ"))
+    }
     func testMatchingTamperedCheckpointAndResponseStillNeedValidContextualChallenge() async throws {
         let h = try handle()
         var saved = try JSONSerialization.jsonObject(with: JSONEncoder().encode(h)) as! [String: Any]
@@ -207,11 +288,12 @@ private struct RefusingOperationStore: MemberOperationStore {
     var submissions = 0
     var outcomes = 0
     var changed = false
+    var outcome: MemberOperationOutcome = .pending("prepared")
     init(handle: MemberOperationHandle, preparation: MemberPreparedOperation) { self.handle = handle; self.preparation = preparation }
     func prepareStatement(_ local: PreparedMemberStatement, store: any MemberOperationStore) async throws -> (MemberOperationHandle, MemberPreparedOperation) { try store.save(handle); return (handle, preparation) }
     func operationReview(_ handle: MemberOperationHandle) async throws -> MemberPreparedOperation { if changed { throw MemberFailure.scopeMismatch }; return preparation }
-    func submitStatement(_ handle: MemberOperationHandle, assertion: MemberPasskeyResponse, store: any MemberOperationStore) async throws -> MemberOperationOutcome { try store.claim(handle); submissions += 1; return .unresolved }
-    func operationOutcome(_ handle: MemberOperationHandle) async -> MemberOperationOutcome { outcomes += 1; return .pending("prepared") }
+    func submitStatement(_ handle: MemberOperationHandle, assertion: MemberPasskeyResponse, store: any MemberOperationStore) async throws -> MemberOperationOutcome { try store.claim(handle, confirmation: "YQ"); submissions += 1; return .unresolved }
+    func operationOutcome(_ handle: MemberOperationHandle) async -> MemberOperationOutcome { outcomes += 1; return outcome }
     func cancelOperation(_ handle: MemberOperationHandle) async throws {}
 }
 @MainActor private final class FlowPasskeys: MemberPasskeyAuthorising {
@@ -276,13 +358,30 @@ extension MemberOperationTransportTests {
         flow.closeReview(); passkeys.release(); await task.value
         XCTAssertEqual(service.submissions, 0); XCTAssertNil(flow.review)
     }
-    func testRestoredHandlesOnlyReadResultsAndFilterSession() async throws {
+    func testRestoredHandlesOnlyReadResultsAndFilterHousehold() async throws {
         let (flow, service, passkeys, detail, statement, info) = try flowSetup()
         await flow.prepare(detail: detail, statement: statement, disputed: [])
         flow.setSession(nil); XCTAssertTrue(flow.saved.isEmpty)
         flow.setSession(info); XCTAssertEqual(flow.saved.count, 1); XCTAssertFalse(flow.canApprove)
         await flow.check(flow.saved[0]); XCTAssertEqual(service.outcomes, 1); XCTAssertEqual(passkeys.calls, 0)
-        flow.setSession(MemberSessionInfo(id: "other", household: info.household, presenters: info.presenters, expiresAt: info.expiresAt)); XCTAssertTrue(flow.saved.isEmpty)
+        // A new sign-in by the same household still sees what it prepared; another household does not.
+        flow.setSession(MemberSessionInfo(id: "other", household: info.household, presenters: info.presenters, expiresAt: info.expiresAt)); XCTAssertEqual(flow.saved.count, 1)
+        flow.setSession(MemberSessionInfo(id: "other", household: "another-house", presenters: info.presenters, expiresAt: info.expiresAt)); XCTAssertTrue(flow.saved.isEmpty)
+    }
+    /// A box seen to settle is remembered, so a statement review loaded before settling does not offer preparation again.
+    func testSettledOutcomeIsRememberedAcrossClosingTheReview() async throws {
+        let (flow, service, _, detail, statement, info) = try flowSetup()
+        await flow.prepare(detail: detail, statement: statement, disputed: [])
+        var receipt = try fixture("committed")["receipt"] as! [String: Any]; receipt["offer"] = detail.id
+        let settlement = try JSONDecoder().decode(ProtocolSettlement.self, from: data(receipt))
+        for outcome in [MemberOperationOutcome.committed(settlement), .settledElsewhere(settlement), .settledUnverified(settlement)] {
+            flow.setSession(info); XCTAssertTrue(flow.settledOffers.isEmpty)
+            service.outcome = outcome
+            await flow.check(flow.saved[0]); flow.closeReview()
+            XCTAssertTrue(flow.settledOffers.contains(detail.id), "\(outcome)")
+        }
+        service.outcome = .pending("prepared"); flow.setSession(info)
+        await flow.check(flow.saved[0]); XCTAssertFalse(flow.settledOffers.contains(detail.id))
     }
     func testCancellingPreparedStatementClosesApprovalWithoutSigning() async throws {
         let (flow, service, passkeys, detail, statement, _) = try flowSetup()

@@ -227,6 +227,17 @@ describe("the list, as a member sees it", () => {
     expect(buttons(routeCard)).toEqual([]);
     expect(signedCard).toBeDefined();
     expect(buttons(signedCard)).toContain("Take it back");
+    // Question 47. A signed box past its expiry cannot be taken back, so it is not offered.
+    const pastApp = await render((url) => {
+      if (url === "/config") return { status: 200, body: CONFIG };
+      if (url.startsWith("/api/offers?")) {
+        return { status: 200, body: { offers: [offerRow({ id: "o-past", binding: "physical", state: "decided", expires_at: 1_000, candidates: [{ id: "c-1", valence: "kept" }] })] } };
+      }
+      return { status: 404, body: {} };
+    });
+    const pastCard = [...pastApp.querySelectorAll("div.card")].find((c) => text(c).includes("past its expiry"))!;
+    expect(pastCard).toBeDefined();
+    expect(buttons(pastCard)).not.toContain("Take it back");
     // Nothing settles on a timer, and this card promised one.
     expect(text(app)).not.toContain("settles when its window closes");
   });
@@ -262,6 +273,14 @@ describe("the approval, as a member sees it", () => {
     openButton.click();
     return settled();
   }
+
+  test("a lost line says it is never charged, without claiming which kind of loss it was", async () => {
+    // Question 46. The statement says "not in the box", but this read cannot
+    // tell a collection's missing record from a deadline loss.
+    const app = await open([candidate({ valence: "lost" })]);
+    expect(text(app)).toContain("did not find it in the box, or it was not collected by the deadline. Never charged to you.");
+    expect(text(app)).not.toContain("Already lost");
+  });
 
   test("it names the maker apart from the merchant, and a gift by its giver", async () => {
     // Clause 12, clause 10. The card printed the merchant as the maker, and a
@@ -574,20 +593,47 @@ describe("what a member is shown after signing a statement", () => {
     expect(shown).toContain("¥1,200 was charged by the settlement that stands");
   });
 
+  // The stub authenticator's signature: 64 bytes of 1, as `assertOver` encodes it.
+  const STUB_SIGNATURE = btoa(String.fromCharCode(...new Uint8Array(64).fill(1)));
+
   test("nothing answering is answered by reading the settlement, not by silence", async () => {
     // The case the receipt exists for. The member was told to open the list
     // again; a settled box is on no list, and nothing read the settlement.
     const shown = await sign(
       () => ({ status: 0, body: {} }),
-      () => ({ status: 200, body: { charged: 1200, disputed_amount: 0 } })
+      () => ({ status: 200, body: { charged: 1200, disputed_amount: 0, confirmation: STUB_SIGNATURE } })
     );
     // **And it is not told that its signature failed**, which is what the
-    // other path is told. Here the engine never answered, so the settlement
-    // that stands is almost certainly this member's own.
+    // other path is told. The settlement names the signature that made it,
+    // and it is the one just sent.
     expect(shown).toContain("This box has settled");
-    expect(shown).toContain("almost certainly yours");
+    expect(shown).toContain("carries the signature you just gave");
     expect(shown).not.toContain("is not what settled it");
     expect(shown).toContain("¥1,200");
+  });
+
+  test("nothing answering, and a settlement made by another signature, is not called this member's", async () => {
+    // Review of atarasy #5: the screen said "almost certainly yours" without
+    // reading which signature the settlement carries. A second tab or device
+    // signs the same statement.
+    const other = await sign(
+      () => ({ status: 0, body: {} }),
+      () => ({ status: 200, body: { charged: 1200, disputed_amount: 0, confirmation: "c29tZW9uZSBlbHNl" } })
+    );
+    expect(other).toContain("was not made by the signature you just gave");
+    expect(other).not.toContain("carries the signature you just gave");
+    // `null` is a settlement no signature made, which is knowable, not unreadable.
+    const unsigned = await sign(
+      () => ({ status: 0, body: {} }),
+      () => ({ status: 200, body: { charged: 1200, disputed_amount: 0, confirmation: null } })
+    );
+    expect(unsigned).toContain("was not made by the signature you just gave");
+    const unread = await sign(
+      () => ({ status: 0, body: {} }),
+      () => ({ status: 200, body: { charged: 1200, disputed_amount: 0 } })
+    );
+    expect(unread).toContain("could not read which signature made it");
+    expect(unread).not.toContain("carries the signature you just gave");
   });
 
   test("nothing answering and no settlement standing is said plainly", async () => {

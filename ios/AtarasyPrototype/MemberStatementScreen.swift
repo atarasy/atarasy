@@ -26,6 +26,8 @@ struct MemberStatementScreen: View {
                     Button("Approve with passkey") { perform { await flow.approve() } }
                         .disabled(!acknowledged || !flow.canApprove).accessibilityIdentifier("approveMemberStatement")
                 }
+            } else if flow.handle == nil && flow.settledOffers.contains(detail.id) {
+                Section { Text("This box has settled. Go back and load it again to see its settlement.").accessibilityIdentifier("statementSettled") }
             } else if flow.handle == nil {
                 Section("Consumed goods") {
                     Text("Mark any consumed line you dispute before preparing the statement.")
@@ -87,7 +89,7 @@ struct FrozenMemberStatementSections: View {
             Section(line.product) {
                 Text("Merchant: \(line.merchant)"); Text("Maker: \(line.maker)"); Text("Carrier: \(line.ships)")
                 Text("Quantity: \(line.quantity); unit price: \(line.unitPrice)")
-                Text("Outcome: \(line.valence); goods amount: \(line.amount)")
+                if line.valence != "lost" { Text("Outcome: \(line.valence); goods amount: \(line.amount)") }
                 if let giver = line.givenBy { Text("Gift from \(giver). No goods charge to the recipient.") }
                 if line.valence == "lost" {
                     Text("The collection says this was not in the box. Never charged to you.")

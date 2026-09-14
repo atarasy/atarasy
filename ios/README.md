@@ -77,7 +77,7 @@ Member details now load binding-specific review sections after refreshing the ow
 
 ## Transaction preparation and read-back increment
 
-The core can now prepare scoped physical statement bytes and compare a subsequent settlement to the exact attempted confirmation and complete expected receipt. Unknown carriage, unresolved candidates and invalid disputes block preparation; unavailable read-back never triggers an automatic write. This is an in-memory core foundation, with no signing control, dispatch route or durable operation journal. [Transaction boundaries](../contracts/member-transaction/README.md) and [validation](evidence/member-transaction-validation.json) record the implementation and remaining authority requirements.
+The core can now prepare scoped physical statement bytes and compare a subsequent settlement to the exact attempted confirmation and complete expected receipt. The outcome read the app uses makes the same confirmation comparison against a digest recorded when the attempt is claimed. Unknown carriage, unresolved candidates and invalid disputes block preparation; unavailable read-back never triggers an automatic write. This is an in-memory core foundation, with no signing control, dispatch route or durable operation journal. [Transaction boundaries](../contracts/member-transaction/README.md) and [validation](evidence/member-transaction-validation.json) record the implementation and remaining authority requirements.
 
 The core now includes [member operation transport](MEMBER_OPERATION_TRANSPORT.md): restricted member routes, contextual challenge validation, durable operation correlation and signature-free outcome reads. Native review/signing and restart-discovery UI integration remain next.
 

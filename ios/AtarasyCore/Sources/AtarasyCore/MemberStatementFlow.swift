@@ -46,6 +46,9 @@ public struct FrozenMemberStatement: Sendable {
     @Published public private(set) var review: FrozenMemberStatement?
     @Published public private(set) var busy = false
     @Published public private(set) var notice = ""
+    /// Offers this flow has seen settle. A statement review loaded before settling is still on the
+    /// screen that opened this flow, so the screen asks here rather than offering preparation again.
+    @Published public private(set) var settledOffers: Set<String> = []
     public var canApprove: Bool { !busy && review != nil && handle?.attempted == false && (handle?.expiresAt ?? 0) > now() && (session?.expiresAt ?? 0) > now() }
     private let environment: MemberEnvironment
     private let service: any MemberStatementService
@@ -59,7 +62,7 @@ public struct FrozenMemberStatement: Sendable {
         self.environment = environment; self.service = service; self.passkeys = passkeys; self.store = store; self.now = now
     }
     public func setSession(_ session: MemberSessionInfo?) {
-        generation &+= 1; self.session = session; handle = nil; prepared = nil; review = nil; saved = []; notice = ""
+        generation &+= 1; self.session = session; handle = nil; prepared = nil; review = nil; saved = []; notice = ""; settledOffers = []
         refreshSaved()
     }
     public func closeReview() { generation &+= 1; handle = nil; prepared = nil; review = nil; notice = "" }
@@ -72,7 +75,7 @@ public struct FrozenMemberStatement: Sendable {
         do {
             saved = try store.handles().filter {
                 Data($0.environment.utf8) == Data(environment.name.utf8) && $0.origin == environment.origin &&
-                Data($0.sessionID.utf8) == Data(session.id.utf8) && Data($0.household.utf8) == Data(session.household.utf8) &&
+                Data($0.household.utf8) == Data(session.household.utf8) &&
                 session.presenters.contains($0.presenter)
             }
         } catch { saved = []; notice = "Saved operations could not be read. Do not repeat an earlier submission." }
@@ -90,7 +93,7 @@ public struct FrozenMemberStatement: Sendable {
             guard Data(local.canonical.utf8) == Data(prepared.canonical.utf8), frozen.disputed.map({ Data($0.utf8) }).sorted(by: { $0.lexicographicallyPrecedes($1) }) == disputed.map({ Data($0.utf8) }).sorted(by: { $0.lexicographicallyPrecedes($1) }) else { throw MemberFailure.scopeMismatch }
             self.prepared = prepared; review = frozen
             notice = "Read the frozen statement and mandate before approving."
-        } catch { if current == generation { notice = "The statement could not be prepared. Check saved operations before trying again."; refreshSaved() } }
+        } catch { if current == generation { notice = "The statement could not be prepared. The box may already have settled; go back and load it again, and check saved operations before trying again."; refreshSaved() } }
     }
     public func approve() async {
         guard canApprove, let handle, let prepared, let session else { return }
@@ -136,9 +139,11 @@ public struct FrozenMemberStatement: Sendable {
     }
     private func show(_ outcome: MemberOperationOutcome) {
         switch outcome {
-        case .committed(let receipt): notice = "Statement recorded. Goods amount: \(receipt.charged). This record does not confirm provider payment."
+        case .committed(let receipt): settledOffers.insert(receipt.offer); notice = "Statement recorded. Goods amount: \(receipt.charged). This record does not confirm provider payment."
+        case .settledElsewhere(let receipt): settledOffers.insert(receipt.offer); notice = "This box has settled, but not by an approval this device sent. Goods amount of the settlement that stands: \(receipt.charged). Nothing was resubmitted."
+        case .settledUnverified(let receipt): settledOffers.insert(receipt.offer); notice = "This box has settled. This approval was saved before this device recorded what it signed, so it cannot say the settlement is this approval. Goods amount of the settlement that stands: \(receipt.charged). Nothing was resubmitted."
         case .pending(let state): notice = "No committed result is reported. Current state: \(state). Nothing was resubmitted."
-        case .unresolved: notice = "The result is still unknown. Check again later; do not repeat the submission."
+        case .unresolved: notice = "The result could not be read. Check again later. An approval made with another passkey cannot be read on this one; do not repeat a submission this passkey made."
         }
     }
 }

@@ -127,6 +127,27 @@ private struct ReviewVault: MemberSessionVault {
             do { _ = try await client.review(detail: detail); XCTFail() } catch { XCTAssertEqual(error as? MemberFailure, .http(422)) }
         }
     }
+    /// A settled box has nothing to sign: its review is the settlement that stands, read from
+    /// the settlement route, and never a statement to prepare.
+    func testSettledPhysicalBoxReviewsItsSettlementNotAStatement() async throws {
+        var detailValue = try reviewValue("physical-detail"); detailValue["state"] = "settled"
+        let detail = try MemberOfferDetail.decode(JSONSerialization.data(withJSONObject: detailValue), expectedID: detailValue["id"] as! String, household: "detail-house")
+        let url = Bundle.module.url(forResource: "member-operation-runtime", withExtension: "json", subdirectory: "Fixtures")!
+        let runtime = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: Any]
+        var receipt = (runtime["committed"] as! [String: Any])["receipt"] as! [String: Any]
+        receipt["offer"] = detail.id; receipt["payer"] = detail.household
+        let transport = ReviewTransport(try JSONSerialization.data(withJSONObject: receipt))
+        let client = MemberClient(environment: try .init(name: "test", origin: URL(string: "https://unit.example")!), transport: transport, vault: ReviewVault(), now: { 1000 })
+        _ = try await client.restore(household: "detail-house")
+        guard case .settlement(let settled) = try await client.review(detail: detail) else { return XCTFail("A settled box was reviewed as something to sign") }
+        XCTAssertEqual(settled.charged, 1200)
+        let requests = await transport.requests; XCTAssertEqual(requests.last?.url?.path, "/offers/" + detail.id + "/settlement")
+        receipt["payer"] = "another-house"
+        let foreign = ReviewTransport(try JSONSerialization.data(withJSONObject: receipt))
+        let other = MemberClient(environment: try .init(name: "test", origin: URL(string: "https://unit.example")!), transport: foreign, vault: ReviewVault(), now: { 1000 })
+        _ = try await other.restore(household: "detail-house")
+        do { _ = try await other.review(detail: detail); XCTFail() } catch { XCTAssertEqual(error as? MemberFailure, .scopeMismatch) }
+    }
     func testReviewDepartureAndReplacementDiscardLateReply() async throws {
         for replace in [false, true] {
             let detail = try reviewDetail("physical"), service = ReviewService(try reviewDetail("physical"))

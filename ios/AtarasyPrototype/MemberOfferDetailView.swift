@@ -18,7 +18,7 @@ struct MemberOfferDetailView: View {
                 if model.detailLoading { ProgressView("Loading proposal") }
                 else if let detail = model.detail {
                     Section {
-                        Button(detail.binding == "physical" ? "Load physical statement" : "Load approval information") { Task { await model.loadReview(selected) } }
+                        Button(detail.binding == "physical" ? (detail.state == "settled" ? "Load settlement" : "Load physical statement") : "Load approval information") { Task { await model.loadReview(selected) } }
                             .disabled(model.reviewLoading).accessibilityIdentifier("loadMemberReview")
                     }
                     if model.reviewLoading { ProgressView("Loading review information") }
@@ -50,7 +50,7 @@ struct MemberOfferDetailView: View {
                             Text("Carrier: \(candidate.ships)")
                             Text("Catalogue unit price: \(candidate.unitPrice)")
                             if let giver = candidate.givenBy { Text("Gift from \(giver). No goods charge to the recipient.").accessibilityIdentifier("detailGift") }
-                            Text("\(detail.binding == "physical" ? "Reported outcome" : "Choice status"): \(candidate.valence)").accessibilityIdentifier("detailOutcome-" + candidate.id)
+                            Text(detail.binding == "physical" && candidate.valence == "lost" ? MemberReviewSections.lostOutcome : "\(detail.binding == "physical" ? "Reported outcome" : "Choice status"): \(candidate.valence)").accessibilityIdentifier("detailOutcome-" + candidate.id)
                         }
                     }
                     Section("Merchant disclosures") {

@@ -19,7 +19,7 @@ private actor StatementFixtureService: MemberStatementService {
         try store.save(handle); prepared = result; return (handle,result)
     }
     func operationReview(_ handle: MemberOperationHandle) async throws -> MemberPreparedOperation { guard let prepared else { throw MemberFailure.unavailable }; return prepared }
-    func submitStatement(_ handle: MemberOperationHandle, assertion: MemberPasskeyResponse, store: any MemberOperationStore) async throws -> MemberOperationOutcome { try store.claim(handle); return .unresolved }
+    func submitStatement(_ handle: MemberOperationHandle, assertion: MemberPasskeyResponse, store: any MemberOperationStore) async throws -> MemberOperationOutcome { try store.claim(handle, confirmation: "YQ"); return .unresolved }
     func operationOutcome(_ handle: MemberOperationHandle) async -> MemberOperationOutcome { .pending("prepared") }
     func cancelOperation(_ handle: MemberOperationHandle) async throws {}
 }

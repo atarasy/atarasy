@@ -82,7 +82,7 @@ export const REFUSALS: Record<string, string> = {
    * stopped offering the button on 2026-09-12 and the engine change is
    * queued behind a mutation sweep. It is here so the two land together.
    */
-  not_withdrawable: "There is nothing here to take back. This box was resolved by the collection rather than by a decision you signed.",
+  not_withdrawable: "This can no longer be taken back: the box was resolved or collected by the route, or it is past its expiry, so what stands is settled as it is. If a line on its statement is wrong, dispute it there.",
   /**
    * Thrown by `settle`, by `decide` on an offer that closed while the screen
    * was open, and by a take-back on an offer that moved on. The sentence said
