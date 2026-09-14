@@ -227,6 +227,17 @@ describe("the list, as a member sees it", () => {
     expect(buttons(routeCard)).toEqual([]);
     expect(signedCard).toBeDefined();
     expect(buttons(signedCard)).toContain("Take it back");
+    // Question 47. A signed box past its expiry cannot be taken back, so it is not offered.
+    const pastApp = await render((url) => {
+      if (url === "/config") return { status: 200, body: CONFIG };
+      if (url.startsWith("/api/offers?")) {
+        return { status: 200, body: { offers: [offerRow({ id: "o-past", binding: "physical", state: "decided", expires_at: 1_000, candidates: [{ id: "c-1", valence: "kept" }] })] } };
+      }
+      return { status: 404, body: {} };
+    });
+    const pastCard = [...pastApp.querySelectorAll("div.card")].find((c) => text(c).includes("past its expiry"))!;
+    expect(pastCard).toBeDefined();
+    expect(buttons(pastCard)).not.toContain("Take it back");
     // Nothing settles on a timer, and this card promised one.
     expect(text(app)).not.toContain("settles when its window closes");
   });

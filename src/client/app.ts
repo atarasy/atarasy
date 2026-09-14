@@ -444,6 +444,15 @@ async function offers(member: Member) {
         el("div", { class: "row" }, el("span", { class: "grow" }, `From ${o.presenter}`)),
         said);
     }
+    // §16.5, question 47, decided 2026-09-15. A signed set on a box past its
+    // expiry stands: withdrawing it would leave the kept goods to go `lost`,
+    // which is never billed. The engine refuses, so the button is not offered.
+    if (o.binding === "physical" && Date.now() >= o.expires_at) {
+      said.textContent = "Decided. This box is past its expiry, so what you signed stands and it is the shop's to settle.";
+      return el("div", { class: "card" },
+        el("div", { class: "row" }, el("span", { class: "grow" }, `From ${o.presenter}`)),
+        said);
+    }
     const undo = el("button", {}, "Take it back") as HTMLButtonElement;
     undo.onclick = async () => {
       undo.disabled = true;
