@@ -960,6 +960,11 @@ async function statement(member: Member, offerId: string) {
           ? "Carriage: nothing to pay on this delivery."
           : `Carriage: ${yen(st.carriage)}.`),
     ...cards,
+    // §6.5, question 46, decided 2026-09-14. What signing attests over a
+    // missing line, so silence is not read as agreeing the item is gone.
+    ...(st.lines.some((l) => l.valence === "lost")
+      ? [el("p", { class: "muted" }, "Signing shows you were told which items the collection did not find. It is not you agreeing they are missing or taking responsibility for them; you are never charged for them, and you can dispute any you had.")]
+      : []),
     totalLine,
     el("div", { class: "row" }, sign, back(member)),
     status
