@@ -10,7 +10,13 @@ private func configuredMemberEnvironment() -> MemberEnvironment? {
           let url = URL(string: origin) else { return nil }
     return try? MemberEnvironment(name: name, origin: url)
 }
-@MainActor private final class MemberWindow: ObservableObject { weak var window: UIWindow? }
+@MainActor final class MemberWindow: ObservableObject { weak var window: UIWindow? }
+// Owned by the view that presents the sheet. Dismissing the sheet used to discard the
+// account while the server session stayed live, so the member had to sign in again.
+@MainActor final class MemberAccountHolder: ObservableObject {
+    @Published var account: MemberAccount?
+    let window = MemberWindow()
+}
 private struct MemberWindowReader: UIViewRepresentable {
     let reference: MemberWindow
     final class Probe: UIView {
@@ -23,7 +29,7 @@ private struct MemberWindowReader: UIViewRepresentable {
     func updateUIView(_ uiView: Probe, context: Context) { uiView.reference = reference }
 }
 struct MemberAccountSheet: View {
-    @State private var account: MemberAccount?
+    @ObservedObject var holder: MemberAccountHolder
     @Environment(\.dismiss) private var dismiss
     var body: some View {
         NavigationStack {
@@ -37,11 +43,10 @@ struct MemberAccountSheet: View {
             configuredContent
             #endif
         }
-        .onDisappear { account?.close() }
     }
     @ViewBuilder private var configuredContent: some View {
             if let environment = configuredMemberEnvironment() {
-                ConfiguredMemberAccount(environment: environment, account: $account)
+                ConfiguredMemberAccount(environment: environment, holder: holder)
             } else {
                 ContentUnavailableView("Member sign-in unavailable", systemImage: "person.crop.circle.badge.exclamationmark", description: Text("This build is not connected to a member service. You can continue exploring the sample proposals."))
                     .accessibilityIdentifier("memberUnconfigured")
@@ -54,30 +59,30 @@ private struct ConfiguredMemberAccount: View {
     let environment: MemberEnvironment
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
-    @StateObject private var window = MemberWindow()
-    @Binding var account: MemberAccount?
+    @ObservedObject var holder: MemberAccountHolder
     var body: some View {
         Group {
-            if let account { MemberAccountForm(account: account) }
+            if let account = holder.account { MemberAccountForm(account: account) }
             else { ProgressView("Opening member account") }
         }
-        .background(MemberWindowReader(reference: window).frame(width: 0, height: 0))
+        .background(MemberWindowReader(reference: holder.window).frame(width: 0, height: 0))
         .navigationTitle("Member account")
+        .onAppear { holder.account?.clearExpired(now: Int64(Date().timeIntervalSince1970 * 1000)) }
         .task {
-            guard account == nil else { return }
+            guard holder.account == nil else { return }
             do {
                 let transport = try URLSessionMemberTransport(timeout: 30, maximumResponseBytes: 1_048_576)
                 let vault = try KeychainMemberSessionVault(namespace: "dev.atarasy.native")
                 let service = MemberClient(environment: environment, transport: transport, vault: vault)
-                let reference = window
+                let reference = holder.window
                 let passkeys = NativePasskeyAuthoriser(environment: environment, anchor: { [weak reference] in reference?.window })
                 let directory = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true).appendingPathComponent("MemberOperations", isDirectory: true)
                 let store = try FileMemberOperationStore(directory: directory)
                 let statements = MemberStatementFlow(environment: environment, service: service, passkeys: passkeys, store: store)
-                account = MemberAccount(service: service, passkeys: passkeys, statements: statements)
+                holder.account = MemberAccount(service: service, passkeys: passkeys, statements: statements)
             } catch { dismiss() }
         }
-        .onChange(of: scenePhase) { _, phase in if phase == .active { account?.clearExpired(now: Int64(Date().timeIntervalSince1970 * 1000)) } }
+        .onChange(of: scenePhase) { _, phase in if phase == .active { holder.account?.clearExpired(now: Int64(Date().timeIntervalSince1970 * 1000)) } }
     }
 }
 private struct MemberAccountForm: View {
