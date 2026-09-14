@@ -45,8 +45,15 @@ export async function challengeFor(offerId: string, decisions: Decision[]): Prom
  *   <offer id>
  *   <candidate>:<valence>:<amount>:<"disputed" or empty>
  *
- * one line per kept, defaulted or consumed candidate in ascending candidate
- * id, UTF-8, "\n" between lines.
+ * one line per kept, defaulted or consumed candidate, and per candidate the
+ * collection recorded missing, in ascending candidate id, UTF-8, "\n" between
+ * lines.
+ *
+ * **A missing line is signed as `<candidate>:lost:0:`** (question 46, decided
+ * 2026-09-14), or with `disputed` where the household says the item was in
+ * the box. It is never charged, and it is on the statement because it is a
+ * merchant's record about the household's home that the household must be
+ * able to see and contest. A candidate the deadline made `lost` is not on it.
  *
  * **The first line is a domain tag and it is not decoration.** A decided set
  * is signed over the same prefix in the same four-field shape, and the two are
@@ -57,7 +64,7 @@ export async function challengeFor(offerId: string, decisions: Decision[]): Prom
  */
 export type StatementLine = {
   candidate: string;
-  valence: "kept" | "defaulted" | "consumed";
+  valence: "kept" | "defaulted" | "consumed" | "lost";
   amount: number;
   disputed: boolean;
 };

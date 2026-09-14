@@ -16,13 +16,13 @@ import { canonicalMandate, type Mandate } from "../shared/mandate.js";
 import { fromBase64, spkiToPem, toBase64, toBase64Url } from "../shared/encoding.js";
 // The rule that sorts a member's own list, in a module the suite can reach:
 // filing a collected box as settled was the worst thing this screen did.
-import { awaitsDecision, awaitsStatement, byArrival, type InboxOffer } from "../shared/inbox.js";
+import { awaitsDecision, awaitsStatement, byArrival, holdsNextBox, type InboxOffer } from "../shared/inbox.js";
 // The sentences a refusal reads as, in a module the suite can reach: four of
 // them directed the member wrongly and nothing here could have said so.
 import { REFUSALS, refusal } from "../shared/refusals.js";
 // The judgements the screens make, separated from the drawing of them: a
 // reviewer reverted five of them at once and the suite stayed green.
-import { blocksFor, decidable, disputable, statementTotal } from "../shared/screen.js";
+import { blocksFor, decidable, disputable, disputeMovesMoney, statementTotal } from "../shared/screen.js";
 
 type Member = {
   /** What the person typed. This browser's own label, and nobody else's business. */
@@ -99,10 +99,19 @@ type Statement = {
     maker: string;
     ships: string;
     given_by: string | null;
-    valence: "kept" | "defaulted" | "consumed";
+    /**
+     * `lost` is a line the collection recorded missing (question 46). It is
+     * at 0, it is never charged, and the household may dispute it.
+     */
+    valence: "kept" | "defaulted" | "consumed" | "lost";
     quantity: number;
     unit_price: number;
     amount: number;
+    /**
+     * Question 46. The collection's note for a missing line, null otherwise.
+     * Optional because an engine from before question 46 sends no such field.
+     */
+    note?: string | null;
     disclosure: { merchant: string; product: string | null };
   }[];
   disclosures: { merchant: string; product: string | null; version: string; items: { label: string; value: string }[] }[];
@@ -459,7 +468,11 @@ async function offers(member: Member) {
       // presenter's and several merchants', and §6.5 blocks the next box of
       // the presenter this one came from. Saying "this seller" told the
       // household that the wrong party had stopped delivering.
-      el("p", { class: "muted" }, `The route found something used. Nothing is charged until you sign, and no further box comes from ${o.presenter} while it waits.`)
+      // §6.5, question 46. Only goods used hold the next box; a box whose
+      // collection recorded only missing items owes nothing and holds nothing.
+      el("p", { class: "muted" }, holdsNextBox(o)
+        ? `The route found something used. Nothing is charged until you sign, and no further box comes from ${o.presenter} while it waits.`
+        : "The route wrote down what came back. Nothing on it is charged to you; sign it, or say where it is wrong.")
     );
   });
   const settings = el("button", {}, "What you have set") as HTMLButtonElement;
@@ -768,6 +781,17 @@ async function statement(member: Member, offerId: string) {
     return;
   }
   const st = got.body;
+  // Question 46. The list files every box with a `lost` line here, because it
+  // cannot tell a missing record from a deadline loss, and a deadline loss is
+  // on no statement. Offering a signature over nothing would ask the person to
+  // confirm a document with no line on it.
+  if (st.lines.length === 0) {
+    show(el("h1", {}, "Atarasy"),
+      el("h2", {}, "What the box came back with"),
+      el("p", { class: "muted" }, "Nothing on this box needs your signature. Anything not collected by the deadline is never charged to you."),
+      back(member));
+    return;
+  }
   const disputed = new Set<string>();
   const status = el("p", {});
   const sign = el("button", { class: "primary" }, "Confirm with your passkey") as HTMLButtonElement;
@@ -780,21 +804,34 @@ async function statement(member: Member, offerId: string) {
     // which was inside which: a household reading "Carriage: ¥500" above "To
     // be charged: ¥900" could not tell whether it owed 900 or 1,400. The
     // engine's `charged` excludes the carriage, so the screen says so.
+    // Question 46. A disputed missing line was never charged, so it is counted
+    // apart: saying it is "not charged here" would imply it otherwise was.
+    const charges = st.lines.filter((l) => disputeMovesMoney(l) && disputed.has(l.candidate)).length;
+    const losses = st.lines.filter((l) => !disputeMovesMoney(l) && disputed.has(l.candidate)).length;
     totalLine.textContent = `To be charged for the goods: ${yen(total())}.` +
       (st.carriage ? ` The carriage above is not in this figure.` : "") +
-      (disputed.size ? ` ${disputed.size} line${disputed.size === 1 ? "" : "s"} disputed and not charged here.` : "");
+      (charges ? ` ${charges} line${charges === 1 ? "" : "s"} disputed and not charged here.` : "") +
+      (losses ? ` ${losses} missing item${losses === 1 ? "" : "s"} disputed.` : "");
   };
 
   const cards = st.lines.map((l) => {
-    const mark = el("button", {}, "I did not use this") as HTMLButtonElement;
+    // §6.5, question 46. A missing line is the collection saying the item was
+    // not in the box. The household is never charged for it and may say it
+    // was there. "Borne by the merchant" is not said: the stock holder may be
+    // the maker.
+    const missing = l.valence === "lost";
+    const idle = missing ? "It was in the box" : "I did not use this";
+    const mark = el("button", {}, idle) as HTMLButtonElement;
     const note = el("p", { class: "muted" }, "");
     const paint = () => {
       const isDisputed = disputed.has(l.candidate);
       mark.className = isDisputed ? "chosen" : "";
-      mark.textContent = isDisputed ? "Disputed" : "I did not use this";
-      note.textContent = isDisputed
-        ? "Not charged here. What is owed for it, if anything, is between you and the seller."
-        : "";
+      mark.textContent = isDisputed ? "Disputed" : idle;
+      note.textContent = !isDisputed
+        ? ""
+        : missing
+          ? "You say this was in the box. Nothing moves either way; your signature records that you dispute it."
+          : "Not charged here. What is owed for it, if anything, is between you and the seller.";
       refreshTotal();
     };
     mark.onclick = () => {
@@ -806,20 +843,26 @@ async function statement(member: Member, offerId: string) {
     return el("div", { class: "card" },
       el("div", { class: "row" },
         el("strong", { class: "grow" }, `${l.product} × ${l.quantity}`),
-        el("span", {}, l.given_by ? "a gift" : yen(l.amount))),
+        el("span", {}, missing ? "not charged" : l.given_by ? "a gift" : yen(l.amount))),
       // Clause 10. A gift arrives at its price and is never billed, and the
       // screen says who gave it rather than leaving a zero to be read as luck.
       el("p", { class: "muted" },
         l.given_by
           ? `Given by ${l.given_by}. Never billed to you (clause 10).`
-          : `${yen(l.unit_price)} each. Sold by ${l.merchant}, made by ${l.maker}.`),
+          : missing
+            ? `Sold by ${l.merchant}, made by ${l.maker}.`
+            : `${yen(l.unit_price)} each. Sold by ${l.merchant}, made by ${l.maker}.`),
       el("p", { class: "muted" },
         wasKept
           ? "You kept this when you decided. It is here because it is on the same bill."
-          : "The collection found this used."),
+          : missing
+            ? "The collection says this was not in the box. You are never charged for it and it is no claim against you. If it was there, dispute it."
+            : "The collection found this used."),
+      // Question 46. The collection's own words, as text (clause 54).
+      ...(missing && l.note ? [el("p", { class: "muted" }, `The collection's note: ${l.note}`)] : []),
       ...blockFor(st.disclosures ?? [], l.disclosure),
-      // §11.2. Only a consumed line can be disputed: a kept line is one this
-      // household signed itself.
+      // §6.5, §11.2. Only a consumed or missing line can be disputed: a kept
+      // line is one this household signed itself.
       ...(wasKept ? [] : [el("div", { class: "row" }, mark), note])
     );
   });
@@ -833,7 +876,7 @@ async function statement(member: Member, offerId: string) {
         candidate: l.candidate,
         valence: l.valence,
         amount: l.amount,
-        disputed: l.valence === "consumed" && disputed.has(l.candidate),
+        disputed: disputable(l) && disputed.has(l.candidate),
       }));
       // §6.5, question 40. What the screen showed as the carriage is inside
       // what the passkey signs. `carriage` is null only where no delivery is
@@ -900,7 +943,10 @@ async function statement(member: Member, offerId: string) {
     // the seller: this box is one presenter's and several merchants'. The
     // statement names the merchants line by line and carries no presenter, so
     // the sentence names neither rather than naming the wrong one.
-    el("p", { class: "muted" }, "The route wrote this down. Nothing is charged until you sign it, and no further box comes from whoever sent this one while it waits."),
+    // §6.5, question 46. Only goods used hold the next box.
+    el("p", { class: "muted" }, st.lines.some((l) => l.valence === "consumed")
+      ? "The route wrote this down. Nothing is charged until you sign it, and no further box comes from whoever sent this one while it waits."
+      : "The route wrote this down. Nothing is charged until you sign it."),
     // §6.5, §10a.5. **The offer's expiry, because a merchant's block may state
     // an application period and a period is measured against something.** The
     // engine has carried it since this route was written and this screen

@@ -5,7 +5,7 @@ final class ContractTests: XCTestCase {
     func data(_ name:String) throws -> Data { try Data(contentsOf: XCTUnwrap(Bundle.module.url(forResource:name,withExtension:"json",subdirectory:"Fixtures"))) }
     func testIndependentCanonicalVectors() throws {
         let d=JSONDecoder(); d.keyDecodingStrategy = .convertFromSnakeCase
-        let vectors=try d.decode([Vector].self,from:data("canonical-vectors")); XCTAssertEqual(vectors.count,9)
+        let vectors=try d.decode([Vector].self,from:data("canonical-vectors")); XCTAssertEqual(vectors.count,11)
         for v in vectors {
             let text:String
             switch v.kind { case "decision": text=try Canonical.decisions(offer:XCTUnwrap(v.offer),lines:XCTUnwrap(v.decisions)); case "statement": text=try Canonical.statement(offer:XCTUnwrap(v.offer),carriage:v.carriage,lines:XCTUnwrap(v.lines)); default: text=try Canonical.mandate(XCTUnwrap(v.mandate)) }
@@ -17,6 +17,10 @@ final class ContractTests: XCTestCase {
         XCTAssertThrowsError(try Canonical.statement(offer:"box",carriage:0,lines:[.init(candidate:"a",valence:"kept",amount:5,disputed:true)]))
         XCTAssertThrowsError(try Canonical.decisions(offer:"o",lines:[.init(candidate:"a\nb",valence:"kept")]))
         XCTAssertThrowsError(try Canonical.statement(offer:"o",carriage:Canonical.maximumInteger+1,lines:[]))
+        // Question 46: a missing line is never charged, and only a consumed or missing line may be disputed.
+        XCTAssertThrowsError(try Canonical.statement(offer:"box",carriage:0,lines:[.init(candidate:"a",valence:"lost",amount:700,disputed:false)]))
+        XCTAssertThrowsError(try Canonical.statement(offer:"box",carriage:0,lines:[.init(candidate:"a",valence:"defaulted",amount:5,disputed:true)]))
+        XCTAssertEqual(try Canonical.statement(offer:"box",carriage:0,lines:[.init(candidate:"a",valence:"lost",amount:0,disputed:true)]),"valence.statement.1\nbox\n0\na:lost:0:disputed")
     }
     func testCarriageAndDisputeChangeAuthority() throws {
         let l=StatementLine(candidate:"a",valence:"consumed",amount:600,disputed:false)

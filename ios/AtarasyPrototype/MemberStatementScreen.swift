@@ -26,6 +26,20 @@ struct MemberStatementScreen: View {
                     ForEach(statement.lines.filter { $0.valence == "consumed" }, id: \.candidate) { line in
                         Toggle("Dispute \(line.product)", isOn: Binding(get: { disputed.contains(line.candidate) }, set: { if $0 { disputed.insert(line.candidate) } else { disputed.remove(line.candidate) } }))
                     }
+                }
+                // Question 46. A missing line is never charged and founds no claim; the household may still contest it.
+                let missing = statement.lines.filter { $0.valence == "lost" }
+                if !missing.isEmpty {
+                    Section("Recorded missing") {
+                        Text("The collection says these were not in the box. You are never charged for them. If one was there, dispute it.")
+                        ForEach(missing, id: \.candidate) { line in
+                            if let note = line.note { Text("\(line.product): \(note)").font(.footnote) }
+                            Toggle("It was in the box: \(line.product)", isOn: Binding(get: { disputed.contains(line.candidate) }, set: { if $0 { disputed.insert(line.candidate) } else { disputed.remove(line.candidate) } }))
+                                .accessibilityIdentifier("disputeMissing-" + line.candidate)
+                        }
+                    }
+                }
+                Section {
                     Button("Prepare statement for review") { acknowledged = false; perform { await flow.prepare(detail: detail, statement: statement, disputed: Array(disputed)) } }
                         .accessibilityIdentifier("prepareMemberStatement")
                 }
@@ -68,7 +82,11 @@ struct FrozenMemberStatementSections: View {
                 Text("Quantity: \(line.quantity); unit price: \(line.unitPrice)")
                 Text("Outcome: \(line.valence); goods amount: \(line.amount)")
                 if let giver = line.givenBy { Text("Gift from \(giver). No goods charge to the recipient.") }
-                if value.disputed.contains(line.candidate) { Text("Disputed: excluded from the goods charge.") }
+                if line.valence == "lost" {
+                    Text("The collection says this was not in the box. Never charged to you.")
+                    if let note = line.note { Text(verbatim: note).font(.footnote) }
+                    if value.disputed.contains(line.candidate) { Text("Disputed: you say it was in the box. No amount moves.") }
+                } else if value.disputed.contains(line.candidate) { Text("Disputed: excluded from the goods charge.") }
             }
         }
         Section("Merchant terms") { Text("Product terms govern matching labels; other standing terms still apply.") }

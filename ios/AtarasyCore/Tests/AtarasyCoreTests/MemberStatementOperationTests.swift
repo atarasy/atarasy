@@ -87,6 +87,39 @@ private actor OperationTransport: MemberHTTPTransport {
         let r = try receipt(record), p = try PendingMemberStatement(prepared: prepared, submittedSignature: r.confirmation!)
         XCTAssertEqual(p.inspect(r), .matchingProtocolRecord(r))
     }
+    /// Question 46. The detail and statement with the gift line recorded missing by the collection.
+    func missingCase() throws -> (MemberOfferDetail, MemberStatement) {
+        var object = try transactionValue("physical-detail"), candidates = object["candidates"] as! [[String: Any]]
+        candidates[1]["valence"] = "lost"; object["candidates"] = candidates
+        let d = try MemberOfferDetail.decode(JSONSerialization.data(withJSONObject: object), expectedID: object["id"] as! String, household: "detail-house")
+        var value = try transactionValue("physical-known-carriage"), rows = value["lines"] as! [[String: Any]]
+        rows[0]["note"] = NSNull(); rows[1]["valence"] = "lost"; rows[1]["amount"] = 0; rows[1]["note"] = "not in the tray at collection"; value["lines"] = rows
+        value["challenge"] = Canonical.challenge(try Canonical.statement(offer: d.id, carriage: 550, lines: [
+            .init(candidate: d.candidates[0].id, valence: "consumed", amount: 3000, disputed: false),
+            .init(candidate: d.candidates[1].id, valence: "lost", amount: 0, disputed: false)]))
+        return (d, try MemberStatement.decode(JSONSerialization.data(withJSONObject: value), detail: d))
+    }
+    func testMissingLineIsSignedAtZeroAndMayBeDisputedWithoutMovingMoney() throws {
+        let (d, s) = try missingCase()
+        XCTAssertEqual(s.lines[1].note, "not in the tray at collection")
+        let prepared = try PreparedMemberStatement(environment: environment(), session: session(), detail: d, statement: s, disputed: [d.candidates[1].id], now: 1000)
+        XCTAssertTrue(prepared.canonical.hasSuffix(":lost:0:disputed")); XCTAssertEqual(prepared.goodsCharged, 3000); XCTAssertEqual(prepared.disputedGoods, 0)
+        var record = try transactionValue("physical-settlement"), lines = record["lines"] as! [[String: Any]]
+        lines[0]["disputed"] = false; lines[1]["valence"] = "lost"; lines[1]["amount"] = 700; lines[1]["disputed"] = true
+        record["lines"] = lines; record["lost_amount"] = 700; record["disputed_amount"] = 0; record["consumed_amount"] = 3000; record["charged"] = 3000
+        let r = try receipt(record), p = try PendingMemberStatement(prepared: prepared, submittedSignature: r.confirmation!)
+        XCTAssertEqual(p.inspect(r), .matchingProtocolRecord(r))
+        lines[1]["disputed"] = false; record["lines"] = lines
+        XCTAssertEqual(try p.inspect(receipt(record)), .inconsistentRecord)
+    }
+    func testMissingLineMustBeZeroAndCarryANote() throws {
+        let (d, _) = try missingCase()
+        for (key, bad) in [("amount", 700 as Any), ("note", NSNull() as Any)] {
+            var value = try transactionValue("physical-known-carriage"), rows = value["lines"] as! [[String: Any]]
+            rows[0]["note"] = NSNull(); rows[1]["valence"] = "lost"; rows[1]["amount"] = 0; rows[1]["note"] = "gone"; rows[1][key] = bad; value["lines"] = rows
+            XCTAssertThrowsError(try MemberStatement.decode(JSONSerialization.data(withJSONObject: value), detail: d))
+        }
+    }
     func testExactConfirmationAndCompleteReceiptMatchActualReadback() throws {
         let pending = try pending(), receipt = try receipt()
         XCTAssertEqual(pending.inspect(receipt), .matchingProtocolRecord(receipt))

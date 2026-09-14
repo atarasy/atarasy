@@ -53,6 +53,19 @@ describe("§6.5: the canonical form of a settlement statement", () => {
     expect(canonicalDecisions("o", [{ candidate: "a", valence: "returned" }]).startsWith(STATEMENT_DOMAIN)).toBe(false);
   });
 
+  test("a line the collection recorded missing is lost at zero, and may be disputed", () => {
+    // Question 46. Sorted with the rest by candidate id, never charged.
+    expect(canonicalStatement("box", 200, [
+      { candidate: "c-3", valence: "lost", amount: 0, disputed: true },
+      { candidate: "c-1", valence: "consumed", amount: 600, disputed: false },
+      { candidate: "c-2", valence: "lost", amount: 0, disputed: false },
+      { candidate: "c-0", valence: "kept", amount: 800, disputed: false },
+    ])).toBe("valence.statement.1\nbox\n200\nc-0:kept:800:\nc-1:consumed:600:\nc-2:lost:0:\nc-3:lost:0:disputed");
+    // A box whose only collection line is missing.
+    expect(canonicalStatement("box", 0, [{ candidate: "a", valence: "lost", amount: 0, disputed: false }]))
+      .toBe("valence.statement.1\nbox\n0\na:lost:0:");
+  });
+
   test("a gift is zero and an undisputed line's fourth field is empty, not missing", () => {
     // §6.5, question 40. The carriage is a whole number and never null here,
     // because the engine refuses a statement settlement with no delivery

@@ -377,6 +377,79 @@ describe("the statement, as a member sees it", () => {
   });
 });
 
+describe("a missing line, as a member sees it (question 46)", () => {
+  const CONSUMED = { candidate: "c-1", product: "tea-a", merchant: "shop-x", maker: "made-by-tea", ships: "carrier-a", given_by: null, valence: "consumed", quantity: 1, unit_price: 1200, amount: 1200, note: null, disclosure: { merchant: "shop-x", product: null } };
+  const MISSING = { candidate: "c-2", product: "miso-a", merchant: "shop-x", maker: "made-by-miso", ships: "carrier-a", given_by: null, valence: "lost", quantity: 1, unit_price: 700, amount: 0, note: "not in the tray at collection", disclosure: { merchant: "shop-x", product: null } };
+
+  async function open(lines: unknown[], candidates: { id: string; valence: string }[]) {
+    stubAuthenticator();
+    const posted: { url: string; body: any }[] = [];
+    const app = await render((url, method, body) => {
+      if (method === "POST") posted.push({ url, body });
+      if (url === "/config") return { status: 200, body: CONFIG };
+      if (url.startsWith("/api/offers?")) {
+        return { status: 200, body: { offers: [offerRow({ binding: "physical", state: "decided", candidates })] } };
+      }
+      if (url.includes("/statement")) {
+        return { status: 200, body: { offer: "o-1", household: MEMBER.household, expires_at: 9_999_999_999_999, lines, disclosures: [STANDING], carriage: 0 } };
+      }
+      if (url.includes("/settle")) return { status: 200, body: { charged: 1200, disputed_amount: 0 } };
+      return { status: 404, body: {} };
+    });
+    return { app, posted };
+  }
+
+  test("it is drawn as not charged, with the collection's note, and leaves the total alone", async () => {
+    const { app } = await open([CONSUMED, MISSING], [{ id: "c-1", valence: "consumed" }, { id: "c-2", valence: "lost" }]);
+    [...app.querySelectorAll("button")].find((b) => text(b) === "See what came back")!.click();
+    const body = text(await settled());
+    expect(body).toContain("not charged");
+    expect(body).toContain("says this was not in the box");
+    expect(body).toContain("never charged for it");
+    expect(body).toContain("The collection's note: not in the tray at collection");
+    expect(body).not.toContain("¥700");
+    expect(body).toContain("To be charged for the goods: ¥1,200");
+  });
+
+  test("disputing it moves no money, and the signature posts it as disputed", async () => {
+    const { app, posted } = await open([CONSUMED, MISSING], [{ id: "c-1", valence: "consumed" }, { id: "c-2", valence: "lost" }]);
+    [...app.querySelectorAll("button")].find((b) => text(b) === "See what came back")!.click();
+    await settled();
+    [...document.querySelectorAll("button")].find((b) => text(b) === "It was in the box")!.click();
+    const body = text(document.getElementById("app")!);
+    expect(body).toContain("To be charged for the goods: ¥1,200");
+    expect(body).toContain("1 missing item disputed");
+    expect(body).not.toContain("disputed and not charged here");
+    [...document.querySelectorAll("button")].find((b) => text(b) === "Confirm with your passkey")!.click();
+    await settled();
+    const sent = posted.find((p) => p.url.includes("/settle"))!;
+    expect(sent.body.disputed).toEqual(["c-2"]);
+  });
+
+  test("a box whose only collection line is missing is listed, holds no next box, and can be signed", async () => {
+    const { app, posted } = await open([MISSING], [{ id: "c-2", valence: "lost" }, { id: "c-3", valence: "returned" }]);
+    const list = text(app);
+    expect(list).toContain("See what came back");
+    expect(list).toContain("Nothing on it is charged to you");
+    expect(list).not.toContain("no further box comes");
+    [...app.querySelectorAll("button")].find((b) => text(b) === "See what came back")!.click();
+    const body = text(await settled());
+    expect(body).toContain("To be charged for the goods: ¥0");
+    expect(body).not.toContain("no further box comes");
+    [...document.querySelectorAll("button")].find((b) => text(b) === "Confirm with your passkey")!.click();
+    await settled();
+    expect(posted.find((p) => p.url.includes("/settle"))!.body.disputed).toEqual([]);
+  });
+
+  test("a box lost at the deadline opens to a statement with nothing to sign", async () => {
+    const { app } = await open([], [{ id: "c-2", valence: "lost" }]);
+    [...app.querySelectorAll("button")].find((b) => text(b) === "See what came back")!.click();
+    const done = await settled();
+    expect(text(done)).toContain("Nothing on this box needs your signature");
+    expect(buttons(done)).not.toContain("Confirm with your passkey");
+  });
+});
+
 describe("what the screen posts, which nothing read until now", () => {
   /**
    * **The deepest thing four refutation rounds found.** Renaming the key the
