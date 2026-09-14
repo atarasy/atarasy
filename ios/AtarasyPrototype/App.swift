@@ -14,6 +14,7 @@ struct InboxView: View {
     @State private var selected: String?
     @State private var partial = false
     @State private var memberAccount = false
+    @StateObject private var memberHolder = MemberAccountHolder()
     var body: some View {
         NavigationSplitView {
             List(selection:$selected) {
@@ -37,7 +38,7 @@ struct InboxView: View {
             if let offer=fixtures.offers.first(where:{$0.id == selected}) { OfferView(offer:offer).id(offer.id) }
             else { ContentUnavailableView("Choose a proposal",systemImage:"tray",description:Text("Digital choices and physical statements remain separate.")) }
         }
-        .sheet(isPresented: $memberAccount) { MemberAccountSheet() }
+        .sheet(isPresented: $memberAccount) { MemberAccountSheet(holder: memberHolder) }
         .onAppear { if ProcessInfo.processInfo.arguments.contains("--physical") { selected="physical-a" }; if ProcessInfo.processInfo.arguments.contains("--digital") { selected="digital-a" } }
     }
 }
