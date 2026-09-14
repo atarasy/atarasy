@@ -73,12 +73,11 @@ const config={version:'fixture-cfg-2',presenter:'merchant-1',products:{'tea-a':{
 const configBody={...config,signature:signConfig(config)};
 await call('config-publication','POST','/_presenter/configs','ConfigResponse',201,request('config-publication','ConfigPublicationRequest',configBody));
 await call('config-duplicate','POST','/_presenter/configs','ErrorResponse',409,configBody);
-// Existing canonicalConfig omits physical eligibility. Record this as a gap,
-// not as evidence that the signature binds every publication field.
+// valence.catalogue.2 signs physical eligibility. The earlier form omitted it and
+// the reference accepted an altered publication; this now records the refusal.
 const eligibilityBase={...config,version:'fixture-eligibility-gap'};
 const alteredEligibility={...eligibilityBase,products:{'tea-a':{...config.products['tea-a'],physical:{...PHYSICAL,ambient:false}}},signature:signConfig(eligibilityBase)};
-const eligibilityResult=await call('config-eligibility-not-signed','POST','/_presenter/configs','ConfigResponse',201,alteredEligibility);
-if(eligibilityResult.products['tea-a'].physical.ambient!==false)throw new Error('eligibility gap observation changed');
+await call('config-eligibility-signed','POST','/_presenter/configs','ErrorResponse',422,alteredEligibility);
 const noSignature={...config,version:'fixture-unsigned'};
 await call('config-unsigned','POST','/_presenter/configs','ErrorResponse',422,request('config-unsigned','ConfigPublicationRequest',noSignature,false));
 const disclosure={merchant:'maker-a',product:null,version:'fixture-disclosure-2',items:[{label:'terms',value:'Updated fixture terms. No legal completeness claim.'}]};
@@ -107,7 +106,7 @@ await call('mandate-cosigner-missing','POST','/_node/mandates','ErrorResponse',4
 await call('mandate-loosened','POST','/_node/mandates','MandateResponse',201,signedMandate(loosened,true));
 await call('mandate-wrong-household','POST','/_node/mandates','ErrorResponse',422,signedMandate({...loosened,version:4,household:'fixture-other-house'}));
 await call('mandate-missing','GET','/_node/mandates/fixture-missing','ErrorResponse',404);
-for(const [id,code] of Object.entries({'config-duplicate':'config_exists','config-unsigned':'bad_signature','disclosure-changed-bytes':'bad_signature','offer-price-override':'malformed','mandate-stale':'stale_version','mandate-cosigner-missing':'unsigned','mandate-wrong-household':'wrong_household','mandate-missing':'not_found'})){if(byID(id).error!==code)throw new Error(`${id}: wrong refusal`);}
+for(const [id,code] of Object.entries({'config-duplicate':'config_exists','config-unsigned':'bad_signature','config-eligibility-signed':'bad_signature','disclosure-changed-bytes':'bad_signature','offer-price-override':'malformed','mandate-stale':'stale_version','mandate-cosigner-missing':'unsigned','mandate-wrong-household':'wrong_household','mandate-missing':'not_found'})){if(byID(id).error!==code)throw new Error(`${id}: wrong refusal`);}
 if(byID('mandate-tightened').ceiling_daily!==0 || byID('mandate-loosened').ceiling_daily!==null || byID('mandate-loosened').co_signers.length!==0)throw new Error('mandate null/zero or old co-signer requirement');
 await Bun.write(process.argv[2],JSON.stringify({synthetic:true,scope:'In-process pinned reference handler; ephemeral bare-signature test keys, no network or authenticator or provider',cases,requests},null,2)+'\n');
 console.log(JSON.stringify({responses:cases.length,result:'captured and semantic assertions passed'}));

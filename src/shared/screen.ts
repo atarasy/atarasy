@@ -94,5 +94,19 @@ export function statementTotal(
     .reduce((sum, l) => sum + l.amount, 0);
 }
 
-/** §11.2. Only a line the collection found used may be disputed. */
-export const disputable = (line: { valence: string }): boolean => line.valence === "consumed";
+/**
+ * §6.5, §11.2. Only a line the collection wrote down may be disputed: one it
+ * found used, or one it recorded missing (question 46). A statement carries
+ * `lost` only for a missing record, since a candidate the deadline made `lost`
+ * is not on it, so the valence alone is enough here. A kept line is one the
+ * household signed itself.
+ */
+export const disputable = (line: { valence: string }): boolean =>
+  line.valence === "consumed" || line.valence === "lost";
+
+/**
+ * §6.5. Whether disputing this line takes anything out of the charge. A
+ * missing line is never charged, so disputing it records that the household
+ * contests the loss and moves no money.
+ */
+export const disputeMovesMoney = (line: { valence: string }): boolean => line.valence === "consumed";

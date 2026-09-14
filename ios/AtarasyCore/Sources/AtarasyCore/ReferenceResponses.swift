@@ -113,7 +113,8 @@ public enum ReferenceResponseReader {
             total += amount
         }
         for line in value.lines {
-            guard !line.candidate.isEmpty, !line.disputed || line.valence == "consumed" else { throw ReferenceReadFailure.inconsistentSettlement }
+            // Question 46: a disputed missing line stays in the stock-loss total and adds nothing to the disputed amount.
+            guard !line.candidate.isEmpty, !line.disputed || ["consumed", "lost"].contains(line.valence) else { throw ReferenceReadFailure.inconsistentSettlement }
             switch line.valence {
             case "kept", "defaulted": try add(&kept, line.amount)
             case "consumed": if line.disputed { try add(&disputed, line.amount) } else { try add(&consumed, line.amount) }

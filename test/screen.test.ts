@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { blocksFor, decidable, disputable, statementTotal } from "../src/shared/screen.js";
+import { blocksFor, decidable, disputable, disputeMovesMoney, statementTotal } from "../src/shared/screen.js";
 import { REFUSALS, refusal } from "../src/shared/refusals.js";
 
 /**
@@ -93,10 +93,20 @@ describe("§6.5: what the statement says will be charged", () => {
     expect(statementTotal(lines, new Set(["paid", "kept"]))).toBe(0);
   });
 
-  test("only a line the collection found used may be disputed", () => {
+  test("only a line the collection wrote down may be disputed", () => {
     expect(disputable({ valence: "consumed" })).toBe(true);
+    // Question 46. A line the collection recorded missing.
+    expect(disputable({ valence: "lost" })).toBe(true);
     expect(disputable({ valence: "kept" })).toBe(false);
     expect(disputable({ valence: "defaulted" })).toBe(false);
+  });
+
+  test("a missing line is at zero, and disputing it moves no money", () => {
+    const withMissing = [...lines, { candidate: "gone", valence: "lost", amount: 0 }];
+    expect(statementTotal(withMissing, new Set())).toBe(2400);
+    expect(statementTotal(withMissing, new Set(["gone"]))).toBe(2400);
+    expect(disputeMovesMoney({ valence: "lost" })).toBe(false);
+    expect(disputeMovesMoney({ valence: "consumed" })).toBe(true);
   });
 });
 

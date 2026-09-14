@@ -38,6 +38,16 @@ final class ReferenceResponseTests: XCTestCase {
         body["charged"] = 2100
         XCTAssertThrowsError(try read(body))
     }
+    func testDisputedMissingLineStaysStockLossAndAddsNoDisputedAmount() throws {
+        // Question 46.
+        var body = try example("digital-settled"), lines = body["lines"] as! [[String: Any]]
+        var lost = lines[0]
+        lost["candidate"] = "fixture-missing-line"; lost["valence"] = "lost"; lost["amount"] = 900; lost["disputed"] = true
+        lines.append(lost); body["lines"] = lines; body["lost_amount"] = 900
+        XCTAssertEqual(try read(body).disputedAmount, 0)
+        body["disputed_amount"] = 900
+        XCTAssertThrowsError(try read(body))
+    }
     func testRefusalsPreserveStatusAndUnknownCodesWithoutServerMessages() throws {
         for item in try examples().filter({ $0["schema"] as? String == "ErrorResponse" }) {
             let body = item["value"] as! [String: Any], status = item["status"] as! Int

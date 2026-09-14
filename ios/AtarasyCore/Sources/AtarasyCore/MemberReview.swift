@@ -54,24 +54,38 @@ public struct MemberStatement: Decodable, Equatable, Sendable {
     public struct Line: Decodable, Equatable, Sendable {
         public let candidate: String; public let product: String; public let merchant: String; public let maker: String; public let ships: String
         public let givenBy: String?; public let valence: String; public let quantity: Int64; public let unitPrice: Int64; public let amount: Int64
+        /// Question 46. The collection's note for a missing (`lost`) line; nil otherwise and from engines before it.
+        public let note: String?
         public let disclosure: MemberDisclosureReference
     }
     public let offer: String; public let household: String; public let expiresAt: Int64
     public let lines: [Line]; public let disclosures: [MemberOfferDetail.Disclosure]; public let carriage: Int64?; public let challenge: String
     public static func decode(_ data: Data, detail: MemberOfferDetail) throws -> Self {
         let object = try ReviewValidation.object(data, keys: "offer household expires_at lines disclosures carriage challenge")
-        try ReviewValidation.rows(object["lines"], keys: "candidate product merchant maker ships given_by valence quantity unit_price amount disclosure", reference: true)
+        // Question 46 added `note` to every line. A capture from an engine before it carries no such key, and no lost line.
+        let base = "candidate product merchant maker ships given_by valence quantity unit_price amount disclosure"
+        let hasNote = ((object["lines"] as? [[String: Any]])?.first?.keys.contains("note")) ?? false
+        try ReviewValidation.rows(object["lines"], keys: hasNote ? base + " note" : base, reference: true)
         try ReviewValidation.disclosureShape(object["disclosures"])
         let value: Self = try ReviewValidation.decode(data)
         guard detail.binding == "physical", ReviewValidation.same(value.offer, detail.id), ReviewValidation.same(value.household, detail.household), value.expiresAt == detail.expiresAt else { throw MemberFailure.scopeMismatch }
         let eligible = detail.candidates.filter { ["kept", "defaulted", "consumed"].contains($0.valence) }
-        guard value.lines.count == eligible.count, ReviewValidation.sameDisclosures(value.disclosures, detail.disclosures), value.carriage.map(ReviewValidation.safe) ?? true else { throw MemberFailure.malformed }
+        // A `lost` candidate is on the statement only where the collection recorded it missing, which the detail
+        // cannot say, so lost lines are checked against lost candidates and every other eligible line must be present.
+        let lost = detail.candidates.filter { $0.valence == "lost" }
+        guard value.lines.filter({ $0.valence != "lost" }).count == eligible.count, ReviewValidation.sameDisclosures(value.disclosures, detail.disclosures), value.carriage.map(ReviewValidation.safe) ?? true else { throw MemberFailure.malformed }
         var ids = Set<Data>()
         for line in value.lines {
             guard ids.insert(Data(line.candidate.utf8)).inserted,
-                  let source = eligible.first(where: { ReviewValidation.same($0.id, line.candidate) }),
+                  let source = (line.valence == "lost" ? lost : eligible).first(where: { ReviewValidation.same($0.id, line.candidate) }),
                   ReviewValidation.matches(source, product: line.product, merchant: line.merchant, maker: line.maker, ships: line.ships, giver: line.givenBy, quantity: line.quantity, unitPrice: line.unitPrice, valence: line.valence),
                   ReviewValidation.governs(line.disclosure, candidate: source, blocks: value.disclosures), ReviewValidation.safe(line.amount) else { throw MemberFailure.malformed }
+            if line.valence == "lost" {
+                // Never charged, and a missing record always carries the collection's note.
+                guard line.amount == 0, let note = line.note, !note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw MemberFailure.malformed }
+                continue
+            }
+            guard line.note == nil else { throw MemberFailure.malformed }
             let amount = source.quantity.multipliedReportingOverflow(by: source.unitPrice)
             if source.givenBy != nil { guard line.amount == 0 else { throw MemberFailure.malformed } }
             else { guard !amount.overflow, ReviewValidation.safe(amount.partialValue), line.amount == amount.partialValue else { throw MemberFailure.malformed } }

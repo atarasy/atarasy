@@ -86,16 +86,20 @@ async function post(base: string, path: string, body: unknown) {
  * percent-encoded before the join, because a merchant named "a:b" with a maker
  * "c" produced the same bytes as a merchant "a" with a maker "b:c".
  */
-function canonicalConfig(c: { version: string; presenter: string; products: Record<string, { merchant: string; maker: string; ships: string; price: number; category?: string }> }) {
-  return Buffer.from(
-    [c.version, c.presenter, ...Object.keys(c.products).sort().map((ref) => {
-      const e = c.products[ref]!;
-      return [ref, e.merchant, e.maker, e.ships, String(e.price), e.category ?? ""]
-        .map(encodeURIComponent)
-        .join(":");
-    })].join("\n"),
-    "utf8"
-  );
+/**
+ * §5.4, catalogue signature revision 2 (`valence.catalogue.2`), which binds
+ * the physical eligibility into the signed bytes. The engine refuses the
+ * earlier line form with `422`, which left every case in this file red.
+ */
+type Eligibility = { ambient: boolean; keeps_for_days: number; fits_ten_per_container: boolean; regulated: boolean };
+function canonicalConfig(c: { version: string; presenter: string; products: Record<string, { merchant: string; maker: string; ships: string; price: number; category?: string; physical?: Eligibility }> }) {
+  const rows = Object.keys(c.products).sort().map((ref) => {
+    const e = c.products[ref]!;
+    const p = e.physical;
+    return [ref, e.merchant, e.maker, e.ships, e.price, e.category ?? null,
+      p ? [p.ambient, p.keeps_for_days, p.fits_ten_per_container, p.regulated] : null];
+  });
+  return Buffer.from(JSON.stringify(["valence.catalogue.2", c.version, c.presenter, rows]), "utf8");
 }
 
 /**
@@ -737,6 +741,109 @@ describe("the statement a household signs (§6.5)", () => {
     const stood = await fetch(`${HUB}/api/offers/${offer.id}/settlement`);
     expect(stood.status).toBe(200);
     expect(((await stood.json()) as { charged: number }).charged).toBe(charged);
+  });
+
+  /**
+   * Question 46. A box whose collection names each product's verdict, with a
+   * note for every missing one.
+   */
+  async function collectedWith(verdicts: Record<string, "consumed" | "missing">) {
+    const household = `${HOUSEHOLD}-missing-${Math.random().toString(36).slice(2, 10)}`;
+    const own = await underOwnMandate();
+    const products = Object.keys(verdicts);
+    const created = await post(ENGINE, "/offers", {
+      binding: "physical",
+      household,
+      purpose: "replenish",
+      config_version: "cfg-hub-test",
+      expires_at: Date.now() + 3_600_000,
+      mandate: own,
+      price_band: null,
+      giver: null,
+      candidates: products.map((product) => ({ product, quantity: 1, predicted_conversion: 0.5, is_exploration: true, given_by: null })),
+    });
+    expect(created.status).toBe(201);
+    const offer = created.body as unknown as { id: string; candidates: { id: string; product: string }[] };
+    const per: Record<string, unknown> = {};
+    for (const c of offer.candidates) per[c.id] = { alternatives: ["a smaller tin"], argument_against: "you have some already" };
+    expect((await post(ENGINE, `/offers/${offer.id}/deliberation`, {
+      per_candidate: per,
+      excluded: [],
+      mandate: { kind: "standing", scope: "tea", lapses_at: Date.now() + 90 * 86_400_000 },
+    })).status).toBe(201);
+    expect((await post(ENGINE, `/offers/${offer.id}/present`, {})).status).toBe(200);
+    expect((await post(ENGINE, `/offers/${offer.id}/delivery`, {
+      carriage: 0,
+      code: `dc-hub-${offer.id.slice(0, 6)}`,
+      status: "delivered",
+    })).status).toBe(201);
+    const idsFor = (v: string) => offer.candidates.filter((c) => verdicts[c.product] === v).map((c) => c.id);
+    const missing = idsFor("missing");
+    const collection = await post(ENGINE, `/offers/${offer.id}/recovery`, {
+      returned: [],
+      consumed: idsFor("consumed"),
+      missing,
+      missing_notes: Object.fromEntries(missing.map((id) => [id, "not in the tray at collection"])),
+    });
+    expect(collection.status).toBe(200);
+    return { offer, missing };
+  }
+
+  type Line = { candidate: string; valence: string; amount: number };
+
+  test("a missing line comes through the hub at zero and settles on the screen's signature", async () => {
+    const { offer, missing } = await collectedWith({ "coffee-a": "consumed", "tea-a": "missing" });
+    const st = (await (await fetch(`${HUB}/api/offers/${offer.id}/statement`)).json()) as { lines: Line[] };
+    const lost = st.lines.find((l) => l.candidate === missing[0])!;
+    expect(lost.valence).toBe("lost");
+    expect(lost.amount).toBe(0);
+    const lines = st.lines.map((l) => ({ ...l, disputed: false }));
+    const settled = await fetch(`${HUB}/api/offers/${offer.id}/settle`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ assertion: assertOver(canonicalStatement(offer.id, 0, lines)), disputed: [] }),
+    });
+    expect(settled.status).toBe(200);
+    const receipt = (await settled.json()) as { charged: number; disputed_amount: number };
+    expect(receipt.charged).toBe(1500);
+    expect(receipt.disputed_amount).toBe(0);
+  });
+
+  test("a disputed missing line is signed as disputed and moves no money", async () => {
+    const { offer, missing } = await collectedWith({ "coffee-a": "consumed", "tea-b": "missing" });
+    const st = (await (await fetch(`${HUB}/api/offers/${offer.id}/statement`)).json()) as { lines: Line[] };
+    const lines = st.lines.map((l) => ({ ...l, disputed: missing.includes(l.candidate) }));
+    const settled = await fetch(`${HUB}/api/offers/${offer.id}/settle`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ assertion: assertOver(canonicalStatement(offer.id, 0, lines)), disputed: missing }),
+    });
+    expect(settled.status).toBe(200);
+    const receipt = (await settled.json()) as { charged: number; disputed_amount: number; lines: { candidate: string; disputed: boolean }[] };
+    expect(receipt.charged).toBe(1500);
+    expect(receipt.disputed_amount).toBe(0);
+    expect(receipt.lines.find((l) => l.candidate === missing[0])!.disputed).toBe(true);
+  });
+
+  test("a box whose only collection line is missing needs the statement signed", async () => {
+    const { offer } = await collectedWith({ "tea-c": "missing" });
+    const unsigned = await fetch(`${HUB}/api/offers/${offer.id}/settle`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    expect(unsigned.status).toBe(422);
+    expect(((await unsigned.json()) as { error: string }).error).toBe("statement_unsigned");
+    const st = (await (await fetch(`${HUB}/api/offers/${offer.id}/statement`)).json()) as { lines: Line[] };
+    expect(st.lines.map((l) => `${l.valence}:${l.amount}`)).toEqual(["lost:0"]);
+    const lines = st.lines.map((l) => ({ ...l, disputed: false }));
+    const settled = await fetch(`${HUB}/api/offers/${offer.id}/settle`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ assertion: assertOver(canonicalStatement(offer.id, 0, lines)), disputed: [] }),
+    });
+    expect(settled.status).toBe(200);
+    expect(((await settled.json()) as { charged: number }).charged).toBe(0);
   });
 
   test("an unsigned statement is refused, so the screen cannot settle by asking", async () => {

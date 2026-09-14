@@ -42,14 +42,15 @@ struct MemberReviewSections: View {
             Section("Physical statement") {
                 carriage(statement.carriage)
                 Text("Collection due: \(date(statement.expiresAt))")
-                Text("Only kept, defaulted and consumed lines appear here. Omission does not establish completed collection.").font(.footnote)
+                Text("Only kept, defaulted and consumed lines, and lines the collection recorded missing, appear here. Omission does not establish completed collection.").font(.footnote)
                 Text("The statement challenge matches these reported lines. This does not verify disclosure signatures or authorise a charge.").font(.footnote)
                 if statement.lines.isEmpty { Text("No eligible statement lines were reported.") }
             }
             ForEach(Array(statement.lines.enumerated()), id: \.offset) { _, line in
                 Section("Statement: \(line.product)") {
                     parties(line.merchant, line.maker, line.ships)
-                    Text("Reported outcome: \(line.valence)")
+                    Text(line.valence == "lost" ? "Reported outcome: not in the box. Never charged to you." : "Reported outcome: \(line.valence)")
+                    if let note = line.note { Text(verbatim: note).font(.footnote) }
                     Text("Quantity: \(line.quantity); catalogue unit price: \(line.unitPrice)")
                     gift(line.givenBy)
                     Text("Proposed goods amount: \(line.amount)").accessibilityIdentifier(line.givenBy == nil ? "reviewGoodsAmount" : "reviewGiftAmount")

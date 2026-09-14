@@ -9,6 +9,8 @@ const cases:any[] = [
  {id:'decision-empty',kind:'decision',offer:'empty',decisions:[]},
  {id:'statement-carriage',kind:'statement',offer:'physical-a',carriage:200,lines:[{candidate:'b',valence:'consumed',amount:0,disputed:false},{candidate:'a',valence:'consumed',amount:600,disputed:true},{candidate:'c',valence:'kept',amount:800,disputed:false}]},
  {id:'statement-zero',kind:'statement',offer:'physical-zero',carriage:0,lines:[{candidate:'gift',valence:'consumed',amount:0,disputed:false}]},
+ {id:'statement-missing',kind:'statement',offer:'physical-missing',carriage:300,lines:[{candidate:'d',valence:'lost',amount:0,disputed:true},{candidate:'b',valence:'consumed',amount:600,disputed:false},{candidate:'c',valence:'lost',amount:0,disputed:false},{candidate:'a',valence:'kept',amount:800,disputed:false}]},
+ {id:'statement-only-missing',kind:'statement',offer:'physical-only-missing',carriage:0,lines:[{candidate:'gone',valence:'lost',amount:0,disputed:false}]},
  {id:'mandate-null',kind:'mandate',mandate},
  {id:'mandate-zero',kind:'mandate',mandate:{...mandate,ceiling_daily:0,cooling_seconds:0}},
  {id:'mandate-empty-signers',kind:'mandate',mandate:{...mandate,co_signers:[]}}

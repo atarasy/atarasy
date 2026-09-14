@@ -116,6 +116,58 @@
     "challenge": "MPpef3AzCuXmis6-KIXoqEFNbvboZvdBoaZgK8d6t3I"
   },
   {
+    "id": "statement-missing",
+    "kind": "statement",
+    "offer": "physical-missing",
+    "carriage": 300,
+    "lines": [
+      {
+        "candidate": "d",
+        "valence": "lost",
+        "amount": 0,
+        "disputed": true
+      },
+      {
+        "candidate": "b",
+        "valence": "consumed",
+        "amount": 600,
+        "disputed": false
+      },
+      {
+        "candidate": "c",
+        "valence": "lost",
+        "amount": 0,
+        "disputed": false
+      },
+      {
+        "candidate": "a",
+        "valence": "kept",
+        "amount": 800,
+        "disputed": false
+      }
+    ],
+    "canonical": "valence.statement.1\nphysical-missing\n300\na:kept:800:\nb:consumed:600:\nc:lost:0:\nd:lost:0:disputed",
+    "sha256": "2d4b2c0704158d80ae862b6732bfc0df2582b331e8ab9a4fe9887c156745583d",
+    "challenge": "LUssBwQVjYCuhitnMr_A3yWCszHoq5pP6Yh8FWdFWD0"
+  },
+  {
+    "id": "statement-only-missing",
+    "kind": "statement",
+    "offer": "physical-only-missing",
+    "carriage": 0,
+    "lines": [
+      {
+        "candidate": "gone",
+        "valence": "lost",
+        "amount": 0,
+        "disputed": false
+      }
+    ],
+    "canonical": "valence.statement.1\nphysical-only-missing\n0\ngone:lost:0:",
+    "sha256": "f22e63df975e51d9ba8a4113dd17e1f221b6b12a126b480f0a3d1d8434daed39",
+    "challenge": "8i5j35deUdm6ikET3Rfh8iG2sSoSa0gPCj0dhDTa7Tk"
+  },
+  {
     "id": "mandate-null",
     "kind": "mandate",
     "mandate": {

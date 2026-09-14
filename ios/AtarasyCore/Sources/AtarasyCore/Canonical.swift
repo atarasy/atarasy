@@ -39,7 +39,8 @@ public enum Canonical {
     public static func statement(offer: String, carriage: Int64?, lines: [StatementLine]) throws -> String {
         try identifier(offer); guard let carriage else { throw ContractError.invalidValue }; try integer(carriage)
         guard Set(lines.map { Data($0.candidate.utf8) }).count == lines.count else { throw ContractError.invalidValue }
-        for line in lines { try identifier(line.candidate); try integer(line.amount); guard ["kept","defaulted","consumed"].contains(line.valence), !line.disputed || line.valence == "consumed" else { throw ContractError.invalidValue } }
+        // Question 46: a line the collection recorded missing is `lost` at 0 and, like a consumed line, may be disputed.
+        for line in lines { try identifier(line.candidate); try integer(line.amount); guard ["kept","defaulted","consumed","lost"].contains(line.valence), line.valence != "lost" || line.amount == 0, !line.disputed || ["consumed","lost"].contains(line.valence) else { throw ContractError.invalidValue } }
         return (["valence.statement.1",offer,String(carriage)] + lines.sorted { ordered($0.candidate,$1.candidate) }.map { "\($0.candidate):\($0.valence):\($0.amount):\($0.disputed ? "disputed" : "")" }).joined(separator:"\n")
     }
     public static func mandate(_ m: Mandate) throws -> String {

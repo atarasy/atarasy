@@ -57,7 +57,7 @@ struct OfferView: View {
     var storageKey:String { "synthetic-operation-"+offer.id }
     var total:Int64 { offer.amount(kept:kept,disputed:disputed) }
     func canonical() throws -> String {
-        if physical { return try Canonical.statement(offer:offer.id,carriage:missingCarriage ? nil : offer.carriage,lines:offer.lines.map { .init(candidate:$0.id,valence:$0.verdict,amount:$0.amount,disputed:$0.verdict == "consumed" && disputed.contains($0.id)) }) }
+        if physical { return try Canonical.statement(offer:offer.id,carriage:missingCarriage ? nil : offer.carriage,lines:offer.lines.map { .init(candidate:$0.id,valence:$0.verdict,amount:$0.amount,disputed:["consumed","lost"].contains($0.verdict) && disputed.contains($0.id)) }) }
         return try Canonical.decisions(offer:offer.id,lines:offer.lines.map { .init(candidate:$0.id,valence:kept.contains($0.id) ? "kept" : "returned",keptAs:kept.contains($0.id) ? "self" : nil) })
     }
     func persist() { if let data=try? JSONEncoder().encode(op) { UserDefaults.standard.set(data,forKey:storageKey) } }
@@ -76,8 +76,9 @@ struct OfferView: View {
                         if let giver=line.givenBy { Text("Gift from \(giver). No goods charge to you for this item.") }
                         else { Text("JPY \(line.amount)").monospacedDigit() }
                         if physical {
-                            Text(line.verdict == "consumed" ? "Collection reported: Used" : "Previously chosen to keep")
-                            if line.verdict == "consumed" { Toggle("Dispute this consumed line",isOn:Binding(get:{disputed.contains(line.id)},set:{if $0 { disputed.insert(line.id) } else { disputed.remove(line.id) }})).accessibilityIdentifier("dispute-"+line.id).disabled(reviewing) }
+                            Text(line.verdict == "consumed" ? "Collection reported: Used" : line.verdict == "lost" ? "Collection reported: not in the box. Never charged to you." : "Previously chosen to keep")
+                            if line.verdict == "lost" { Toggle("It was in the box",isOn:Binding(get:{disputed.contains(line.id)},set:{if $0 { disputed.insert(line.id) } else { disputed.remove(line.id) }})).accessibilityIdentifier("dispute-"+line.id).disabled(reviewing) }
+                            else if line.verdict == "consumed" { Toggle("Dispute this consumed line",isOn:Binding(get:{disputed.contains(line.id)},set:{if $0 { disputed.insert(line.id) } else { disputed.remove(line.id) }})).accessibilityIdentifier("dispute-"+line.id).disabled(reviewing) }
                             else { Text("This line was already your signed choice.").font(.footnote) }
                         } else {
                             Toggle("Choose this item",isOn:Binding(get:{kept.contains(line.id)},set:{if $0 { kept.insert(line.id) } else { kept.remove(line.id) }})).accessibilityIdentifier("choose-"+line.id).disabled(reviewing)

@@ -11,11 +11,17 @@ struct MemberStatementScreen: View {
     @State private var acknowledged = false
     private let clock = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     private func perform(_ work: @escaping @MainActor () async -> Void) { guard action == nil else { return }; action = Task { await work(); action = nil } }
+    /// Same wording as the web statement screen (`src/client/app.ts`).
+    static let missingAttestation = "Signing shows you were told which items the collection did not find. It is not you agreeing they are missing or taking responsibility for them; you are never charged for them, and you can dispute any you had."
     var body: some View {
         Form {
             if let frozen = flow.review {
                 FrozenMemberStatementSections(value: frozen)
                 Section("Approval") {
+                    // Question 46. What a signature over missing lines attests, beside the button that makes it.
+                    if frozen.statement.lines.contains(where: { $0.valence == "lost" }) {
+                        Text(MemberStatementScreen.missingAttestation).font(.footnote).accessibilityIdentifier("missingAttestation")
+                    }
                     Toggle("I have reviewed this statement and the mandate", isOn: $acknowledged).accessibilityIdentifier("acknowledgeFrozenStatement")
                     Button("Approve with passkey") { perform { await flow.approve() } }
                         .disabled(!acknowledged || !flow.canApprove).accessibilityIdentifier("approveMemberStatement")
@@ -26,6 +32,21 @@ struct MemberStatementScreen: View {
                     ForEach(statement.lines.filter { $0.valence == "consumed" }, id: \.candidate) { line in
                         Toggle("Dispute \(line.product)", isOn: Binding(get: { disputed.contains(line.candidate) }, set: { if $0 { disputed.insert(line.candidate) } else { disputed.remove(line.candidate) } }))
                     }
+                }
+                // Question 46. A missing line is never charged and founds no claim; the household may still contest it.
+                let missing = statement.lines.filter { $0.valence == "lost" }
+                if !missing.isEmpty {
+                    Section("Recorded missing") {
+                        Text("The collection says these were not in the box. You are never charged for them. If one was there, dispute it.")
+                        ForEach(missing, id: \.candidate) { line in
+                            if let note = line.note { Text("\(line.product): \(note)").font(.footnote) }
+                            Toggle("It was in the box: \(line.product)", isOn: Binding(get: { disputed.contains(line.candidate) }, set: { if $0 { disputed.insert(line.candidate) } else { disputed.remove(line.candidate) } }))
+                                .accessibilityIdentifier("disputeMissing-" + line.candidate)
+                        }
+                    }
+                }
+                Section {
+                    if !missing.isEmpty { Text(MemberStatementScreen.missingAttestation).font(.footnote) }
                     Button("Prepare statement for review") { acknowledged = false; perform { await flow.prepare(detail: detail, statement: statement, disputed: Array(disputed)) } }
                         .accessibilityIdentifier("prepareMemberStatement")
                 }
@@ -68,7 +89,11 @@ struct FrozenMemberStatementSections: View {
                 Text("Quantity: \(line.quantity); unit price: \(line.unitPrice)")
                 Text("Outcome: \(line.valence); goods amount: \(line.amount)")
                 if let giver = line.givenBy { Text("Gift from \(giver). No goods charge to the recipient.") }
-                if value.disputed.contains(line.candidate) { Text("Disputed: excluded from the goods charge.") }
+                if line.valence == "lost" {
+                    Text("The collection says this was not in the box. Never charged to you.")
+                    if let note = line.note { Text(verbatim: note).font(.footnote) }
+                    if value.disputed.contains(line.candidate) { Text("Disputed: you say it was in the box. No amount moves.") }
+                } else if value.disputed.contains(line.candidate) { Text("Disputed: excluded from the goods charge.") }
             }
         }
         Section("Merchant terms") { Text("Product terms govern matching labels; other standing terms still apply.") }

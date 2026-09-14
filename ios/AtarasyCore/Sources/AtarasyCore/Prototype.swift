@@ -7,7 +7,8 @@ public extension DemoFixtures {
 }
 public struct DemoLine: Codable, Identifiable, Sendable {
     public var id: String; public var name: String; public var maker: String; public var price: Int64; public var givenBy: String?; public var verdict: String
-    public var amount: Int64 { givenBy == nil ? price : 0 }
+    /// A line the collection recorded missing (`lost`) is never charged (question 46).
+    public var amount: Int64 { givenBy == nil && verdict != "lost" ? price : 0 }
 }
 public struct DemoOffer: Codable, Identifiable, Sendable {
     public var id: String; public var household: String; public var presenter: String; public var title: String; public var binding: String; public var arrived: Int; public var carriage: Int64?; public var lines: [DemoLine]

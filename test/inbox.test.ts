@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { awaitsDecision, awaitsStatement, byArrival, type InboxOffer } from "../src/shared/inbox.js";
+import { awaitsDecision, awaitsStatement, byArrival, holdsNextBox, type InboxOffer } from "../src/shared/inbox.js";
 
 /**
  * The rule that sorts a member's own list.
@@ -44,6 +44,19 @@ describe("§6.5: a box waiting on a signature is one the list can see", () => {
       state: "expired",
       candidates: [{ id: "c-1", valence: "consumed" }, { id: "c-2", valence: "defaulted" }],
     }))).toBe(true);
+  });
+
+  test("a box whose only collection line is missing waits on a statement and holds no next box", () => {
+    // Question 46. The household is shown the missing record and may dispute
+    // it, but nothing is owed on it, so the presenter's next box is not held.
+    const box = offer({
+      binding: "physical",
+      state: "decided",
+      candidates: [{ id: "c-1", valence: "lost" }, { id: "c-2", valence: "returned" }],
+    });
+    expect(awaitsStatement(box)).toBe(true);
+    expect(holdsNextBox(box)).toBe(false);
+    expect(holdsNextBox(offer({ candidates: [{ id: "c-1", valence: "consumed" }, { id: "c-2", valence: "lost" }] }))).toBe(true);
   });
 
   test("a settled box waits on nothing, and needs no second call to say so", () => {

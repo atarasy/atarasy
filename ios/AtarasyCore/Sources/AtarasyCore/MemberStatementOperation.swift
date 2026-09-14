@@ -24,11 +24,16 @@ public struct PreparedMemberStatement: Sendable {
         guard exact(session.household, detail.household), session.presenters.contains(where: { exact($0, detail.presenter) }),
               exact(statement.offer, detail.id), exact(statement.household, detail.household), statement.expiresAt == detail.expiresAt else { throw MemberFailure.scopeMismatch }
         guard detail.binding == "physical", detail.giver == nil, ["decided", "expired"].contains(detail.state),
-              !detail.candidates.contains(where: { $0.valence == "offered" }), detail.candidates.contains(where: { $0.valence == "consumed" }),
+              !detail.candidates.contains(where: { $0.valence == "offered" }),
+              // Question 46: goods used, or a line the collection recorded missing, make a statement to sign.
+              detail.candidates.contains(where: { $0.valence == "consumed" }) || statement.lines.contains(where: { $0.valence == "lost" }),
               let carriage = statement.carriage, (0...Canonical.maximumInteger).contains(carriage),
               disclosureBytes(detail.disclosures) == disclosureBytes(statement.disclosures) else { throw MemberFailure.invalidInput }
         let disputeIDs = Set(disputed.map { Data($0.utf8) })
-        guard disputeIDs.count == disputed.count, disputed.allSatisfy({ id in detail.candidates.contains { exact($0.id, id) && $0.valence == "consumed" } }) else { throw MemberFailure.invalidInput }
+        let missing = statement.lines.filter { $0.valence == "lost" }
+        guard disputeIDs.count == disputed.count, disputed.allSatisfy({ id in
+            detail.candidates.contains { exact($0.id, id) && $0.valence == "consumed" } || missing.contains { exact($0.candidate, id) }
+        }) else { throw MemberFailure.invalidInput }
         var expected: [ExpectedStatementReceiptLine] = [], canonicalLines: [StatementLine] = []
         var kept: Int64 = 0, consumed: Int64 = 0, contested: Int64 = 0, lost: Int64 = 0
         for candidate in detail.candidates {
@@ -45,7 +50,13 @@ public struct PreparedMemberStatement: Sendable {
             case "consumed": if isDisputed { try checkedAdd(&contested, amount) } else { try checkedAdd(&consumed, amount) }
             default: throw MemberFailure.malformed
             }
-            if candidate.valence != "lost" {
+            if candidate.valence == "lost" {
+                // A missing record is signed at 0; a deadline loss is not on the statement at all.
+                if let line = statement.lines.first(where: { exact($0.candidate, candidate.id) }) {
+                    guard exact(line.valence, "lost"), line.amount == 0 else { throw MemberFailure.malformed }
+                    canonicalLines.append(.init(candidate: candidate.id, valence: "lost", amount: 0, disputed: isDisputed))
+                }
+            } else {
                 guard let line = statement.lines.first(where: { exact($0.candidate, candidate.id) }),
                       exact(line.product, candidate.product), exact(line.merchant, candidate.merchant), exact(line.maker, candidate.maker), exact(line.ships, candidate.ships),
                       optionalExact(line.givenBy, candidate.givenBy), line.quantity == candidate.quantity, line.unitPrice == candidate.unitPrice,

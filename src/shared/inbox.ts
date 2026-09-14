@@ -24,14 +24,29 @@ export type InboxOffer = {
 };
 
 /**
- * §6.5. A physical box whose collection found goods used, and which nothing
- * has settled. A settled offer is in `settled`, which is why the state carries
- * the answer and no second call is needed to ask whether money has moved.
+ * §6.5. A physical box whose collection found goods used or recorded goods
+ * missing, and which nothing has settled. A settled offer is in `settled`,
+ * which is why the state carries the answer and no second call is needed to
+ * ask whether money has moved.
+ *
+ * **A `lost` line counts, and that over-reaches on purpose** (question 46).
+ * The list carries a valence and not the collection, so a candidate the
+ * collection recorded missing and one the deadline made `lost` look the same
+ * here. Leaving `lost` out would keep a box whose only collection lines are
+ * missing off this surface, which §6.5 requires the hub to show; counting it
+ * files a box lost at the deadline here too, where its statement comes back
+ * with no line to sign and the screen says so.
  */
 export const awaitsStatement = (o: InboxOffer): boolean =>
   o.binding === "physical" &&
   (o.state === "decided" || o.state === "expired") &&
-  o.candidates.some((c) => c.valence === "consumed");
+  o.candidates.some((c) => c.valence === "consumed" || c.valence === "lost");
+
+/**
+ * §6.5. Whether a waiting box holds this presenter's next one: only goods used
+ * do, because a box whose collection recorded only missing lines owes nothing.
+ */
+export const holdsNextBox = (o: InboxOffer): boolean => o.candidates.some((c) => c.valence === "consumed");
 
 /**
  * §10, §11. A line nobody has decided yet. A physical box is collected line by

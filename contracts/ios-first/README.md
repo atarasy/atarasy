@@ -9,7 +9,7 @@ Status: executable subset, not a complete or production-ready API. The accompany
 - One proposed private operation envelope, explicitly unimplemented and separate from strict public request bodies.
 - Fifteen positive/negative request examples and five proposed-envelope validation cases.
 - Two households, two merchants and four presentation-model offers. These are UI fixtures, not complete server seed commands or evidence of deployed isolation.
-- Nine canonical vectors generated from the Web reference and checked independently by Swift and pinned engine functions.
+- Eleven canonical vectors generated from the Web reference and checked independently by Swift and pinned engine functions, including statements with a missing (`lost`) line and a disputed one (question 46).
 
 ## Interpretation
 
@@ -43,6 +43,6 @@ OpenAPI 0.3 adds configuration publication, disclosure publication, offer creati
 
 The 44-response harness checks duplicate configuration refusal, unsigned configuration refusal, altered disclosure refusal, frozen original offer price/disclosures after new publication, new offers using the new revisions, rejection of a candidate price override, mandate version conflicts, null versus zero ceilings and loosening with the previous co-signer. The key material is still ephemeral test-only material.
 
-**Measured existing signature gap:** `canonicalConfig` at the pinned revision does not include `physical` eligibility. The harness signs an ambient-eligible configuration, alters `physical.ambient` to false, and the reference accepts that changed publication under the original signature. This case records a limitation, not desirable production behavior or proof of a complete signed payload. Keep publication behind trusted boundaries pending a versioned signature-coverage decision and independent vectors; the member read boundary exposes no publication route. The current schemas validate structure and cannot repair this cryptographic gap.
+**Closed signature gap:** until the catalogue signature moved to `valence.catalogue.2`, `canonicalConfig` did not include `physical` eligibility, and the reference accepted a publication whose `physical.ambient` had been altered under the original signature. At the pinned revision the harness signs an ambient-eligible configuration, alters `physical.ambient` to false, and the reference refuses it with `422 bad_signature` (case `config-eligibility-signed`). Recorded 2026-09-15 when the pin moved to valence `67df231`.
 
 Swift mandate reads now bind the expected mandate and household by UTF-8 identity, require nullable fields to be present, preserve null/zero and allow lapsed records to be displayed. A caller may require a known minimum version. None of these checks grants authority to change the mandate or proves session authentication.
