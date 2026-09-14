@@ -36,10 +36,10 @@ private struct RefusingOperationStore: MemberOperationStore {
         return (try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: Any])[name] as! [String: Any]
     }
     func data(_ object: [String: Any]) throws -> Data { try JSONSerialization.data(withJSONObject: object) }
-    func handle() throws -> MemberOperationHandle {
+    func handle(canonical override: String? = nil) throws -> MemberOperationHandle {
         let p = try fixture("prepared"), key = p["publicKey"] as! [String: Any], credential = (key["allowCredentials"] as! [[String: Any]])[0]
         let receipt = try fixture("committed")["receipt"] as! [String: Any]
-        return .init(id: p["operationID"] as! String, environment: "test", origin: URL(string: "https://unit.example")!, sessionID: info.id, household: info.household, presenter: "merchant-1", offer: receipt["offer"] as! String, canonical: p["canonical"] as! String, expiresAt: (p["expiresAt"] as! NSNumber).int64Value, requestDigest: p["requestDigest"] as! String, reviewedRevision: p["reviewedRevision"] as! String, challenge: key["challenge"] as! String, credentialID: credential["id"] as! String, attempted: false)
+        return .init(id: p["operationID"] as! String, environment: "test", origin: URL(string: "https://unit.example")!, sessionID: info.id, household: info.household, presenter: "merchant-1", offer: receipt["offer"] as! String, canonical: override ?? p["canonical"] as! String, expiresAt: (p["expiresAt"] as! NSNumber).int64Value, requestDigest: p["requestDigest"] as! String, reviewedRevision: p["reviewedRevision"] as! String, challenge: key["challenge"] as! String, credentialID: credential["id"] as! String, attempted: false)
     }
     private func client(_ replies: [Data?], environment: String = "test") async throws -> (MemberClient, RuntimeTransport) {
         let transport = RuntimeTransport(info: info, replies: replies)
@@ -66,6 +66,32 @@ private struct RefusingOperationStore: MemberOperationStore {
         guard case .committed(let receipt) = outcome else { return XCTFail("Actual service receipt was not decoded") }
         XCTAssertEqual(receipt.charged, 1200)
         let requests = await t.requests; XCTAssertTrue(requests.allSatisfy { $0.httpMethod == "GET" && $0.httpBody == nil })
+    }
+    /// Question 46. A line the collection recorded missing is signed at 0 and carried on the
+    /// receipt at its stock value; the read-back must rebuild the signed bytes, not drop it.
+    func missingOutcome(disputed: Bool, signed: Bool) throws -> (MemberOperationHandle, Data) {
+        let missing = "ffffffff-0000-4000-8000-000000000046"
+        var outcome = try fixture("committed"), receipt = outcome["receipt"] as! [String: Any]
+        var lines = receipt["lines"] as! [[String: Any]], line = lines[0]
+        line["candidate"] = missing; line["product"] = "salt-0"; line["valence"] = "lost"; line["amount"] = 300; line["disputed"] = disputed
+        lines.append(line); receipt["lines"] = lines; receipt["lost_amount"] = 300; outcome["receipt"] = receipt
+        let base = try fixture("prepared")["canonical"] as! String
+        let canonical = signed ? base + "\n\(missing):lost:0:\(disputed ? "disputed" : "")" : base
+        return (try handle(canonical: canonical), try data(outcome))
+    }
+    func testSignedMissingLineReadsBackAsCommitted() async throws {
+        for disputed in [true, false] {
+            let (h, reply) = try missingOutcome(disputed: disputed, signed: true)
+            let (c, _) = try await client([reply])
+            let outcome = await c.operationOutcome(h)
+            guard case .committed(let receipt) = outcome else { return XCTFail("Signed missing line (disputed: \(disputed)) was not read back") }
+            XCTAssertEqual(receipt.charged, 1200); XCTAssertEqual(receipt.lostAmount, 300)
+        }
+    }
+    func testDeadlineLossOffTheStatementStillReadsBackAsCommitted() async throws {
+        let (h, reply) = try missingOutcome(disputed: false, signed: false)
+        let (c, _) = try await client([reply])
+        let outcome = await c.operationOutcome(h); guard case .committed = outcome else { return XCTFail("Deadline loss broke the read-back") }
     }
     func testLostSubmissionPersistsAttemptAndRestartCannotSendAgain() async throws {
         let h = try handle(), (s, directory) = try store(); try s.save(h)
