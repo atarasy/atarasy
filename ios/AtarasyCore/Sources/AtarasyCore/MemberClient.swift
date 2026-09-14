@@ -272,6 +272,8 @@ public actor MemberClient {
             let fields = part.split(separator: ":", omittingEmptySubsequences: false)
             return fields.count == 4 && fields[1] == "lost" ? String(fields[0]) : nil
         })
+        // A receipt cannot say the household disputed a line it was never shown.
+        guard !receipt.lines.contains(where: { $0.valence == "lost" && $0.disputed && !signedLost.contains($0.candidate) }) else { throw MemberFailure.scopeMismatch }
         let lines = receipt.lines.compactMap { line -> StatementLine? in
             if line.valence == "lost" {
                 guard signedLost.contains(line.candidate) else { return nil }
