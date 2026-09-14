@@ -59,6 +59,15 @@ describe("§6.5: a box waiting on a signature is one the list can see", () => {
     expect(holdsNextBox(offer({ candidates: [{ id: "c-1", valence: "consumed" }, { id: "c-2", valence: "lost" }] }))).toBe(true);
   });
 
+  test("a box lost at the deadline waits on nothing once the list says what the collection named (question 48)", () => {
+    const deadline = offer({ binding: "physical", state: "expired", candidates: [{ id: "c-1", valence: "lost", collected_as: null }] });
+    expect(awaitsStatement(deadline)).toBe(false);
+    const missing = offer({ binding: "physical", state: "decided", candidates: [{ id: "c-1", valence: "lost", collected_as: "missing" }] });
+    expect(awaitsStatement(missing)).toBe(true);
+    // An engine from before the field: the two cannot be told apart, so the box is shown.
+    expect(awaitsStatement(offer({ binding: "physical", state: "expired", candidates: [{ id: "c-1", valence: "lost" }] }))).toBe(true);
+  });
+
   test("a settled box waits on nothing, and needs no second call to say so", () => {
     expect(awaitsStatement(offer({
       binding: "physical",

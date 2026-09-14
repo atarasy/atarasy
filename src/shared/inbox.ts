@@ -20,7 +20,8 @@ export type InboxOffer = {
   presented_at: number | null;
   expires_at: number;
   giver: string | null;
-  candidates: { id: string; valence: string }[];
+  /** `collected_as` is question 48's; absent from an engine before the field. */
+  candidates: { id: string; valence: string; collected_as?: string | null }[];
 };
 
 /**
@@ -29,18 +30,21 @@ export type InboxOffer = {
  * which is why the state carries the answer and no second call is needed to
  * ask whether money has moved.
  *
- * **A `lost` line counts, and that over-reaches on purpose** (question 46).
- * The list carries a valence and not the collection, so a candidate the
- * collection recorded missing and one the deadline made `lost` look the same
- * here. Leaving `lost` out would keep a box whose only collection lines are
- * missing off this surface, which §6.5 requires the hub to show; counting it
- * files a box lost at the deadline here too, where its statement comes back
- * with no line to sign and the screen says so.
+ * **A `lost` line counts only where the collection recorded it missing**
+ * (question 48, decided 2026-09-15). A line the deadline made `lost` is on no
+ * statement, and until the list carried `collected_as` the two looked the same
+ * here, so every box with a `lost` line was filed as waiting and a box lost at
+ * the deadline opened to a statement with nothing on it. An engine from before
+ * the field sends no `collected_as`, and there the over-reach stays, because
+ * leaving such a line out would keep a box whose only collection lines are
+ * missing off this surface, which §6.5 requires the hub to show.
  */
 export const awaitsStatement = (o: InboxOffer): boolean =>
   o.binding === "physical" &&
   (o.state === "decided" || o.state === "expired") &&
-  o.candidates.some((c) => c.valence === "consumed" || c.valence === "lost");
+  o.candidates.some(
+    (c) => c.valence === "consumed" || (c.valence === "lost" && (c.collected_as === "missing" || c.collected_as === undefined))
+  );
 
 /**
  * §6.5. Whether a waiting box holds this presenter's next one: only goods used

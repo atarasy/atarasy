@@ -22,6 +22,7 @@ private actor StatementFixtureService: MemberStatementService {
     func submitStatement(_ handle: MemberOperationHandle, assertion: MemberPasskeyResponse, store: any MemberOperationStore) async throws -> MemberOperationOutcome { try store.claim(handle, confirmation: "YQ"); return .unresolved }
     func operationOutcome(_ handle: MemberOperationHandle) async -> MemberOperationOutcome { .pending("prepared") }
     func cancelOperation(_ handle: MemberOperationHandle) async throws {}
+    func settlement(offerID: String) async throws -> ProtocolSettlement { throw MemberFailure.unavailable }
 }
 @MainActor private final class StatementFixturePasskeys: MemberPasskeyAuthorising {
     func authorise(_ ceremony: MemberCeremony, kind: NativePasskeyOptions.Kind) async throws -> MemberPasskeyResponse { .assertion(id:"YQ",clientDataJSON:"YQ",authenticatorData:"YQ",signature:"YQ",userHandle:"YQ") }

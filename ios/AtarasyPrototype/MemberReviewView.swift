@@ -2,10 +2,6 @@ import SwiftUI
 import AtarasyCore
 
 struct MemberReviewSections: View {
-    /// Where a line is `lost` but the screen cannot tell a collection's missing record from a
-    /// deadline loss (the offer and settlement reads carry no marker), so it names both. The same
-    /// words are on the web hub's approval screen (`src/client/app.ts`).
-    static let lostOutcome = "Not returned: the collection did not find it in the box, or it was not collected by the deadline. Never charged to you."
     let review: MemberReview
     var body: some View {
         Section("Read-only review") {
@@ -53,7 +49,8 @@ struct MemberReviewSections: View {
             ForEach(Array(settlement.lines.enumerated()), id: \.offset) { _, line in
                 Section("Settled: \(line.product)") {
                     parties(line.merchant, line.maker, line.ships)
-                    if line.valence == "lost" { Text(MemberReviewSections.lostOutcome) }
+                    // The settlement read carries no collected_as, so a settled lost line names both kinds.
+                    if line.valence == "lost" { Text(MemberOfferDetail.lostOutcome(nil, supplied: false)) }
                     else { Text("Outcome: \(line.valence); goods amount: \(line.amount)") }
                     if line.disputed { Text(line.valence == "lost" ? "Disputed: you said it was in the box." : "Disputed: excluded from the goods charge.") }
                 }

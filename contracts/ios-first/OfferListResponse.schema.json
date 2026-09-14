@@ -222,6 +222,20 @@
                       "type": "null"
                     }
                   ]
+                },
+                "collected_as": {
+                  "anyOf": [
+                    {
+                      "enum": [
+                        "returned",
+                        "consumed",
+                        "missing"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
               },
               "required": [
@@ -239,7 +253,8 @@
                 "valence",
                 "decided_at",
                 "kept_as",
-                "lineage"
+                "lineage",
+                "collected_as"
               ]
             }
           },
