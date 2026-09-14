@@ -20,6 +20,14 @@ public struct MemberOperationHandle: Codable, Equatable, Sendable {
     /// SHA-256 of the assertion signature this device submitted. Nil before a submission, and
     /// on handles saved by builds that did not record it.
     public private(set) var confirmationFingerprint: String? = nil
+    /// The same operation, ignoring the session that prepared it. Re-preparing after signing in
+    /// again returns the same operation id, and the new session id alone must not refuse it.
+    func sameOperation(_ other: Self) -> Bool {
+        id == other.id && environment == other.environment && origin == other.origin && household == other.household &&
+        presenter == other.presenter && offer == other.offer && canonical == other.canonical && expiresAt == other.expiresAt &&
+        requestDigest == other.requestDigest && reviewedRevision == other.reviewedRevision && challenge == other.challenge &&
+        credentialID == other.credentialID && attempted == other.attempted && confirmationFingerprint == other.confirmationFingerprint
+    }
     func markedAttempted(confirmation: String) -> Self {
         Self(id: id, environment: environment, origin: origin, sessionID: sessionID, household: household, presenter: presenter, offer: offer, canonical: canonical, expiresAt: expiresAt, requestDigest: requestDigest, reviewedRevision: reviewedRevision, challenge: challenge, credentialID: credentialID, attempted: true, confirmationFingerprint: Canonical.digest(confirmation))
     }
@@ -40,6 +48,9 @@ public enum MemberOperationOutcome: Equatable, Sendable {
     case committed(ProtocolSettlement)
     /// A settlement stands for this offer, but not by the signature this device submitted.
     case settledElsewhere(ProtocolSettlement)
+    /// A settlement stands, and this handle was saved by a build that did not record the signature
+    /// it sent, so whether it is this device's approval cannot be said.
+    case settledUnverified(ProtocolSettlement)
     case pending(String)
     case unresolved
 }
@@ -88,7 +99,7 @@ public final class FileMemberOperationStore: MemberOperationStore, @unchecked Se
     public func save(_ handle: MemberOperationHandle) throws {
         try lock.withLock {
             if let existing = try read(handle.id) {
-                guard existing == handle else { throw MemberFailure.storage }
+                guard existing.sameOperation(handle) else { throw MemberFailure.storage }
             } else { try write(handle) }
         }
     }

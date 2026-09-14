@@ -147,6 +147,14 @@ private struct ReviewVault: MemberSessionVault {
         let other = MemberClient(environment: try .init(name: "test", origin: URL(string: "https://unit.example")!), transport: foreign, vault: ReviewVault(), now: { 1000 })
         _ = try await other.restore(household: "detail-house")
         do { _ = try await other.review(detail: detail); XCTFail() } catch { XCTAssertEqual(error as? MemberFailure, .scopeMismatch) }
+        // A gift box is paid for by its giver, and its settlement is still this household's to see.
+        detailValue["purpose"] = "ceremonial"; detailValue["giver"] = "giver-1"; detailValue["price_band"] = ["min": 0, "max": 5000]
+        let gift = try MemberOfferDetail.decode(JSONSerialization.data(withJSONObject: detailValue), expectedID: detailValue["id"] as! String, household: "detail-house")
+        receipt["payer"] = "giver-1"
+        let giftTransport = ReviewTransport(try JSONSerialization.data(withJSONObject: receipt))
+        let giftClient = MemberClient(environment: try .init(name: "test", origin: URL(string: "https://unit.example")!), transport: giftTransport, vault: ReviewVault(), now: { 1000 })
+        _ = try await giftClient.restore(household: "detail-house")
+        guard case .settlement = try await giftClient.review(detail: gift) else { return XCTFail("A settled gift box was refused") }
     }
     func testReviewDepartureAndReplacementDiscardLateReply() async throws {
         for replace in [false, true] {

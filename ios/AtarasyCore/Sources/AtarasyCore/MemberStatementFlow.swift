@@ -46,6 +46,9 @@ public struct FrozenMemberStatement: Sendable {
     @Published public private(set) var review: FrozenMemberStatement?
     @Published public private(set) var busy = false
     @Published public private(set) var notice = ""
+    /// Offers this flow has seen settle. A statement review loaded before settling is still on the
+    /// screen that opened this flow, so the screen asks here rather than offering preparation again.
+    @Published public private(set) var settledOffers: Set<String> = []
     public var canApprove: Bool { !busy && review != nil && handle?.attempted == false && (handle?.expiresAt ?? 0) > now() && (session?.expiresAt ?? 0) > now() }
     private let environment: MemberEnvironment
     private let service: any MemberStatementService
@@ -59,7 +62,7 @@ public struct FrozenMemberStatement: Sendable {
         self.environment = environment; self.service = service; self.passkeys = passkeys; self.store = store; self.now = now
     }
     public func setSession(_ session: MemberSessionInfo?) {
-        generation &+= 1; self.session = session; handle = nil; prepared = nil; review = nil; saved = []; notice = ""
+        generation &+= 1; self.session = session; handle = nil; prepared = nil; review = nil; saved = []; notice = ""; settledOffers = []
         refreshSaved()
     }
     public func closeReview() { generation &+= 1; handle = nil; prepared = nil; review = nil; notice = "" }
@@ -136,8 +139,9 @@ public struct FrozenMemberStatement: Sendable {
     }
     private func show(_ outcome: MemberOperationOutcome) {
         switch outcome {
-        case .committed(let receipt): notice = "Statement recorded. Goods amount: \(receipt.charged). This record does not confirm provider payment."
-        case .settledElsewhere(let receipt): notice = "This box has settled, but not by the approval this device sent. Goods amount of the settlement that stands: \(receipt.charged). Nothing was resubmitted."
+        case .committed(let receipt): settledOffers.insert(receipt.offer); notice = "Statement recorded. Goods amount: \(receipt.charged). This record does not confirm provider payment."
+        case .settledElsewhere(let receipt): settledOffers.insert(receipt.offer); notice = "This box has settled, but not by the approval this device sent. Goods amount of the settlement that stands: \(receipt.charged). Nothing was resubmitted."
+        case .settledUnverified(let receipt): settledOffers.insert(receipt.offer); notice = "This box has settled. This approval was saved before this device recorded what it signed, so it cannot say the settlement is this approval. Goods amount of the settlement that stands: \(receipt.charged). Nothing was resubmitted."
         case .pending(let state): notice = "No committed result is reported. Current state: \(state). Nothing was resubmitted."
         case .unresolved: notice = "The result is still unknown. Check again later; do not repeat the submission."
         }

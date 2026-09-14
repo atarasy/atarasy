@@ -136,6 +136,27 @@ private struct RefusingOperationStore: MemberOperationStore {
             XCTAssertEqual(receipt.charged, 1200, name)
         }
     }
+    /// A handle saved before this build recorded signatures still settles, but is not called this device's.
+    func testLegacyAttemptedHandleWithoutFingerprintIsNotReportedAsThisDevices() async throws {
+        var saved = try JSONSerialization.jsonObject(with: JSONEncoder().encode(handle())) as! [String: Any]
+        saved["attempted"] = true; saved.removeValue(forKey: "confirmationFingerprint")
+        let legacy = try JSONDecoder().decode(MemberOperationHandle.self, from: data(saved))
+        XCTAssertTrue(legacy.attempted); XCTAssertNil(legacy.confirmationFingerprint)
+        let (c, _) = try await client([data(fixture("committed"))])
+        let outcome = await c.operationOutcome(legacy)
+        guard case .settledUnverified(let receipt) = outcome else { return XCTFail("A legacy handle read back as this device's approval") }
+        XCTAssertEqual(receipt.charged, 1200)
+    }
+    /// Signing in again and preparing the same box returns the same operation, which a new session id must not refuse.
+    func testSavingTheSameOperationFromANewSessionKeepsTheStoredHandle() throws {
+        let h = try handle(), (s, _) = try store(); try s.save(h)
+        var fields = try JSONSerialization.jsonObject(with: JSONEncoder().encode(h)) as! [String: Any]
+        fields["sessionID"] = "a-later-session"
+        let later = try JSONDecoder().decode(MemberOperationHandle.self, from: data(fields))
+        XCTAssertNoThrow(try s.save(later)); XCTAssertEqual(try s.load(id: h.id), h)
+        fields["canonical"] = "changed"
+        XCTAssertThrowsError(try s.save(JSONDecoder().decode(MemberOperationHandle.self, from: data(fields))))
+    }
     /// A result read after signing in again, from the same household.
     func testOutcomeReadsAfterANewSessionForTheSameHousehold() async throws {
         let saved = try JSONSerialization.jsonObject(with: JSONEncoder().encode(handle(submitted: fixtureSignature()))) as! [String: Any]
@@ -238,11 +259,12 @@ private struct RefusingOperationStore: MemberOperationStore {
     var submissions = 0
     var outcomes = 0
     var changed = false
+    var outcome: MemberOperationOutcome = .pending("prepared")
     init(handle: MemberOperationHandle, preparation: MemberPreparedOperation) { self.handle = handle; self.preparation = preparation }
     func prepareStatement(_ local: PreparedMemberStatement, store: any MemberOperationStore) async throws -> (MemberOperationHandle, MemberPreparedOperation) { try store.save(handle); return (handle, preparation) }
     func operationReview(_ handle: MemberOperationHandle) async throws -> MemberPreparedOperation { if changed { throw MemberFailure.scopeMismatch }; return preparation }
     func submitStatement(_ handle: MemberOperationHandle, assertion: MemberPasskeyResponse, store: any MemberOperationStore) async throws -> MemberOperationOutcome { try store.claim(handle, confirmation: "YQ"); submissions += 1; return .unresolved }
-    func operationOutcome(_ handle: MemberOperationHandle) async -> MemberOperationOutcome { outcomes += 1; return .pending("prepared") }
+    func operationOutcome(_ handle: MemberOperationHandle) async -> MemberOperationOutcome { outcomes += 1; return outcome }
     func cancelOperation(_ handle: MemberOperationHandle) async throws {}
 }
 @MainActor private final class FlowPasskeys: MemberPasskeyAuthorising {
@@ -316,6 +338,21 @@ extension MemberOperationTransportTests {
         // A new sign-in by the same household still sees what it prepared; another household does not.
         flow.setSession(MemberSessionInfo(id: "other", household: info.household, presenters: info.presenters, expiresAt: info.expiresAt)); XCTAssertEqual(flow.saved.count, 1)
         flow.setSession(MemberSessionInfo(id: "other", household: "another-house", presenters: info.presenters, expiresAt: info.expiresAt)); XCTAssertTrue(flow.saved.isEmpty)
+    }
+    /// A box seen to settle is remembered, so a statement review loaded before settling does not offer preparation again.
+    func testSettledOutcomeIsRememberedAcrossClosingTheReview() async throws {
+        let (flow, service, _, detail, statement, info) = try flowSetup()
+        await flow.prepare(detail: detail, statement: statement, disputed: [])
+        var receipt = try fixture("committed")["receipt"] as! [String: Any]; receipt["offer"] = detail.id
+        let settlement = try JSONDecoder().decode(ProtocolSettlement.self, from: data(receipt))
+        for outcome in [MemberOperationOutcome.committed(settlement), .settledElsewhere(settlement), .settledUnverified(settlement)] {
+            flow.setSession(info); XCTAssertTrue(flow.settledOffers.isEmpty)
+            service.outcome = outcome
+            await flow.check(flow.saved[0]); flow.closeReview()
+            XCTAssertTrue(flow.settledOffers.contains(detail.id), "\(outcome)")
+        }
+        service.outcome = .pending("prepared"); flow.setSession(info)
+        await flow.check(flow.saved[0]); XCTAssertFalse(flow.settledOffers.contains(detail.id))
     }
     func testCancellingPreparedStatementClosesApprovalWithoutSigning() async throws {
         let (flow, service, passkeys, detail, statement, _) = try flowSetup()

@@ -928,9 +928,11 @@ async function statement(member: Member, offerId: string) {
             // whether it is this member's is read rather than guessed. A
             // second tab or device signs the same statement, so matching lines
             // alone do not say it.
-            const mine = typeof stood.body.confirmation === "string"
-              ? stood.body.confirmation === assertion.signature ? "unanswered-mine" : "unanswered-other"
-              : "unanswered-unknown";
+            // `null` is a settlement no signature made, so not this one.
+            const recorded = stood.body.confirmation;
+            const mine = recorded === assertion.signature
+              ? "unanswered-mine"
+              : typeof recorded === "string" || recorded === null ? "unanswered-other" : "unanswered-unknown";
             show(el("h1", {}, "Atarasy"), receipt(stood.body, mine), back(member));
             return;
           }
@@ -1032,13 +1034,13 @@ function receipt(r: Receipt, path: ReceiptPath): Node {
     // **Which signature settled it is not the same question on the two paths
     // that reach here**, and one sentence said the same thing on both. After a
     // refusal the engine has told us this signature was not the one; after no
-    // answer at all it very probably was. Saying "what you just signed did not
-    // settle it" on the second is the opposite of the truth.
+    // answer at all the settlement's confirmation says whether it was, and a
+    // guess either way is what the review of atarasy #5 took out.
     ...(stood
       ? [el("p", { class: "muted" }, {
           refused: "What you just signed is not what settled it. This is the settlement that stands, and nothing was charged twice.",
           "unanswered-mine": "The answer to your signature never came back, but this settlement carries the signature you just gave. Nothing was charged twice.",
-          "unanswered-other": "The answer to your signature never came back, and the settlement that stands carries a different signature, so what you just signed is not what settled it. Nothing was charged twice.",
+          "unanswered-other": "The answer to your signature never came back, and the settlement that stands was not made by the signature you just gave. Nothing was charged twice.",
           "unanswered-unknown": "The answer to your signature never came back, and this is the settlement that stands. This screen could not read which signature made it. Nothing was charged twice.",
         }[path as Exclude<ReceiptPath, "signed">])]
       : []),

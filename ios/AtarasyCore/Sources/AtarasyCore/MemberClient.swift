@@ -171,7 +171,8 @@ public actor MemberClient {
             let (reply, session) = try await read("/offers/" + detail.id + "/settlement")
             guard same(session.household, detail.household), session.presenters.contains(where: { same($0, detail.presenter) }) else { throw MemberFailure.scopeMismatch }
             let receipt = try ReferenceResponseReader.settlement(status: reply.status, contentType: reply.contentType, data: reply.data, expectedOffer: detail.id)
-            guard same(receipt.payer, detail.household), same(receipt.signedBy, detail.presenter) else { throw MemberFailure.scopeMismatch }
+            // A giver pays for a gift box, so the payer is the giver where there is one.
+            guard same(receipt.payer, detail.giver ?? detail.household), same(receipt.signedBy, detail.presenter) else { throw MemberFailure.scopeMismatch }
             return .settlement(receipt)
         }
         let (reply, session) = try await read("/offers/" + detail.id + (detail.binding == "physical" ? "/statement" : "/approval"))
@@ -207,8 +208,9 @@ public actor MemberClient {
         guard UUID(uuidString: handle.id)?.uuidString.lowercased() == handle.id,
               let session = active?.info, live(session.expiresAt),
               same(handle.environment, environment.name), handle.origin == environment.origin,
-              // Not the session id: the journal lets a new sign-in by the same credential read its
-              // own history, and binding to the session stranded a result after signing in again.
+              // Not the session id: binding to it stranded a result after signing in again. The journal
+              // authorises by credential ownership, which the client cannot check because session info
+              // carries no credential; a different passkey for this household is refused by the server.
               same(handle.household, session.household),
               session.presenters.contains(where: { same($0, handle.presenter) }) else { throw MemberFailure.scopeMismatch }
     }
@@ -252,8 +254,9 @@ public actor MemberClient {
         guard prepared.operationState == "prepared", live(prepared.expiresAt), prepared.expiresAt <= info.expiresAt else { throw MemberFailure.expired }
         guard case .string(let challenge) = prepared.publicKey["challenge"], case .array(let allowed) = prepared.publicKey["allowCredentials"], case .object(let credential) = allowed[0], case .string(let credentialID) = credential["id"] else { throw MemberFailure.malformed }
         let handle = MemberOperationHandle(id: prepared.operationID, environment: environment.name, origin: environment.origin, sessionID: info.id, household: info.household, presenter: local.presenter, offer: local.offer, canonical: local.canonical, expiresAt: prepared.expiresAt, requestDigest: prepared.requestDigest, reviewedRevision: prepared.reviewedRevision, challenge: challenge, credentialID: credentialID, attempted: false)
-        do { try store.save(handle) } catch { throw MemberFailure.storage }
-        return (handle, prepared)
+        // A handle saved by an earlier session for the same operation is the one to keep: its session
+        // id differs, and `claim` compares against what is stored.
+        do { try store.save(handle); return (try store.load(id: handle.id) ?? handle, prepared) } catch { throw MemberFailure.storage }
     }
     public func operationReview(_ handle: MemberOperationHandle) async throws -> MemberPreparedOperation {
         try operationScope(handle)
@@ -294,9 +297,8 @@ public actor MemberClient {
         // The receipt names the signature that settled the offer. Matching lines do not show it was
         // this device's: another device, or a second attempt, signs the same statement.
         guard handle.attempted else { return .settledElsewhere(receipt) }
-        if let fingerprint = handle.confirmationFingerprint {
-            guard let confirmation = receipt.confirmation, same(Canonical.digest(confirmation), fingerprint) else { return .settledElsewhere(receipt) }
-        }
+        guard let fingerprint = handle.confirmationFingerprint else { return .settledUnverified(receipt) }
+        guard let confirmation = receipt.confirmation, same(Canonical.digest(confirmation), fingerprint) else { return .settledElsewhere(receipt) }
         return .committed(receipt)
     }
     /// A failed read never establishes that dispatch had no effect.

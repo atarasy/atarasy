@@ -609,8 +609,14 @@ describe("what a member is shown after signing a statement", () => {
       () => ({ status: 0, body: {} }),
       () => ({ status: 200, body: { charged: 1200, disputed_amount: 0, confirmation: "c29tZW9uZSBlbHNl" } })
     );
-    expect(other).toContain("carries a different signature");
+    expect(other).toContain("was not made by the signature you just gave");
     expect(other).not.toContain("carries the signature you just gave");
+    // `null` is a settlement no signature made, which is knowable, not unreadable.
+    const unsigned = await sign(
+      () => ({ status: 0, body: {} }),
+      () => ({ status: 200, body: { charged: 1200, disputed_amount: 0, confirmation: null } })
+    );
+    expect(unsigned).toContain("was not made by the signature you just gave");
     const unread = await sign(
       () => ({ status: 0, body: {} }),
       () => ({ status: 200, body: { charged: 1200, disputed_amount: 0 } })
