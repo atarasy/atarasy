@@ -15,7 +15,9 @@ private struct MemberWindowReader: UIViewRepresentable {
     let reference: MemberWindow
     final class Probe: UIView {
         var reference: MemberWindow?
-        override func didMoveToWindow() { super.didMoveToWindow(); reference?.window = window }
+        // A pushed screen takes this probe off the window. Keep the last window so a
+        // statement approval on that screen still has an anchor for the passkey sheet.
+        override func didMoveToWindow() { super.didMoveToWindow(); if let window { reference?.window = window } }
     }
     func makeUIView(context: Context) -> Probe { let view = Probe(); view.reference = reference; return view }
     func updateUIView(_ uiView: Probe, context: Context) { uiView.reference = reference }
