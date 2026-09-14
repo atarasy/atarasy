@@ -253,8 +253,7 @@
                 "valence",
                 "decided_at",
                 "kept_as",
-                "lineage",
-                "collected_as"
+                "lineage"
               ]
             }
           },
