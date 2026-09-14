@@ -3,63 +3,63 @@
   "sources": [
     {
       "repo": "atarasy",
-      "commit": "42735e4b33f6a80adf792cfa0359845bfa097d98",
+      "commit": "295ccff13f0530820e1875b62ee6787a5a461732",
       "path": "src/shared/canonical.ts",
-      "sha256": "550c76bfe9829afb264643b8504bc50eec9cd4fb9dfafa5860437ac63098a355"
+      "sha256": "3f64229b7fc6ae78cd0372db4d7e0ba40bea8cc0af8eba9eb20dc379ee5cd4e5"
     },
     {
       "repo": "atarasy",
-      "commit": "42735e4b33f6a80adf792cfa0359845bfa097d98",
+      "commit": "295ccff13f0530820e1875b62ee6787a5a461732",
       "path": "src/shared/mandate.ts",
       "sha256": "8002ea2d4731aadb293ae46871c7a957a24e0a2a16da7dfb224bb194c302e140"
     },
     {
       "repo": "valence",
-      "commit": "0039bd17ec238d43ebf34e77c89ec51b4105cf5e",
+      "commit": "67df23142ba9ac9aee0fd59ea9abc939e8a47742",
       "path": "engine/src/http.ts",
-      "sha256": "da14afa4e293ce4976a9dff8abdf5153e55d32a9febb3986d2dc861136f26140"
+      "sha256": "348b5371c4e0a34d6f0b3827a65bb5fc287e17aa2de5f9e7b29fe7bb532bf3c1"
     },
     {
       "repo": "valence",
-      "commit": "0039bd17ec238d43ebf34e77c89ec51b4105cf5e",
+      "commit": "67df23142ba9ac9aee0fd59ea9abc939e8a47742",
       "path": "engine/src/shared/decisions.ts",
       "sha256": "d76009dd22471f34f737a2193ca02ba7f86a3169eddcceba8e6f92f4bd01cd04"
     },
     {
       "repo": "valence",
-      "commit": "0039bd17ec238d43ebf34e77c89ec51b4105cf5e",
+      "commit": "67df23142ba9ac9aee0fd59ea9abc939e8a47742",
       "path": "engine/src/shared/statement.ts",
-      "sha256": "3f92fece541f4fa63063baa5a0db5f72001c1b5415b21343e98a3a288a69877b"
+      "sha256": "e094e93ee48b13bb8bf92ed4f92b0c1274d4abdf223b28dc169049a910f59f01"
     },
     {
       "repo": "valence",
-      "commit": "0039bd17ec238d43ebf34e77c89ec51b4105cf5e",
+      "commit": "67df23142ba9ac9aee0fd59ea9abc939e8a47742",
       "path": "engine/src/hub/statement.ts",
-      "sha256": "9c206a37e7d7fbb2b70cd7a0ab8bc242142157dd8b8a855a40154a88b25eeba9"
+      "sha256": "08177fae9f81e971b9b3f38fb4ba12cd025dc5a07ef70bd2b83e14e2e6fac5d3"
     },
     {
       "repo": "valence",
-      "commit": "0039bd17ec238d43ebf34e77c89ec51b4105cf5e",
+      "commit": "67df23142ba9ac9aee0fd59ea9abc939e8a47742",
       "path": "engine/src/hub/mandates.ts",
       "sha256": "87ac1e1fe31acd5216f1063c6c57affd37d0d5c1bcd65a9112d9d0cad0afa57b"
     },
     {
       "repo": "valence",
-      "commit": "0039bd17ec238d43ebf34e77c89ec51b4105cf5e",
+      "commit": "67df23142ba9ac9aee0fd59ea9abc939e8a47742",
       "path": "engine/src/common/store.ts",
       "sha256": "940ac7d92563739722756406e55de9ed89e9175441709721b3a4a7046e2ee89b"
     },
     {
       "repo": "valence",
-      "commit": "0039bd17ec238d43ebf34e77c89ec51b4105cf5e",
+      "commit": "67df23142ba9ac9aee0fd59ea9abc939e8a47742",
       "path": "engine/src/common/errors.ts",
       "sha256": "d84cd11ad8a2fbda6b5d013e4a35d3c58246e4c7cdb90af34a46c972f6452ffe"
     },
     {
       "repo": "valence",
-      "commit": "0039bd17ec238d43ebf34e77c89ec51b4105cf5e",
+      "commit": "67df23142ba9ac9aee0fd59ea9abc939e8a47742",
       "path": "engine/src/common/types.ts",
-      "sha256": "dc327dc8bd49094c2e8d624b2d8fa2290c6c297b85d3747506726b8916ee5f25"
+      "sha256": "5305c05a824aa165c4b946a30036a185938056590dcc54620cc41157d0846f96"
     }
   ],
   "schema_limits": [

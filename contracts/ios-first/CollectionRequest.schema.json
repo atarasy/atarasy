@@ -17,6 +17,21 @@
         "type": "string",
         "minLength": 1
       }
+    },
+    "missing": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "missing_notes": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 500
+      }
     }
   },
   "required": [
