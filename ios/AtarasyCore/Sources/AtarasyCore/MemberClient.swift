@@ -171,8 +171,7 @@ public actor MemberClient {
             let (reply, session) = try await read("/offers/" + detail.id + "/settlement")
             guard same(session.household, detail.household), session.presenters.contains(where: { same($0, detail.presenter) }) else { throw MemberFailure.scopeMismatch }
             let receipt = try ReferenceResponseReader.settlement(status: reply.status, contentType: reply.contentType, data: reply.data, expectedOffer: detail.id)
-            // A giver pays for a gift box, so the payer is the giver where there is one.
-            guard same(receipt.payer, detail.giver ?? detail.household), same(receipt.signedBy, detail.presenter) else { throw MemberFailure.scopeMismatch }
+            guard same(receipt.payer, detail.household), same(receipt.signedBy, detail.presenter) else { throw MemberFailure.scopeMismatch }
             return .settlement(receipt)
         }
         let (reply, session) = try await read("/offers/" + detail.id + (detail.binding == "physical" ? "/statement" : "/approval"))

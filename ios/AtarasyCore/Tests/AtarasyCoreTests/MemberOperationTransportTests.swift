@@ -240,6 +240,35 @@ private struct RefusingOperationStore: MemberOperationStore {
         }
     }
 
+    /// Signing in again and preparing the same box must hand back the handle already stored, or the
+    /// claim before submission refuses it as busy and the approval is stranded.
+    func testPreparingAgainAfterANewSignInReturnsTheStoredHandleSoItCanBeClaimed() async throws {
+        let url = Bundle.module.url(forResource: "member-transaction-responses", withExtension: "json", subdirectory: "Fixtures")!
+        let cases = (try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: Any])["cases"] as! [[String: Any]]
+        func value(_ name: String) -> [String: Any] { cases.first { $0["name"] as? String == name }!["value"] as! [String: Any] }
+        let detailValue = value("physical-detail"), statementValue = value("physical-known-carriage")
+        let detail = try MemberOfferDetail.decode(data(detailValue), expectedID: detailValue["id"] as! String, household: "detail-house")
+        let statement = try MemberStatement.decode(data(statementValue), detail: detail)
+        let environment = try MemberEnvironment(name: "test", origin: URL(string: "https://unit.example")!)
+        let (storage, _) = try store()
+        var stored: MemberOperationHandle?
+        for sessionID in ["earlier-session", "later-session"] {
+            let localInfo = MemberSessionInfo(id: sessionID, household: "detail-house", presenters: ["merchant-1"], expiresAt: 5000)
+            let local = try PreparedMemberStatement(environment: environment, session: localInfo, detail: detail, statement: statement, disputed: [], now: 1000)
+            var reply = try fixture("prepared"), review = reply["review"] as! [String: Any]
+            var serverStatement = statementValue; serverStatement.removeValue(forKey: "challenge")
+            review["statement"] = serverStatement; review["disputed"] = [] as [String]
+            var mandate = review["mandate"] as! [String: Any]; mandate["household"] = localInfo.household; review["mandate"] = mandate
+            reply["review"] = review; reply["canonical"] = local.canonical; reply["expiresAt"] = 2000
+            let transport = RuntimeTransport(info: localInfo, replies: [try data(reply)])
+            let client = MemberClient(environment: environment, transport: transport, vault: RuntimeVault(info: localInfo), now: { 1000 })
+            _ = try await client.restore(household: localInfo.household)
+            let (handle, _) = try await client.prepareStatement(local, store: storage)
+            if let stored { XCTAssertEqual(handle, stored) } else { stored = handle }
+        }
+        XCTAssertEqual(stored?.sessionID, "earlier-session")
+        XCTAssertNoThrow(try storage.claim(XCTUnwrap(stored), confirmation: "YQ"))
+    }
     func testMatchingTamperedCheckpointAndResponseStillNeedValidContextualChallenge() async throws {
         let h = try handle()
         var saved = try JSONSerialization.jsonObject(with: JSONEncoder().encode(h)) as! [String: Any]

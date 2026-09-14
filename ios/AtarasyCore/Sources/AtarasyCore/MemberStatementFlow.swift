@@ -93,7 +93,7 @@ public struct FrozenMemberStatement: Sendable {
             guard Data(local.canonical.utf8) == Data(prepared.canonical.utf8), frozen.disputed.map({ Data($0.utf8) }).sorted(by: { $0.lexicographicallyPrecedes($1) }) == disputed.map({ Data($0.utf8) }).sorted(by: { $0.lexicographicallyPrecedes($1) }) else { throw MemberFailure.scopeMismatch }
             self.prepared = prepared; review = frozen
             notice = "Read the frozen statement and mandate before approving."
-        } catch { if current == generation { notice = "The statement could not be prepared. Check saved operations before trying again."; refreshSaved() } }
+        } catch { if current == generation { notice = "The statement could not be prepared. The box may already have settled; go back and load it again, and check saved operations before trying again."; refreshSaved() } }
     }
     public func approve() async {
         guard canApprove, let handle, let prepared, let session else { return }
@@ -140,10 +140,10 @@ public struct FrozenMemberStatement: Sendable {
     private func show(_ outcome: MemberOperationOutcome) {
         switch outcome {
         case .committed(let receipt): settledOffers.insert(receipt.offer); notice = "Statement recorded. Goods amount: \(receipt.charged). This record does not confirm provider payment."
-        case .settledElsewhere(let receipt): settledOffers.insert(receipt.offer); notice = "This box has settled, but not by the approval this device sent. Goods amount of the settlement that stands: \(receipt.charged). Nothing was resubmitted."
+        case .settledElsewhere(let receipt): settledOffers.insert(receipt.offer); notice = "This box has settled, but not by an approval this device sent. Goods amount of the settlement that stands: \(receipt.charged). Nothing was resubmitted."
         case .settledUnverified(let receipt): settledOffers.insert(receipt.offer); notice = "This box has settled. This approval was saved before this device recorded what it signed, so it cannot say the settlement is this approval. Goods amount of the settlement that stands: \(receipt.charged). Nothing was resubmitted."
         case .pending(let state): notice = "No committed result is reported. Current state: \(state). Nothing was resubmitted."
-        case .unresolved: notice = "The result is still unknown. Check again later; do not repeat the submission."
+        case .unresolved: notice = "The result could not be read. Check again later. An approval made with another passkey cannot be read on this one; do not repeat a submission this passkey made."
         }
     }
 }
