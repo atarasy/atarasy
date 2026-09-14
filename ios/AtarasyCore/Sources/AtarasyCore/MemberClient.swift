@@ -265,7 +265,22 @@ public actor MemberClient {
         guard same(receipt.payer, handle.household), same(receipt.signedBy, handle.presenter), receipt.signedAs == "agent" else { throw MemberFailure.scopeMismatch }
         let canonicalParts = handle.canonical.split(separator: "\n", omittingEmptySubsequences: false)
         guard canonicalParts.count >= 3, let carriage = Int64(canonicalParts[2]) else { throw MemberFailure.malformed }
-        let lines = receipt.lines.filter { $0.valence != "lost" }.map { StatementLine(candidate: $0.candidate, valence: $0.valence, amount: $0.amount, disputed: $0.disputed) }
+        // Question 46: a line the collection recorded missing is on the signed statement at 0,
+        // while the receipt carries it at its stock value. A lost line the deadline made is
+        // on the receipt and not on the statement, so only lost lines the statement names stay.
+        let signedLost = Set(canonicalParts.dropFirst(3).compactMap { part -> String? in
+            let fields = part.split(separator: ":", omittingEmptySubsequences: false)
+            return fields.count == 4 && fields[1] == "lost" ? String(fields[0]) : nil
+        })
+        // A receipt cannot say the household disputed a line it was never shown.
+        guard !receipt.lines.contains(where: { $0.valence == "lost" && $0.disputed && !signedLost.contains($0.candidate) }) else { throw MemberFailure.scopeMismatch }
+        let lines = receipt.lines.compactMap { line -> StatementLine? in
+            if line.valence == "lost" {
+                guard signedLost.contains(line.candidate) else { return nil }
+                return StatementLine(candidate: line.candidate, valence: "lost", amount: 0, disputed: line.disputed)
+            }
+            return StatementLine(candidate: line.candidate, valence: line.valence, amount: line.amount, disputed: line.disputed)
+        }
         guard same(try Canonical.statement(offer: handle.offer, carriage: carriage, lines: lines), handle.canonical) else { throw MemberFailure.scopeMismatch }
         return .committed(receipt)
     }
