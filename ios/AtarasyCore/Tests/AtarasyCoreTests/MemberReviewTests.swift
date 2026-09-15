@@ -50,6 +50,19 @@ private struct ReviewVault: MemberSessionVault {
         XCTAssertTrue(known.disclosures.contains { $0.product == nil }); XCTAssertTrue(known.disclosures.contains { $0.product == "tea-b" })
         XCTAssertEqual(known.candidates[1].disclosure.product, "tea-b")
     }
+    /// §3, question 48. An engine that carries `collected_as` on the approval is accepted, whole and valid only.
+    func testApprovalAcceptsCollectedAsWholeAndValidOnly() throws {
+        let detail = try reviewDetail("digital")
+        var value = try reviewValue("digital-known-carriage")
+        var rows = value["candidates"] as! [[String: Any]]
+        rows = rows.map { var r = $0; r["collected_as"] = NSNull(); return r }
+        value["candidates"] = rows
+        XCTAssertNoThrow(try MemberApproval.decode(JSONSerialization.data(withJSONObject: value), detail: detail))
+        var partial = value, some = rows; some[0].removeValue(forKey: "collected_as"); partial["candidates"] = some
+        XCTAssertThrowsError(try MemberApproval.decode(JSONSerialization.data(withJSONObject: partial), detail: detail))
+        var wrong = value, bad = rows; bad[0]["collected_as"] = "lost"; wrong["candidates"] = bad
+        XCTAssertThrowsError(try MemberApproval.decode(JSONSerialization.data(withJSONObject: wrong), detail: detail))
+    }
     func testActualStatementChecksChallengeGiftAndUnknownCarriage() throws {
         let detail = try reviewDetail("physical")
         let unknown = try MemberStatement.decode(data("physical-unknown-carriage"), detail: detail)

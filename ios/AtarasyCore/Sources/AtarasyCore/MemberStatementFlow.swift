@@ -73,7 +73,8 @@ public struct FrozenMemberStatement: Sendable {
         guard let session, session.expiresAt > now() else { return }
         let current = generation
         guard let receipt = try? await service.settlement(offerID: offerID), current == generation,
-              Data(receipt.offer.utf8) == Data(offerID.utf8), Data(receipt.payer.utf8) == Data(session.household.utf8) else { return }
+              Data(receipt.offer.utf8) == Data(offerID.utf8), Data(receipt.payer.utf8) == Data(session.household.utf8),
+              session.presenters.contains(where: { Data($0.utf8) == Data(receipt.signedBy.utf8) }) else { return }
         settledOffers.insert(offerID)
     }
     public func closeReview() { generation &+= 1; handle = nil; prepared = nil; review = nil; notice = "" }

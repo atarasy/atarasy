@@ -392,7 +392,10 @@ extension MemberOperationTransportTests {
         var receipt = try fixture("committed")["receipt"] as! [String: Any]; receipt["offer"] = detail.id; receipt["payer"] = "another-house"
         service.settled = try JSONDecoder().decode(ProtocolSettlement.self, from: data(receipt))
         await flow.checkSettled(offerID: detail.id); XCTAssertFalse(flow.settledOffers.contains(detail.id), "another household's settlement")
-        receipt["payer"] = info.household
+        receipt["payer"] = info.household; receipt["signed_by"] = "a-presenter-this-session-does-not-hold"
+        service.settled = try JSONDecoder().decode(ProtocolSettlement.self, from: data(receipt))
+        await flow.checkSettled(offerID: detail.id); XCTAssertFalse(flow.settledOffers.contains(detail.id), "signed by a presenter outside the session")
+        receipt["signed_by"] = info.presenters[0]
         service.settled = try JSONDecoder().decode(ProtocolSettlement.self, from: data(receipt))
         await flow.checkSettled(offerID: detail.id); XCTAssertTrue(flow.settledOffers.contains(detail.id))
     }

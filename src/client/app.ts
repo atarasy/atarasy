@@ -967,8 +967,10 @@ async function statement(member: Member, offerId: string) {
     // the seller: this box is one presenter's and several merchants'. The
     // statement names the merchants line by line and carries no presenter, so
     // the sentence names neither rather than naming the wrong one.
-    // §6.5, question 46. Only goods used hold the next box.
-    el("p", { class: "muted" }, st.lines.some((l) => l.valence === "consumed")
+    // The engine's rule: goods used hold the next box, and so does a missing
+    // line beside a kept or defaulted one (question 46, decided 2026-09-14).
+    el("p", { class: "muted" }, st.lines.some((l) => l.valence === "consumed") ||
+      (st.lines.some((l) => l.valence === "lost") && st.lines.some((l) => l.valence === "kept" || l.valence === "defaulted"))
       ? "The route wrote this down. Nothing is charged until you sign it, and no further box comes from whoever sent this one while it waits."
       : "The route wrote this down. Nothing is charged until you sign it."),
     // §6.5, §10a.5. **The offer's expiry, because a merchant's block may state

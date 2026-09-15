@@ -47,10 +47,19 @@ export const awaitsStatement = (o: InboxOffer): boolean =>
   );
 
 /**
- * §6.5. Whether a waiting box holds this presenter's next one: only goods used
- * do, because a box whose collection recorded only missing lines owes nothing.
+ * §6.5, question 46. Whether a waiting box holds this presenter's next one,
+ * the same rule as the engine's `hasUnsignedStatement`: goods used hold it, and
+ * so does a line the collection recorded missing beside a kept, defaulted or
+ * consumed line, so a household cannot receive the next box by never signing.
+ * A box whose only collection lines are missing owes nothing and holds nothing.
+ * This said "only goods used" until a refutation pass on 2026-09-15 read it
+ * against the engine: the list told a household its next box was not held
+ * while the engine refused it with `statement_unsigned`.
  */
-export const holdsNextBox = (o: InboxOffer): boolean => o.candidates.some((c) => c.valence === "consumed");
+export const holdsNextBox = (o: InboxOffer): boolean =>
+  o.candidates.some((c) => c.valence === "consumed") ||
+  (o.candidates.some((c) => c.valence === "lost" && (c.collected_as === "missing" || c.collected_as === undefined)) &&
+    o.candidates.some((c) => c.valence === "kept" || c.valence === "defaulted"));
 
 /**
  * §10, §11. A line nobody has decided yet. A physical box is collected line by
