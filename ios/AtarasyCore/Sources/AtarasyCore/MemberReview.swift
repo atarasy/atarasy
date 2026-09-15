@@ -29,7 +29,8 @@ public struct MemberApproval: Decodable, Equatable, Sendable {
         let object = try ReviewValidation.object(data, keys: "price_band disclosures offer presenter expires_at carriage reminded mandate candidates excluded")
         try ReviewValidation.shape(object["mandate"], keys: "kind scope lapses_at")
         if !(object["price_band"] is NSNull) { try ReviewValidation.shape(object["price_band"], keys: "min max") }
-        try ReviewValidation.rows(object["candidates"], keys: "merchant maker ships given_by id product quantity unit_price is_exploration valence alternatives argument_against disclosure", reference: true)
+        try ReviewValidation.rows(object["candidates"], keys: "merchant maker ships given_by id product quantity unit_price is_exploration valence alternatives argument_against disclosure", optional: "collected_as", reference: true)
+        _ = try ReviewValidation.collectedAs(object["candidates"])
         try ReviewValidation.rows(object["excluded"], keys: "product reason")
         try ReviewValidation.disclosureShape(object["disclosures"])
         let value: Self = try ReviewValidation.decode(data)
@@ -102,7 +103,7 @@ public struct MemberStatement: Decodable, Equatable, Sendable {
         return value
     }
 }
-private enum ReviewValidation {
+enum ReviewValidation {
     static func same(_ a: String, _ b: String) -> Bool { Data(a.utf8) == Data(b.utf8) }
     static func sameOptional(_ a: String?, _ b: String?) -> Bool {
         switch (a, b) { case (.none, .none): return true; case let (.some(a), .some(b)): return same(a, b); default: return false }
@@ -112,16 +113,29 @@ private enum ReviewValidation {
         let decoder = JSONDecoder(); decoder.keyDecodingStrategy = .convertFromSnakeCase
         do { return try decoder.decode(T.self, from: data) } catch { throw MemberFailure.malformed }
     }
-    static func shape(_ value: Any?, keys: String) throws {
-        guard let value = value as? [String: Any], Set(value.keys) == Set(keys.split(separator: " ").map(String.init)) else { throw MemberFailure.malformed }
+    /// `optional` names keys a newer engine adds and an older one omits; any other difference is refused.
+    static func shape(_ value: Any?, keys: String, optional: String = "") throws {
+        let required = Set(keys.split(separator: " ").map(String.init)), extra = Set(optional.split(separator: " ").map(String.init))
+        guard let value = value as? [String: Any], Set(value.keys).subtracting(extra) == required else { throw MemberFailure.malformed }
     }
     static func object(_ data: Data, keys: String) throws -> [String: Any] {
         guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw MemberFailure.malformed }
         try shape(object, keys: keys); return object
     }
-    static func rows(_ value: Any?, keys: String, reference: Bool = false) throws {
+    static func rows(_ value: Any?, keys: String, optional: String = "", reference: Bool = false) throws {
         guard let rows = value as? [[String: Any]] else { throw MemberFailure.malformed }
-        for row in rows { try shape(row, keys: keys); if reference { try shape(row["disclosure"], keys: "merchant product") } }
+        for row in rows { try shape(row, keys: keys, optional: optional); if reference { try shape(row["disclosure"], keys: "merchant product") } }
+    }
+    /// §3, question 48. Where an engine sends `collected_as` it sends it on every row, as null or a collection verdict.
+    static func collectedAs(_ value: Any?) throws -> Bool {
+        guard let rows = value as? [[String: Any]] else { throw MemberFailure.malformed }
+        let present = rows.filter { $0.keys.contains("collected_as") }.count
+        guard present == 0 || present == rows.count else { throw MemberFailure.malformed }
+        guard rows.allSatisfy({ row in
+            guard let v = row["collected_as"] else { return true }
+            return v is NSNull || ["returned", "consumed", "missing"].contains(v as? String ?? "")
+        }) else { throw MemberFailure.malformed }
+        return present > 0
     }
     static func disclosureShape(_ value: Any?) throws {
         try rows(value, keys: "merchant product version items signature")

@@ -295,6 +295,8 @@ private struct RefusingOperationStore: MemberOperationStore {
     func submitStatement(_ handle: MemberOperationHandle, assertion: MemberPasskeyResponse, store: any MemberOperationStore) async throws -> MemberOperationOutcome { try store.claim(handle, confirmation: "YQ"); submissions += 1; return .unresolved }
     func operationOutcome(_ handle: MemberOperationHandle) async -> MemberOperationOutcome { outcomes += 1; return outcome }
     func cancelOperation(_ handle: MemberOperationHandle) async throws {}
+    var settled: ProtocolSettlement?
+    func settlement(offerID: String) async throws -> ProtocolSettlement { guard let settled else { throw MemberFailure.http(404) }; return settled }
 }
 @MainActor private final class FlowPasskeys: MemberPasskeyAuthorising {
     var calls = 0
@@ -382,6 +384,20 @@ extension MemberOperationTransportTests {
         }
         service.outcome = .pending("prepared"); flow.setSession(info)
         await flow.check(flow.saved[0]); XCTAssertFalse(flow.settledOffers.contains(detail.id))
+    }
+    /// A box settled by another route while its statement screen opens is seen as settled before preparation is offered.
+    func testCheckSettledMarksABoxSettledElsewhere() async throws {
+        let (flow, service, _, detail, _, info) = try flowSetup()
+        await flow.checkSettled(offerID: detail.id); XCTAssertFalse(flow.settledOffers.contains(detail.id))
+        var receipt = try fixture("committed")["receipt"] as! [String: Any]; receipt["offer"] = detail.id; receipt["payer"] = "another-house"
+        service.settled = try JSONDecoder().decode(ProtocolSettlement.self, from: data(receipt))
+        await flow.checkSettled(offerID: detail.id); XCTAssertFalse(flow.settledOffers.contains(detail.id), "another household's settlement")
+        receipt["payer"] = info.household; receipt["signed_by"] = "a-presenter-this-session-does-not-hold"
+        service.settled = try JSONDecoder().decode(ProtocolSettlement.self, from: data(receipt))
+        await flow.checkSettled(offerID: detail.id); XCTAssertFalse(flow.settledOffers.contains(detail.id), "signed by a presenter outside the session")
+        receipt["signed_by"] = info.presenters[0]
+        service.settled = try JSONDecoder().decode(ProtocolSettlement.self, from: data(receipt))
+        await flow.checkSettled(offerID: detail.id); XCTAssertTrue(flow.settledOffers.contains(detail.id))
     }
     func testCancellingPreparedStatementClosesApprovalWithoutSigning() async throws {
         let (flow, service, passkeys, detail, statement, _) = try flowSetup()

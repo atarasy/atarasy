@@ -38,6 +38,31 @@ private actor DetailTransport: MemberHTTPTransport {
     }
 }
 @MainActor final class MemberDetailTests: XCTestCase {
+    /// §3, question 48. `collected_as` is accepted from an engine that sends it, validated, and optional for one that does not.
+    func testCollectedAsIsOptionalButWhole() throws {
+        var value = try detailValue("physical-collected")
+        func decode(_ v: [String: Any]) throws -> MemberOfferDetail {
+            try MemberOfferDetail.decode(JSONSerialization.data(withJSONObject: v), expectedID: v["id"] as! String, household: "detail-house", presenter: "merchant-1")
+        }
+        XCTAssertEqual(try decode(value).collectedAsSupplied, false)
+        var rows = value["candidates"] as! [[String: Any]]
+        rows = rows.enumerated().map { i, r in var r = r; r["valence"] = i == 0 ? "lost" : r["valence"]; r["collected_as"] = i == 0 ? "missing" : NSNull(); return r }
+        value["candidates"] = rows
+        let supplied = try decode(value)
+        XCTAssertEqual(supplied.collectedAsSupplied, true)
+        XCTAssertEqual(supplied.candidates.map(\.collectedAs), ["missing", nil])
+        var partial = value; var some = rows; some[1].removeValue(forKey: "collected_as"); partial["candidates"] = some
+        XCTAssertThrowsError(try decode(partial))
+        var wrong = value; var bad = rows; bad[0]["collected_as"] = "lost"; wrong["candidates"] = bad
+        XCTAssertThrowsError(try decode(wrong))
+    }
+    func testLostOutcomeNamesTheKindOfLossOnlyWhenTheEngineSaidIt() {
+        XCTAssertTrue(MemberOfferDetail.lostOutcome("missing", supplied: true).hasPrefix("Not in the box"))
+        XCTAssertTrue(MemberOfferDetail.lostOutcome(nil, supplied: true).hasPrefix("Not collected by the deadline"))
+        XCTAssertTrue(MemberOfferDetail.lostOutcome(nil, supplied: false).hasPrefix("Not returned"))
+        XCTAssertTrue(MemberOfferDetail.lostOutcome("missing", supplied: false).hasPrefix("Not returned"))
+    }
+
     func info(household: String = "detail-house", expiry: Int64 = 5000) -> MemberSessionInfo { .init(id: "session", household: household, presenters: ["merchant-1"], expiresAt: expiry) }
     func summary(_ value: MemberOfferDetail) -> MemberOfferSummary { .init(id: value.id, household: value.household, presenter: value.presenter, binding: value.binding, state: value.state) }
     func testCapturedDetailsPreserveGiftPartiesAndCollectionOutcomes() throws {

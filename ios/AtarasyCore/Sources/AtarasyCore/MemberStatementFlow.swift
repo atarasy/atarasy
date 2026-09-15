@@ -7,6 +7,7 @@ public protocol MemberStatementService: Sendable {
     func submitStatement(_ handle: MemberOperationHandle, assertion: MemberPasskeyResponse, store: any MemberOperationStore) async throws -> MemberOperationOutcome
     func operationOutcome(_ handle: MemberOperationHandle) async -> MemberOperationOutcome
     func cancelOperation(_ handle: MemberOperationHandle) async throws
+    func settlement(offerID: String) async throws -> ProtocolSettlement
 }
 extension MemberClient: MemberStatementService {}
 
@@ -64,6 +65,17 @@ public struct FrozenMemberStatement: Sendable {
     public func setSession(_ session: MemberSessionInfo?) {
         generation &+= 1; self.session = session; handle = nil; prepared = nil; review = nil; saved = []; notice = ""; settledOffers = []
         refreshSaved()
+    }
+    /// A box can settle by another route while its statement review is open: the web hub, another device,
+    /// or a race. Reading the settlement when the statement screen opens keeps it from offering preparation
+    /// for a box that has settled. No settlement, or a failed read, leaves the screen as it was.
+    public func checkSettled(offerID: String) async {
+        guard let session, session.expiresAt > now() else { return }
+        let current = generation
+        guard let receipt = try? await service.settlement(offerID: offerID), current == generation,
+              Data(receipt.offer.utf8) == Data(offerID.utf8), Data(receipt.payer.utf8) == Data(session.household.utf8),
+              session.presenters.contains(where: { Data($0.utf8) == Data(receipt.signedBy.utf8) }) else { return }
+        settledOffers.insert(offerID)
     }
     public func closeReview() { generation &+= 1; handle = nil; prepared = nil; review = nil; notice = "" }
     public func checkExpiry() {

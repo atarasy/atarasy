@@ -110,3 +110,19 @@ export const disputable = (line: { valence: string }): boolean =>
  * contests the loss and moves no money.
  */
 export const disputeMovesMoney = (line: { valence: string }): boolean => line.valence === "consumed";
+
+/**
+ * §3, question 48, decided 2026-09-15. What a `lost` line says, told apart by
+ * what the collection named it. Not in the box is a record about the
+ * household's home that it sees on its statement and may dispute; a line the
+ * deadline made `lost` is on no statement. `undefined` is an engine from before
+ * the field, where the two cannot be told apart and the sentence names both.
+ * The iOS detail screen carries the same words.
+ */
+export function lostOutcome(collectedAs: string | null | undefined): string {
+  if (collectedAs === "missing") {
+    return "Not in the box: the collection did not find it. Never charged to you, and you can dispute it on the statement if it was there.";
+  }
+  if (collectedAs === null) return "Not collected by the deadline. Never charged to you.";
+  return "Not returned: the collection did not find it in the box, or it was not collected by the deadline. Never charged to you.";
+}

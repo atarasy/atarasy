@@ -70,6 +70,7 @@ struct MemberStatementScreen: View {
         .navigationTitle("Approve statement")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { flow.closeReview() }
+        .task { await flow.checkSettled(offerID: detail.id) }
         .onReceive(clock) { _ in flow.checkExpiry() }
         .onDisappear { action?.cancel(); flow.closeReview() }
     }

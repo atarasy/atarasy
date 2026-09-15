@@ -274,12 +274,17 @@ describe("the approval, as a member sees it", () => {
     return settled();
   }
 
-  test("a lost line says it is never charged, without claiming which kind of loss it was", async () => {
-    // Question 46. The statement says "not in the box", but this read cannot
-    // tell a collection's missing record from a deadline loss.
-    const app = await open([candidate({ valence: "lost" })]);
-    expect(text(app)).toContain("did not find it in the box, or it was not collected by the deadline. Never charged to you.");
-    expect(text(app)).not.toContain("Already lost");
+  test("a lost line says which kind of loss it was, from what the collection named it", async () => {
+    // Questions 46 and 48. Not in the box may be disputed on the statement; a
+    // deadline loss is on no statement; an engine without the field gets both.
+    const missing = await open([candidate({ valence: "lost", collected_as: "missing" })]);
+    expect(text(missing)).toContain("Not in the box: the collection did not find it.");
+    expect(text(missing)).not.toContain("Already lost");
+    const deadline = await open([candidate({ valence: "lost", collected_as: null })]);
+    expect(text(deadline)).toContain("Not collected by the deadline. Never charged to you.");
+    expect(text(deadline)).not.toContain("Not in the box");
+    const older = await open([candidate({ valence: "lost" })]);
+    expect(text(older)).toContain("did not find it in the box, or it was not collected by the deadline.");
   });
 
   test("it names the maker apart from the merchant, and a gift by its giver", async () => {

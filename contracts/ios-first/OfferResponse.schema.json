@@ -216,6 +216,20 @@
                 "type": "null"
               }
             ]
+          },
+          "collected_as": {
+            "anyOf": [
+              {
+                "enum": [
+                  "returned",
+                  "consumed",
+                  "missing"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [

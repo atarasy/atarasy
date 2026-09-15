@@ -22,7 +22,7 @@ import { awaitsDecision, awaitsStatement, byArrival, holdsNextBox, type InboxOff
 import { REFUSALS, refusal } from "../shared/refusals.js";
 // The judgements the screens make, separated from the drawing of them: a
 // reviewer reverted five of them at once and the suite stayed green.
-import { blocksFor, decidable, disputable, disputeMovesMoney, statementTotal } from "../shared/screen.js";
+import { blocksFor, decidable, disputable, disputeMovesMoney, lostOutcome, statementTotal } from "../shared/screen.js";
 
 type Member = {
   /** What the person typed. This browser's own label, and nobody else's business. */
@@ -69,6 +69,8 @@ type Approval = {
     given_by: string | null;
     /** §10 step 3c. `offered` is a line still this household's to decide. */
     valence: string;
+    /** §3, question 48. What the collection named this line; absent from an engine before the field. */
+    collected_as?: "returned" | "consumed" | "missing" | null;
     is_exploration: boolean;
     alternatives: string[];
     argument_against: string;
@@ -641,11 +643,9 @@ async function approval(member: Member, offerId: string, binding?: "digital" | "
         c.valence === "consumed"
           ? "The route found this used, so it is not yours to decide here. It comes back on the statement you sign."
           : c.valence === "lost"
-            // Question 46. The statement says "not in the box", but this read
-            // cannot tell a collection's missing record from a deadline loss,
-            // so the card names both rather than asserting the wrong one. The
-            // iOS detail screen carries the same words.
-            ? "Not returned: the collection did not find it in the box, or it was not collected by the deadline. Never charged to you."
+            // Questions 46 and 48. Which kind of loss this is comes from what
+            // the collection named the line.
+            ? lostOutcome(c.collected_as)
             : `Already ${c.valence}. Nothing on this screen changes it.`)]),
       ...(c.is_exploration ? [el("p", { class: "exploration" }, "Something you have not been offered before (§5).")] : []),
       // Clauses 54 and 59. **These are the presenter's words, and the screen
@@ -967,8 +967,10 @@ async function statement(member: Member, offerId: string) {
     // the seller: this box is one presenter's and several merchants'. The
     // statement names the merchants line by line and carries no presenter, so
     // the sentence names neither rather than naming the wrong one.
-    // §6.5, question 46. Only goods used hold the next box.
-    el("p", { class: "muted" }, st.lines.some((l) => l.valence === "consumed")
+    // The engine's rule: goods used hold the next box, and so does a missing
+    // line beside a kept or defaulted one (question 46, decided 2026-09-14).
+    el("p", { class: "muted" }, st.lines.some((l) => l.valence === "consumed") ||
+      (st.lines.some((l) => l.valence === "lost") && st.lines.some((l) => l.valence === "kept" || l.valence === "defaulted"))
       ? "The route wrote this down. Nothing is charged until you sign it, and no further box comes from whoever sent this one while it waits."
       : "The route wrote this down. Nothing is charged until you sign it."),
     // §6.5, §10a.5. **The offer's expiry, because a merchant's block may state
