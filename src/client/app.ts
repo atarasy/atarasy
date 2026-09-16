@@ -253,7 +253,7 @@ async function setup() {
       // identifier is this one with a label. Nobody can hold either by filing
       // it first, which is what the credential id used to be relied on for.
       const household = made.household;
-      const mandate = `${household}.1`;
+      const mandate = made.mandate;
       const registered = await api<{ error?: string; message?: string }>("POST", "/_identities", { key: household, public_key: made.pem });
       if (registered.status !== 201) throw new Error(refusal(registered.body, registered.status));
       const member: Member = { label, household, mandate, credential_id: credentialId };
@@ -306,7 +306,7 @@ async function setup() {
       const member: Member = {
         label: input.value.trim() || `household-${credentialId.slice(0, 6)}`,
         household: known.household,
-        mandate: `${known.household}.1`,
+        mandate: known.mandate,
         credential_id: credentialId,
       };
       localStorage.setItem(STORAGE, JSON.stringify(member));

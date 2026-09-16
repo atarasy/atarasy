@@ -55,7 +55,7 @@ const KEY = await newMemberKey();
 const MEMBER = {
   label: "A member",
   household: KEY.household,
-  mandate: `${KEY.household}.1`,
+  mandate: KEY.mandate,
   credential_id: "AAAAAAAAAAAAAAAA",
 };
 

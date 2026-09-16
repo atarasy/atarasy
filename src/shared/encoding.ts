@@ -58,7 +58,7 @@ export async function householdName(spki: ArrayBuffer | Uint8Array): Promise<str
  * assertion never allowed. Chosen on 2026-09-16 over a hub that remembers its
  * members and over a person who carries 47 characters.
  */
-export type MemberKey = { handle: Uint8Array<ArrayBuffer>; key: CryptoKey; pem: string; household: string };
+export type MemberKey = { handle: Uint8Array<ArrayBuffer>; key: CryptoKey; pem: string; household: string; mandate: string };
 
 const ED = { name: "Ed25519" };
 
@@ -69,7 +69,15 @@ async function fromParts(d: string, x: string): Promise<MemberKey> {
   const handle = new Uint8Array(new ArrayBuffer(64));
   handle.set(fromBase64(d), 0);
   handle.set(fromBase64(x), 32);
-  return { handle, key, pem: spkiToPem(spki), household: await householdName(spki) };
+  const household = await householdName(spki);
+  // §13.2, question 55. A mandate identifier is still a bearer reference for
+  // reading `GET /_node/mandates/{id}` until question 41's authenticated read
+  // exists, and that section asks a hub to choose a label with as much entropy
+  // as the identifier it hangs from. A label of `.1` would hand a household's
+  // ceilings and co-signers to anyone who learnt its name from an offer, so
+  // the label is derived from the public half, which nothing publishes.
+  const label = toBase64Url(await crypto.subtle.digest("SHA-256", fromBase64(x) as unknown as BufferSource)).slice(0, 32);
+  return { handle, key, pem: spkiToPem(spki), household, mandate: `${household}.${label}` };
 }
 
 /** A new household: a key, and the 64-byte handle the passkey will carry for it. */
