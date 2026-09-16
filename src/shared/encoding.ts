@@ -82,17 +82,15 @@ async function fromParts(d: string, x: string): Promise<MemberKey> {
     throw new Error("this passkey carries a household nothing can sign for");
   }
   const household = await householdName(spki);
-  // §13.2, question 55. A mandate identifier is still a bearer reference for
-  // reading `GET /_node/mandates/{id}` until question 41's authenticated read
-  // exists, and that section asks a hub to choose a label with as much entropy
-  // as the identifier it hangs from. A label of `.1` would hand a household's
-  // ceilings and co-signers to anyone who learnt its household's name, so the
-  // label is derived from the public half instead. **What that defends against
-  // is a party that knows the name and nothing else.** Every host that verifies
-  // this household holds the public key (§13.2), and the whole mandate
-  // identifier is on every offer `valence-merchant/1` hands a merchant, so it
-  // defends against neither of those. Said plainly after a review pass read the
-  // first version of this comment as claiming more.
+  // §13.2. The label is derived rather than counted from one, and **it is not
+  // a defence.** The specification recommended an unguessable label while
+  // `GET /households/{id}/export` was already listing every mandate a
+  // household has, co-signers included, to whoever asked, and §16.2's
+  // `?household=` answers whether it has any; a refutation pass on 2026-09-16
+  // showed the recommendation had never been worth anything. What deriving it
+  // buys is that a second device rebuilds the same identifier from the handle
+  // like everything else here. What closes the read is question 41's
+  // authenticated one.
   const label = toBase64Url(await crypto.subtle.digest("SHA-256", fromBase64(x) as unknown as BufferSource)).slice(0, 32);
   return { handle, key, pem: spkiToPem(spki), household, mandate: `${household}.${label}` };
 }
