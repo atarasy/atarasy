@@ -69,6 +69,18 @@ async function fromParts(d: string, x: string): Promise<MemberKey> {
   const handle = new Uint8Array(new ArrayBuffer(64));
   handle.set(fromBase64(d), 0);
   handle.set(fromBase64(x), 32);
+  // **The two halves of a handle are not checked against each other by
+  // WebCrypto.** Measured on 2026-09-16: a private scalar and an unrelated
+  // public key import without complaint and sign what that public key cannot
+  // verify. The household is the name of `x` and the signature is made by
+  // `d`, so a handle whose halves do not belong together is a household
+  // nothing can ever sign for. One signature and one verification say so
+  // here, where it costs a member nothing and saves them a household that
+  // does not work.
+  const probe = new Uint8Array([0]);
+  if (!(await crypto.subtle.verify(ED, pub, await crypto.subtle.sign(ED, key, probe as unknown as BufferSource), probe as unknown as BufferSource))) {
+    throw new Error("this passkey carries a household nothing can sign for");
+  }
   const household = await householdName(spki);
   // §13.2, question 55. A mandate identifier is still a bearer reference for
   // reading `GET /_node/mandates/{id}` until question 41's authenticated read

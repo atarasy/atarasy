@@ -545,7 +545,13 @@ describe("what the screen posts, which nothing read until now", () => {
     // set this member is looking at: the engine would refuse it, and the
     // screen would have said the person had confirmed.
     const other = await newMemberKey();
-    for (const handle of [other.handle.buffer, new Uint8Array(32).buffer, null]) {
+    // A handle whose two halves do not belong together names a household
+    // nothing can sign for; WebCrypto imports it without complaint, so this
+    // file checks that the screen does not.
+    const mixed = new Uint8Array(new ArrayBuffer(64));
+    mixed.set(KEY.handle.slice(0, 32), 0);
+    mixed.set(other.handle.slice(32), 32);
+    for (const handle of [other.handle.buffer, mixed.buffer, new Uint8Array(32).buffer, null]) {
       const posted = await capture("approval", handle as ArrayBuffer | null);
       expect(posted.find((p) => p.url.includes("/decisions"))).toBeUndefined();
     }
