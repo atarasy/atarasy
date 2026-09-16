@@ -25,6 +25,11 @@ public enum Canonical {
     public static let maximumInteger: Int64 = 9_007_199_254_740_991
     private static func integer(_ v: Int64) throws { guard (0...maximumInteger).contains(v) else { throw ContractError.invalidValue } }
     private static func identifier(_ v: String) throws { guard !v.isEmpty, !v.contains("\n"), !v.contains("\r"), !v.contains(":") else { throw ContractError.invalidValue } }
+    /// §13.2, question 55. A household's identifier carries a colon and a mandate's carries one and a
+    /// full stop, and both sit on lines of their own in the signed form, so only a line break is
+    /// ambiguous there. The colon is refused above because a decision and a statement join their
+    /// fields with one.
+    private static func line(_ v: String) throws { guard !v.isEmpty, !v.contains("\n"), !v.contains("\r") else { throw ContractError.invalidValue } }
     private static func ordered(_ a: String, _ b: String) -> Bool { a.utf16.lexicographicallyPrecedes(b.utf16) }
     private static func encoded(_ value: String) -> String {
         let allowed = Set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.!~*'()".utf8)
@@ -44,7 +49,7 @@ public enum Canonical {
         return (["valence.statement.1",offer,String(carriage)] + lines.sorted { ordered($0.candidate,$1.candidate) }.map { "\($0.candidate):\($0.valence):\($0.amount):\($0.disputed ? "disputed" : "")" }).joined(separator:"\n")
     }
     public static func mandate(_ m: Mandate) throws -> String {
-        try identifier(m.id); try identifier(m.household)
+        try line(m.id); try line(m.household)
         for value in [m.ceilingOutOfNetwork,m.ceilingDaily,m.coolingSeconds,m.lapsesAt,m.version].compactMap({$0}) { try integer(value) }
         guard m.version >= 1 else { throw ContractError.invalidValue }
         return [m.id,m.household,String(m.ceilingOutOfNetwork),m.ceilingDaily.map(String.init) ?? "",m.coolingSeconds.map(String.init) ?? "",m.coSigners.sorted(by:ordered).map(encoded).joined(separator:","),String(m.lapsesAt),String(m.version)].joined(separator:"\n")

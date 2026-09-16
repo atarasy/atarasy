@@ -11,9 +11,9 @@
  * confirmation is the passkey's assertion over the set (§10.5), made by the
  * browser's own authenticator. This page never sees a private key.
  */
-import { canonicalStatement, challengeFor, type Decision, type StatementLine } from "../shared/canonical.js";
+import { canonicalDecisions, canonicalStatement, type Decision, type StatementLine } from "../shared/canonical.js";
 import { canonicalMandate, type Mandate } from "../shared/mandate.js";
-import { fromBase64, spkiToPem, toBase64, toBase64Url } from "../shared/encoding.js";
+import { fromBase64, memberKeyFromHandle, newMemberKey, toBase64, toBase64Url } from "../shared/encoding.js";
 // The rule that sorts a member's own list, in a module the suite can reach:
 // filing a collected box as settled was the worst thing this screen did.
 import { awaitsDecision, awaitsStatement, byArrival, holdsNextBox, type InboxOffer } from "../shared/inbox.js";
@@ -210,6 +210,10 @@ async function setup() {
     const label = input.value.trim();
     if (!label) { status.textContent = "The household needs a name."; button.disabled = false; return; }
     try {
+      // §13.2, question 55. The household is the name of a key, and a `get`
+      // never hands the public key back, so the key is made here and its
+      // parts ride in the user handle that every later assertion returns.
+      const made = await newMemberKey();
       const credential = (await navigator.credentials.create({
         publicKey: {
           challenge: crypto.getRandomValues(new Uint8Array(32)),
@@ -223,7 +227,7 @@ async function setup() {
           // could never be confirmed again by anything. A random handle makes
           // each setup its own account and leaves recovery to the discoverable
           // credential below, which is what actually carries the household.
-          user: { id: crypto.getRandomValues(new Uint8Array(32)), name: label, displayName: label },
+          user: { id: made.handle, name: label, displayName: label },
           // ES256 first, because that is what most phones and laptops carry;
           // EdDSA and RS256 after it. The engine checks by the registered key's type.
           pubKeyCredParams: [
@@ -243,23 +247,15 @@ async function setup() {
         },
       })) as PublicKeyCredential | null;
       if (!credential) throw new Error("no credential was created");
-      const response = credential.response as AuthenticatorAttestationResponse;
-      const spki = response.getPublicKey();
-      if (!spki) throw new Error("this browser does not hand out the public key of a new passkey");
       const credentialId = toBase64Url(credential.rawId);
-      // Both names are the credential's, so that nobody can register a key
-      // under either first. The engine keeps the first key registered for a
-      // name and refuses a later, different one (clause 22), which turns a
-      // guessable name into a name somebody else can take: the mandate
-      // reference confirms this household's decisions (§10.5) and the
-      // household's own name signs its protections (§16.1).
-      const mandate = `mandate-${credentialId}`;
-      const household = `household-${credentialId}`;
-      const pem = spkiToPem(spki);
-      for (const key of [mandate, household]) {
-        const registered = await api<{ error?: string; message?: string }>("POST", "/_identities", { key, public_key: pem });
-        if (registered.status !== 201) throw new Error(refusal(registered.body, registered.status));
-      }
+      // §13.2, question 55. One registration, under the name the key has, and
+      // nothing under the mandate's: a mandate has no key of its own, and its
+      // identifier is this one with a label. Nobody can hold either by filing
+      // it first, which is what the credential id used to be relied on for.
+      const household = made.household;
+      const mandate = `${household}.1`;
+      const registered = await api<{ error?: string; message?: string }>("POST", "/_identities", { key: household, public_key: made.pem });
+      if (registered.status !== 201) throw new Error(refusal(registered.body, registered.status));
       const member: Member = { label, household, mandate, credential_id: credentialId };
       localStorage.setItem(STORAGE, JSON.stringify(member));
       await offers(member);
@@ -300,10 +296,17 @@ async function setup() {
       })) as PublicKeyCredential | null;
       if (!credential) throw new Error("no passkey was offered");
       const credentialId = toBase64Url(credential.rawId);
+      // §13.2, question 55. The household is the name of a key, and the key
+      // is in the handle the authenticator just returned. A passkey made
+      // elsewhere carries a handle of another length and is refused here
+      // rather than becoming a household nothing answers for.
+      const handle = (credential.response as AuthenticatorAssertionResponse).userHandle;
+      if (!handle) throw new Error("this passkey carries no household");
+      const known = await memberKeyFromHandle(handle);
       const member: Member = {
         label: input.value.trim() || `household-${credentialId.slice(0, 6)}`,
-        household: `household-${credentialId}`,
-        mandate: `mandate-${credentialId}`,
+        household: known.household,
+        mandate: `${known.household}.1`,
         credential_id: credentialId,
       };
       localStorage.setItem(STORAGE, JSON.stringify(member));
@@ -679,26 +682,13 @@ async function approval(member: Member, offerId: string, binding?: "digital" | "
       return valence === "kept" ? { candidate: c.id, valence, kept_as: "self" } : { candidate: c.id, valence };
     });
     try {
-      // §10.5. The set is the challenge, so what the device signs is what the
-      // person saw, in the canonical shape the engine compares.
-      const challenge = await challengeFor(a.offer, decisions);
-      const credential = (await navigator.credentials.get({
-        publicKey: {
-          challenge,
-          rpId: location.hostname,
-          allowCredentials: [{ type: "public-key", id: fromBase64(member.credential_id) }],
-          userVerification: "required",
-        },
-      })) as PublicKeyCredential | null;
-      if (!credential) throw new Error("no assertion was made");
-      const r = credential.response as AuthenticatorAssertionResponse;
+      // §10.5. What is signed is the set in the canonical shape the engine
+      // compares, and the gesture that releases the key is over the same
+      // bytes: `signOver` puts their hash in the assertion's challenge even
+      // though what goes to the engine is the signature.
       const decided = await api<{ state?: string; error?: string; message?: string }>("POST", `/offers/${encodeURIComponent(a.offer)}/decisions`, {
         decisions,
-        assertion: {
-          authenticator_data: toBase64(r.authenticatorData),
-          client_data_json: toBase64(r.clientDataJSON),
-          signature: toBase64(r.signature),
-        },
+        signature: await signOver(member, new TextEncoder().encode(canonicalDecisions(a.offer, decisions))),
       });
       if (decided.status !== 200) throw new Error(refusal(decided.body, decided.status));
       // The count below is this screen's own, so a `200` that carried no state
@@ -898,11 +888,11 @@ async function statement(member: Member, offerId: string) {
       // recorded, and the engine refuses such a settlement before reading a
       // signature, so 0 there signs bytes nothing can settle.
       const bytes = new TextEncoder().encode(canonicalStatement(st.offer, st.carriage ?? 0, lines));
-      const assertion = await assertOver(member, new Uint8Array(bytes));
+      const signature = await signOver(member, new Uint8Array(bytes));
       const settled = await api<{ charged?: number; disputed_amount?: number; error?: string; message?: string }>(
         "POST",
         `/offers/${encodeURIComponent(st.offer)}/settle`,
-        { assertion, disputed: [...disputed] }
+        { signature, disputed: [...disputed] }
       );
       if (settled.status !== 200) {
         // §6.5. **A box that has already settled is one this member may have
@@ -939,7 +929,7 @@ async function statement(member: Member, offerId: string) {
             // alone do not say it.
             // `null` is a settlement no signature made, so not this one.
             const recorded = stood.body.confirmation;
-            const mine = recorded === assertion.signature
+            const mine = recorded === signature
               ? "unanswered-mine"
               : typeof recorded === "string" || recorded === null ? "unanswered-other" : "unanswered-unknown";
             show(el("h1", {}, "Atarasy"), receipt(stood.body, mine), back(member));
@@ -1061,12 +1051,18 @@ function receipt(r: Receipt, path: ReceiptPath): Node {
 }
 
 /**
- * §10.5, §16.1. What the device sends where the specification asks the person
- * to sign: an assertion whose challenge is the canonical bytes. A passkey
- * cannot sign bytes a caller hands it, so this is the only shape a member of
- * this hub can produce, and it is the one shape both routes take.
+ * §10.5, §16.1. The person's signature over the canonical bytes, in the first
+ * of the two shapes the specification names.
+ *
+ * **It was the second shape until 2026-09-16**, an assertion by the passkey's
+ * own key, because that key was the household's. Question 55 made a household
+ * the name of a key and a `get` never returns a public key, so the key a
+ * member carries between devices is the one inside the handle instead. The
+ * gesture is unchanged: the authenticator releases the handle only after the
+ * person verifies, and this holds the key for the length of one signature.
+ * What is lost is that a page which kept it could sign again without asking.
  */
-async function assertOver(member: Member, bytes: Uint8Array<ArrayBuffer>) {
+async function signOver(member: Member, bytes: Uint8Array<ArrayBuffer>): Promise<string> {
   const challenge = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
   const credential = (await navigator.credentials.get({
     publicKey: {
@@ -1077,12 +1073,12 @@ async function assertOver(member: Member, bytes: Uint8Array<ArrayBuffer>) {
     },
   })) as PublicKeyCredential | null;
   if (!credential) throw new Error("no assertion was made");
-  const r = credential.response as AuthenticatorAssertionResponse;
-  return {
-    authenticator_data: toBase64(r.authenticatorData),
-    client_data_json: toBase64(r.clientDataJSON),
-    signature: toBase64(r.signature),
-  };
+  const handle = (credential.response as AuthenticatorAssertionResponse).userHandle;
+  if (!handle) throw new Error("this passkey carries no household");
+  const held = await memberKeyFromHandle(handle);
+  if (held.household !== member.household) throw new Error("this passkey is another household's");
+  const signature = await crypto.subtle.sign({ name: "Ed25519" }, held.key, bytes as unknown as BufferSource);
+  return toBase64(signature);
 }
 
 // ---- the protections a person sets for themselves (§16) ---------------------
@@ -1169,7 +1165,7 @@ async function protections(member: Member) {
       const bytes = new TextEncoder().encode(canonicalMandate(next));
       const recorded = await api<{ error?: string; message?: string }>("POST", "/_node/mandates", {
         ...next,
-        assertions: { [member.household]: await assertOver(member, bytes) },
+        signatures: { [member.household]: await signOver(member, bytes) },
       });
       if (recorded.status !== 201) throw new Error(refusal(recorded.body, recorded.status));
       await protections(member);

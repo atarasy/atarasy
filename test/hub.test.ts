@@ -29,8 +29,13 @@ const PRESENTER = "reference-merchant";
  * the household's own name is the one that signs its protections (§16.1).
  */
 const CREDENTIAL = Buffer.from(crypto.getRandomValues(new Uint8Array(16))).toString("base64url");
-const HOUSEHOLD = `household-${CREDENTIAL}`;
-const MANDATE = `mandate-${CREDENTIAL}`;
+// §13.2, question 55. A household is the name of its key and a mandate hangs
+// from that identifier, so the member's key is made here and both names come
+// from it. The key is P-256, which is what a passkey carries.
+const MEMBER_PAIR = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+const MEMBER_DER = MEMBER_PAIR.publicKey.export({ type: "spki", format: "der" });
+const HOUSEHOLD = "key:" + createHash("sha256").update(MEMBER_DER).digest("base64url");
+const MANDATE = `${HOUSEHOLD}.1`;
 
 /**
  * A child process inherits PATH and what this test sets, and nothing of the
@@ -129,7 +134,7 @@ let candidateIds: string[] = [];
  * take: it signs its own data and the SHA-256 of the client's, and the client
  * data carries the challenge, which is the canonical bytes' hash.
  */
-function assertOver(canonical: string) {
+function assertOver(canonical: string, key = memberKey!.privateKey) {
   const challenge = createHash("sha256").update(canonical, "utf8").digest("base64url");
   const authenticatorData = Buffer.concat([
     createHash("sha256").update(RP).digest(),
@@ -144,7 +149,7 @@ function assertOver(canonical: string) {
   return {
     authenticator_data: toBase64(authenticatorData),
     client_data_json: toBase64(clientDataJson),
-    signature: toBase64(sign("sha256", signed, memberKey!.privateKey)),
+    signature: toBase64(sign("sha256", signed, key)),
   };
 }
 
@@ -267,13 +272,11 @@ describe("the hub in front of an engine", () => {
   test("a member's key goes through the hub to /_identities", async () => {
     // What the browser does after `navigator.credentials.create`: the public
     // key arrives as SPKI DER, and it is registered under the mandate's name.
-    const pair = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
-    const der = pair.publicKey.export({ type: "spki", format: "der" });
-    for (const key of [MANDATE, HOUSEHOLD]) {
-      const registered = await post(HUB, "/api/_identities", { key, public_key: spkiToPem(der) });
-      expect([key, registered.status]).toEqual([key, 201]);
-    }
-    memberKey = pair;
+    // §13.2, question 55. One registration, under the name the key has: a
+    // mandate has none of its own.
+    const registered = await post(HUB, "/api/_identities", { key: HOUSEHOLD, public_key: spkiToPem(MEMBER_DER) });
+    expect([HOUSEHOLD, registered.status]).toEqual([HOUSEHOLD, 201]);
+    memberKey = MEMBER_PAIR;
   });
 
   test("an offer presented by the engine is waiting on the hub", async () => {
@@ -421,7 +424,8 @@ describe("the hub in front of an engine", () => {
     // What makes that observable is §5.2, where an offer says whether an
     // identity root endorsed the key of the presenter it names. So the key is
     // asked to be a presenter, and the offer answers.
-    const name = `mandate-${Buffer.from(crypto.getRandomValues(new Uint8Array(16))).toString("base64url")}`;
+    // §13.2, question 55. The name this hub issues is the name the key has.
+    const name = "key:" + createHash("sha256").update(pair.publicKey.export({ type: "spki", format: "der" })).digest("base64url");
     expect((await post(HUB, "/api/_identities", { key: name, public_key: pem, attested: true })).status).toBe(201);
     const config = {
       version: `cfg-${name}`,
@@ -434,11 +438,11 @@ describe("the hub in front of an engine", () => {
     })).status).toBe(201);
     const offer = await post(ENGINE, "/offers", {
       binding: "digital",
-      household: `${HOUSEHOLD}-attested`,
+      household: HOUSEHOLD,
       purpose: "replenish",
       config_version: config.version,
       expires_at: Date.now() + 3_600_000,
-      mandate: name,
+      mandate: MANDATE,
       price_band: null,
       giver: null,
       candidates: [{ product: "tea-a", quantity: 1, predicted_conversion: 0.5, is_exploration: true, given_by: null }],
@@ -598,21 +602,31 @@ describe("the statement a household signs (§6.5)", () => {
    * name registered with the same key gives these tests a settlement path
    * without unpicking what another test proved.
    */
-  let mandate = "";
-  async function underOwnMandate() {
-    if (mandate) return mandate;
-    mandate = `mandate-statement-${Math.random().toString(36).slice(2, 12)}`;
+  /**
+   * §13.2, question 55. A household is the name of a key, so a box of its own
+   * is a key of its own: the daily ceiling and the unsigned-statement block
+   * are both per household, and one household could not carry these boxes.
+   * The mandate hangs from that identifier and the engine holds no record of
+   * it, which §16.2 leaves alone, so no ceiling of the shared mandate reaches
+   * these offers.
+   */
+  const keyed = new Map<string, KeyPairKeyObjectResult>();
+  async function ownHousehold() {
+    const pair = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+    const der = pair.publicKey.export({ type: "spki", format: "der" });
+    const household = "key:" + createHash("sha256").update(der).digest("base64url");
     expect((await post(ENGINE, "/_identities", {
-      key: mandate,
-      public_key: memberKey!.publicKey.export({ type: "spki", format: "pem" }).toString(),
+      key: household,
+      public_key: spkiToPem(der),
       attested: false,
     })).status).toBe(201);
-    return mandate;
+    keyed.set(household, pair);
+    return household;
   }
 
   async function collected(product: string) {
-    const household = `${HOUSEHOLD}-statement-${Math.random().toString(36).slice(2, 10)}`;
-    const own = await underOwnMandate();
+    const household = await ownHousehold();
+    const own = `${household}.statement`;
     const created = await post(ENGINE, "/offers", {
       binding: "physical",
       household,
@@ -645,7 +659,7 @@ describe("the statement a household signs (§6.5)", () => {
       returned: [],
       consumed: offer.candidates.map((c) => c.id),
     })).status).toBe(200);
-    return offer;
+    return { ...offer, household };
   }
 
   test("the hub carries the statement, and the screen's signature settles it", async () => {
@@ -674,7 +688,7 @@ describe("the statement a household signs (§6.5)", () => {
     const settled = await fetch(`${HUB}/api/offers/${offer.id}/settle`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ assertion: assertOver(canonicalStatement(offer.id, 0, lines)), disputed: [] }),
+      body: JSON.stringify({ assertion: assertOver(canonicalStatement(offer.id, 0, lines), keyed.get(offer.household)!.privateKey), disputed: [] }),
     });
     expect(settled.status).toBe(200);
     const receipt = (await settled.json()) as { charged: number; disputed_amount: number; confirmation: string | null };
@@ -695,7 +709,7 @@ describe("the statement a household signs (§6.5)", () => {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        assertion: assertOver(canonicalStatement(offer.id, 0, lines)),
+        assertion: assertOver(canonicalStatement(offer.id, 0, lines), keyed.get(offer.household)!.privateKey),
         disputed: st.lines.map((l) => l.candidate),
       }),
     });
@@ -724,7 +738,7 @@ describe("the statement a household signs (§6.5)", () => {
     const settled = await fetch(`${HUB}/api/offers/${offer.id}/settle`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ assertion: assertOver(canonicalStatement(offer.id, 0, lines)), disputed: [] }),
+      body: JSON.stringify({ assertion: assertOver(canonicalStatement(offer.id, 0, lines), keyed.get(offer.household)!.privateKey), disputed: [] }),
     });
     expect(settled.status).toBe(200);
     const charged = ((await settled.json()) as { charged: number }).charged;
@@ -733,7 +747,7 @@ describe("the statement a household signs (§6.5)", () => {
     const again = await fetch(`${HUB}/api/offers/${offer.id}/settle`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ assertion: assertOver(canonicalStatement(offer.id, 0, lines)), disputed: [] }),
+      body: JSON.stringify({ assertion: assertOver(canonicalStatement(offer.id, 0, lines), keyed.get(offer.household)!.privateKey), disputed: [] }),
     });
     expect(again.status).toBe(409);
     expect(((await again.json()) as { error: string }).error).toBe("already_settled");
@@ -748,8 +762,8 @@ describe("the statement a household signs (§6.5)", () => {
    * note for every missing one.
    */
   async function collectedWith(verdicts: Record<string, "consumed" | "missing">) {
-    const household = `${HOUSEHOLD}-missing-${Math.random().toString(36).slice(2, 10)}`;
-    const own = await underOwnMandate();
+    const household = await ownHousehold();
+    const own = `${household}.statement`;
     const products = Object.keys(verdicts);
     const created = await post(ENGINE, "/offers", {
       binding: "physical",
@@ -786,7 +800,7 @@ describe("the statement a household signs (§6.5)", () => {
       missing_notes: Object.fromEntries(missing.map((id) => [id, "not in the tray at collection"])),
     });
     expect(collection.status).toBe(200);
-    return { offer, missing };
+    return { offer: { ...offer, household }, missing };
   }
 
   type Line = { candidate: string; valence: string; amount: number };
@@ -801,7 +815,7 @@ describe("the statement a household signs (§6.5)", () => {
     const settled = await fetch(`${HUB}/api/offers/${offer.id}/settle`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ assertion: assertOver(canonicalStatement(offer.id, 0, lines)), disputed: [] }),
+      body: JSON.stringify({ assertion: assertOver(canonicalStatement(offer.id, 0, lines), keyed.get(offer.household)!.privateKey), disputed: [] }),
     });
     expect(settled.status).toBe(200);
     const receipt = (await settled.json()) as { charged: number; disputed_amount: number };
@@ -816,7 +830,7 @@ describe("the statement a household signs (§6.5)", () => {
     const settled = await fetch(`${HUB}/api/offers/${offer.id}/settle`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ assertion: assertOver(canonicalStatement(offer.id, 0, lines)), disputed: missing }),
+      body: JSON.stringify({ assertion: assertOver(canonicalStatement(offer.id, 0, lines), keyed.get(offer.household)!.privateKey), disputed: missing }),
     });
     expect(settled.status).toBe(200);
     const receipt = (await settled.json()) as { charged: number; disputed_amount: number; lines: { candidate: string; disputed: boolean }[] };
@@ -840,7 +854,7 @@ describe("the statement a household signs (§6.5)", () => {
     const settled = await fetch(`${HUB}/api/offers/${offer.id}/settle`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ assertion: assertOver(canonicalStatement(offer.id, 0, lines)), disputed: [] }),
+      body: JSON.stringify({ assertion: assertOver(canonicalStatement(offer.id, 0, lines), keyed.get(offer.household)!.privateKey), disputed: [] }),
     });
     expect(settled.status).toBe(200);
     expect(((await settled.json()) as { charged: number }).charged).toBe(0);

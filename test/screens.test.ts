@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import { join } from "node:path";
+import { newMemberKey } from "../src/shared/encoding.js";
 
 /**
  * The screens themselves, rendered.
@@ -47,10 +48,14 @@ afterAll(async () => {
   await GlobalRegistrator.unregister();
 });
 
+// §13.2, question 55. A household is the name of a key, and the key rides in
+// the passkey's user handle, so the fixture makes one rather than choosing a
+// name the engine would refuse.
+const KEY = await newMemberKey();
 const MEMBER = {
   label: "A member",
-  household: "household-AAAAAAAAAAAAAAAA",
-  mandate: "mandate-AAAAAAAAAAAAAAAA",
+  household: KEY.household,
+  mandate: `${KEY.household}.1`,
   credential_id: "AAAAAAAAAAAAAAAA",
 };
 
@@ -98,7 +103,8 @@ function stubAuthenticator() {
     value: {
       get: async () => ({
         rawId: bytes(16),
-        response: { authenticatorData: bytes(37), clientDataJSON: bytes(64), signature: bytes(64) },
+        // §13.2, question 55. The handle is what the screen signs with now.
+        response: { authenticatorData: bytes(37), clientDataJSON: bytes(64), signature: bytes(64), userHandle: KEY.handle.buffer },
       }),
     },
   });
@@ -525,19 +531,21 @@ describe("what the screen posts, which nothing read until now", () => {
     const sent = posted.find((p) => p.url.includes("/decisions"))!;
     expect(sent).toBeDefined();
     expect(sent.body.decisions).toEqual([{ candidate: "c-1", valence: "kept", kept_as: "self" }]);
-    // §10.5. The confirmation is the authenticator's assertion, under the key
-    // the engine reads it from, with all three parts present.
-    expect(Object.keys(sent.body.assertion).sort()).toEqual(["authenticator_data", "client_data_json", "signature"]);
-    for (const v of Object.values(sent.body.assertion)) expect(typeof v).toBe("string");
+    // §10.5, §13.2, question 55. The confirmation is the household's own
+    // signature over the canonical bytes, the first of the two shapes: the
+    // key is the one inside the passkey's handle, not the passkey's own.
+    expect(typeof sent.body.signature).toBe("string");
+    expect(Object.keys(sent.body).sort()).toEqual(["decisions", "signature"]);
   });
 
   test("a settlement is posted as the engine reads it, with the disputed lines named", async () => {
     const posted = await capture("statement");
     const sent = posted.find((p) => p.url.includes("/settle"))!;
     expect(sent).toBeDefined();
-    expect(Object.keys(sent.body).sort()).toEqual(["assertion", "disputed"]);
+    expect(Object.keys(sent.body).sort()).toEqual(["disputed", "signature"]);
     expect(sent.body.disputed).toEqual([]);
-    expect(Object.keys(sent.body.assertion).sort()).toEqual(["authenticator_data", "client_data_json", "signature"]);
+    // §13.2, question 55. One signature by the household's own key.
+    expect(typeof sent.body.signature).toBe("string");
   });
 });
 
@@ -598,15 +606,16 @@ describe("what a member is shown after signing a statement", () => {
     expect(shown).toContain("¥1,200 was charged by the settlement that stands");
   });
 
-  // The stub authenticator's signature: 64 bytes of 1, as `assertOver` encodes it.
-  const STUB_SIGNATURE = btoa(String.fromCharCode(...new Uint8Array(64).fill(1)));
-
   test("nothing answering is answered by reading the settlement, not by silence", async () => {
     // The case the receipt exists for. The member was told to open the list
     // again; a settled box is on no list, and nothing read the settlement.
+    // §13.2, question 55. The screen signs with the household's own key now,
+    // so the settlement that stands is read back with the signature the screen
+    // actually sent rather than with a constant this file could predict.
+    let sent: string | undefined;
     const shown = await sign(
-      () => ({ status: 0, body: {} }),
-      () => ({ status: 200, body: { charged: 1200, disputed_amount: 0, confirmation: STUB_SIGNATURE } })
+      (body) => { sent = (body as { signature?: string }).signature; return { status: 0, body: {} }; },
+      () => ({ status: 200, body: { charged: 1200, disputed_amount: 0, confirmation: sent } })
     );
     // **And it is not told that its signature failed**, which is what the
     // other path is told. The settlement names the signature that made it,

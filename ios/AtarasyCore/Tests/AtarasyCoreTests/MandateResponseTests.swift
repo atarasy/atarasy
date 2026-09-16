@@ -20,6 +20,19 @@ final class MandateResponseTests: XCTestCase {
         XCTAssertNil(loose.ceilingDaily); XCTAssertEqual(loose.coSigners, []); XCTAssertEqual(loose.version, 3)
         XCTAssertNotEqual(try Canonical.mandate(first), try Canonical.mandate(tight))
     }
+    /// §13.2, question 55. A household's identifier carries a colon and a mandate's carries one and
+    /// a full stop. Both sit on lines of their own in the signed form, so the colon the decision and
+    /// statement forms refuse is not ambiguous here, and only a line break is.
+    func testMandateIdentifiersCarryAColonAndRefuseALineBreak() throws {
+        let household = "key:L7zIqTWzxcxLB9T_L9Z--Rewkt-8DAkgRYtgcIIsC-E"
+        let m = Mandate(id: household + ".1", household: household, ceilingOutOfNetwork: 1,
+                        ceilingDaily: nil, coolingSeconds: nil, coSigners: [], lapsesAt: 1, version: 1)
+        let bytes = try Canonical.mandate(m)
+        XCTAssertTrue(bytes.hasPrefix(household + ".1\n" + household + "\n"))
+        var broken = m; broken.id = household + ".1\nkey:other"
+        XCTAssertThrowsError(try Canonical.mandate(broken))
+    }
+
     func testMandateCannotChangeResourceHouseholdOrRegressBelowKnownVersion() throws {
         let value = try body("mandate-created")
         XCTAssertThrowsError(try read(value, id: "other"))
