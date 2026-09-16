@@ -94,7 +94,7 @@ async function render(routes: Route, member: Record<string, unknown> | null = ME
  * does not produce a real one, so what is proven here is what the member is
  * shown after a settle, and not that the settle verifies.
  */
-function stubAuthenticator() {
+function stubAuthenticator(handle: ArrayBuffer | null = KEY.handle.buffer) {
   const bytes = (n: number) => new Uint8Array(n).fill(1).buffer;
   // happy-dom's `navigator.credentials` is read-only, so it is redefined
   // rather than assigned.
@@ -104,7 +104,7 @@ function stubAuthenticator() {
       get: async () => ({
         rawId: bytes(16),
         // §13.2, question 55. The handle is what the screen signs with now.
-        response: { authenticatorData: bytes(37), clientDataJSON: bytes(64), signature: bytes(64), userHandle: KEY.handle.buffer },
+        response: { authenticatorData: bytes(37), clientDataJSON: bytes(64), signature: bytes(64), userHandle: handle },
       }),
     },
   });
@@ -490,8 +490,8 @@ describe("what the screen posts, which nothing read until now", () => {
    */
   const LINE = { candidate: "c-1", product: "tea-a", merchant: "shop-x", maker: "made-by-tea", ships: "carrier-a", given_by: null, valence: "consumed", quantity: 1, unit_price: 1200, amount: 1200, disclosure: { merchant: "shop-x", product: null } };
 
-  async function capture(open: "approval" | "statement") {
-    stubAuthenticator();
+  async function capture(open: "approval" | "statement", handle: ArrayBuffer | null = KEY.handle.buffer) {
+    stubAuthenticator(handle);
     const posted: { url: string; body: any }[] = [];
     const app = await render((url, method, body) => {
       if (method === "POST") posted.push({ url, body });
@@ -536,6 +536,19 @@ describe("what the screen posts, which nothing read until now", () => {
     // key is the one inside the passkey's handle, not the passkey's own.
     expect(typeof sent.body.signature).toBe("string");
     expect(Object.keys(sent.body).sort()).toEqual(["decisions", "signature"]);
+  });
+
+  test("a passkey that carries another household, or no household, signs nothing", async () => {
+    // §13.2, question 55. The handle is the household, so a passkey from
+    // somewhere else is not this member's and a handle of the wrong length was
+    // not made by this hub. Neither is allowed to become a signature over a
+    // set this member is looking at: the engine would refuse it, and the
+    // screen would have said the person had confirmed.
+    const other = await newMemberKey();
+    for (const handle of [other.handle.buffer, new Uint8Array(32).buffer, null]) {
+      const posted = await capture("approval", handle as ArrayBuffer | null);
+      expect(posted.find((p) => p.url.includes("/decisions"))).toBeUndefined();
+    }
   });
 
   test("a settlement is posted as the engine reads it, with the disputed lines named", async () => {
