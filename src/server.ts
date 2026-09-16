@@ -59,8 +59,8 @@ const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
 /**
- * §10.5, §16. The two names a member's key is registered under, both derived
- * from the credential id and so unguessable.
+ * §13.2, §16, question 55. The one name a member's key is registered under,
+ * which is the name that key has.
  *
  * The engine keeps the first key registered for a name and refuses a later,
  * different one (clause 22), so a guessable name is a name somebody else can
@@ -78,7 +78,10 @@ const json = (body: unknown, status = 200) =>
  * is a label this browser keeps, and the identifier a shop is given is the
  * credential's.
  */
-const MEMBER_NAME = /^(mandate|household)-[A-Za-z0-9_-]{16,}$/;
+// §13.2. The last character of a 43-character base64url digest carries four
+// bits of digest and two that must be zero, so a name that decodes and does
+// not encode back to itself is one no key has.
+const MEMBER_NAME = /^key:[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/;
 
 /**
  * The calls the screen makes. Anything else is not this hub's to carry.

@@ -2,8 +2,9 @@ import { describe, expect, test } from "bun:test";
 import { canonicalMandate, loosens, type Mandate } from "../src/shared/mandate.js";
 
 const base: Mandate = {
-  id: "mandate-x",
-  household: "household-x",
+  // §13.2, question 55. A household is the name of its key, a mandate that with a label.
+  id: "key:L7zIqTWzxcxLB9T_L9Z--Rewkt-8DAkgRYtgcIIsC-E.x",
+  household: "key:L7zIqTWzxcxLB9T_L9Z--Rewkt-8DAkgRYtgcIIsC-E",
   ceiling_out_of_network: 100000,
   ceiling_daily: null,
   cooling_seconds: null,
@@ -17,7 +18,7 @@ describe("§16.1: the bytes a mandate version is signed over", () => {
     // Seven lines since 2026-09-12, when §16.4 was withdrawn and the category
     // list left the form. There were eight.
     expect(canonicalMandate(base)).toBe(
-      ["mandate-x", "household-x", "100000", "", "", "key-a", "1800000000000", "1"].join("\n")
+      ["key:L7zIqTWzxcxLB9T_L9Z--Rewkt-8DAkgRYtgcIIsC-E.x", "key:L7zIqTWzxcxLB9T_L9Z--Rewkt-8DAkgRYtgcIIsC-E", "100000", "", "", "key-a", "1800000000000", "1"].join("\n")
     );
   });
 

@@ -142,6 +142,11 @@ public actor MemberClient {
     private func identifier(_ id: String) throws {
         guard id.range(of: "^[A-Za-z0-9_-]+\\z", options: .regularExpression) != nil else { throw MemberFailure.invalidInput }
     }
+    /// §13.2, question 55. A mandate's identifier is its household's, a full stop and a label, and a
+    /// household's is `key:` and the base64url SHA-256 of its public key.
+    private func mandateIdentifier(_ id: String) throws {
+        guard id.range(of: "^key:[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]\\.[A-Za-z0-9_-]{1,64}\\z", options: .regularExpression) != nil else { throw MemberFailure.invalidInput }
+    }
     public func offers(presenter: String) async throws -> [MemberOfferSummary] {
         guard let info = active?.info, info.presenters.contains(where: { same($0, presenter) }) else { throw MemberFailure.scopeMismatch }
         let (reply, session) = try await read("/offers", query: [URLQueryItem(name: "household", value: info.household), URLQueryItem(name: "presenter", value: presenter)])
@@ -200,7 +205,7 @@ public actor MemberClient {
         return try ReferenceResponseReader.settlement(status: reply.status, contentType: reply.contentType, data: reply.data, expectedOffer: offerID)
     }
     public func mandate(id: String) async throws -> Mandate {
-        try identifier(id); let (reply, info) = try await read("/_node/mandates/" + id)
+        try mandateIdentifier(id); let (reply, info) = try await read("/_node/mandates/" + id)
         return try ReferenceResponseReader.mandate(status: reply.status, contentType: reply.contentType, data: reply.data, expectedID: id, expectedHousehold: info.household)
     }
     private func operationScope(_ handle: MemberOperationHandle) throws {
