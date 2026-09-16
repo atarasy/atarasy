@@ -74,8 +74,13 @@ async function fromParts(d: string, x: string): Promise<MemberKey> {
   // reading `GET /_node/mandates/{id}` until question 41's authenticated read
   // exists, and that section asks a hub to choose a label with as much entropy
   // as the identifier it hangs from. A label of `.1` would hand a household's
-  // ceilings and co-signers to anyone who learnt its name from an offer, so
-  // the label is derived from the public half, which nothing publishes.
+  // ceilings and co-signers to anyone who learnt its household's name, so the
+  // label is derived from the public half instead. **What that defends against
+  // is a party that knows the name and nothing else.** Every host that verifies
+  // this household holds the public key (§13.2), and the whole mandate
+  // identifier is on every offer `valence-merchant/1` hands a merchant, so it
+  // defends against neither of those. Said plainly after a review pass read the
+  // first version of this comment as claiming more.
   const label = toBase64Url(await crypto.subtle.digest("SHA-256", fromBase64(x) as unknown as BufferSource)).slice(0, 32);
   return { handle, key, pem: spkiToPem(spki), household, mandate: `${household}.${label}` };
 }

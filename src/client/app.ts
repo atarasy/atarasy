@@ -279,8 +279,9 @@ async function setup() {
    *
    * An empty `allowCredentials` asks the authenticator for any credential it
    * holds for this site, which is what `residentKey: "required"` above makes
-   * possible. Nothing is registered here: the key is already the one the
-   * engine knows, and re-registering would be refused (clause 22).
+   * possible. The key is registered here, because a household that moved to
+   * this host (clause 52) arrives with its rows and without its key, and the
+   * same key under the name it has is not a conflict (§13.2).
    */
   const again = el("button", {}, "Use a passkey I already have") as HTMLButtonElement;
   again.onclick = async () => {
@@ -303,6 +304,13 @@ async function setup() {
       const handle = (credential.response as AuthenticatorAssertionResponse).userHandle;
       if (!handle) throw new Error("this passkey carries no household");
       const known = await memberKeyFromHandle(handle);
+      // Clause 52. A household that moved arrives at a host that holds its
+      // rows and not its key, and this flow registered nothing on the reasoning
+      // that the key was already the one the engine knew. That is true of the
+      // host it left. Registering is safe and idempotent now, because the name
+      // proves the key and the same key under the same name is not a conflict.
+      // Named by a review pass on 2026-09-16.
+      await api("POST", "/_identities", { key: known.household, public_key: known.pem });
       const member: Member = {
         label: input.value.trim() || `household-${credentialId.slice(0, 6)}`,
         household: known.household,
