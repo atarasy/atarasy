@@ -78,7 +78,10 @@ const json = (body: unknown, status = 200) =>
  * is a label this browser keeps, and the identifier a shop is given is the
  * credential's.
  */
-const MEMBER_NAME = /^key:[A-Za-z0-9_-]{43}$/;
+// §13.2. The last character of a 43-character base64url digest carries four
+// bits of digest and two that must be zero, so a name that decodes and does
+// not encode back to itself is one no key has.
+const MEMBER_NAME = /^key:[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$/;
 
 /**
  * The calls the screen makes. Anything else is not this hub's to carry.

@@ -145,7 +145,7 @@ public actor MemberClient {
     /// §13.2, question 55. A mandate's identifier is its household's, a full stop and a label, and a
     /// household's is `key:` and the base64url SHA-256 of its public key.
     private func mandateIdentifier(_ id: String) throws {
-        guard id.range(of: "^key:[A-Za-z0-9_-]{43}\\.[A-Za-z0-9_-]{1,64}\\z", options: .regularExpression) != nil else { throw MemberFailure.invalidInput }
+        guard id.range(of: "^key:[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]\\.[A-Za-z0-9_-]{1,64}\\z", options: .regularExpression) != nil else { throw MemberFailure.invalidInput }
     }
     public func offers(presenter: String) async throws -> [MemberOfferSummary] {
         guard let info = active?.info, info.presenters.contains(where: { same($0, presenter) }) else { throw MemberFailure.scopeMismatch }
