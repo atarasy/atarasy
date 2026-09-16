@@ -99,7 +99,18 @@ async function fromParts(d: string, x: string): Promise<MemberKey> {
 
 /** A new household: a key, and the 64-byte handle the passkey will carry for it. */
 export async function newMemberKey(): Promise<MemberKey> {
-  const pair = (await crypto.subtle.generateKey(ED, true, ["sign", "verify"])) as CryptoKeyPair;
+  // Ed25519 reached WebCrypto in Safari 17, Chrome 137 and Firefox 130. A
+  // browser without it throws a `NotSupportedError` whose message says
+  // nothing a member can act on, so it says it here instead. There is no
+  // fallback: the key has to be one the engine verifies and one this browser
+  // can rebuild from the handle, and a curve the authenticator chose is not
+  // the second.
+  let pair: CryptoKeyPair;
+  try {
+    pair = (await crypto.subtle.generateKey(ED, true, ["sign", "verify"])) as CryptoKeyPair;
+  } catch {
+    throw new Error("This browser cannot make the kind of key a household is named by. Recent Safari, Chrome and Firefox can; open this page in one of them.");
+  }
   const jwk = (await crypto.subtle.exportKey("jwk", pair.privateKey)) as { d?: string; x?: string };
   if (!jwk.d || !jwk.x) throw new Error("this browser does not hand out the parts of a new key");
   return fromParts(jwk.d, jwk.x);
