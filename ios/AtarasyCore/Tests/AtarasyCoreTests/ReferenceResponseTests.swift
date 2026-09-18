@@ -14,7 +14,7 @@ final class ReferenceResponseTests: XCTestCase {
     }
     func testActualReferenceReceiptsKeepGoodsDisputeAndProviderBoundaries() throws {
         let receipts = try examples().filter { $0["schema"] as? String == "SettlementResponse" }
-        XCTAssertEqual(receipts.count, 5)
+        XCTAssertEqual(receipts.count, 6)
         for receipt in receipts { _ = try read(receipt["value"] as! [String: Any]) }
         let digital = try read(example("digital-settled"))
         XCTAssertEqual(digital.charged, 1200)
@@ -25,6 +25,11 @@ final class ReferenceResponseTests: XCTestCase {
         XCTAssertEqual(physical.lines.first { $0.disputed }?.amount, 1200)
         XCTAssertEqual(try read(example("physical-read-back")), physical)
         XCTAssertEqual(try read(example("physical-same-asserted-bytes")), physical)
+        // Question 62: every line returned settles at 0 inside the decision.
+        let returned = try read(example("returned-read-back"))
+        XCTAssertEqual(returned.charged, 0)
+        XCTAssertEqual(returned.keptAmount, 0)
+        XCTAssertTrue(returned.lines.allSatisfy { $0.valence == "returned" && !$0.disputed })
     }
     func testLostGoodsStayOutsideChargedTotal() throws {
         var body = try example("digital-settled")

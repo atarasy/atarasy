@@ -21,7 +21,7 @@ const cases:any[]=[];
 const house=(label:string)=>{const h=houseFor(label);engine.registerIdentity(h.household,h.pem);return h;};
 const HOUSE_A=house('fixture-house-a'), HOUSE_B=house('fixture-house-b'),
       HOUSE_PHYSICAL=house('fixture-house-physical'), HOUSE_NEW=house('fixture-house-new'),
-      HOUSE_OTHER=house('fixture-other-house');
+      HOUSE_OTHER=house('fixture-other-house'), HOUSE_RETURNED=house('fixture-house-returned');
 async function call(id:string, method:string, path:string, schema:string, expected:number, body?:unknown, handler=handle){
  const response=await handler(new Request('https://unit.example'+path,{method,...(body===undefined?{}:{body:JSON.stringify(body),headers:{'content-type':'application/json'}})}));
  const value=await response.json();if(response.status!==expected)throw new Error(`${id}: ${response.status} ${JSON.stringify(value)}`);
@@ -49,6 +49,16 @@ const signature=sign(null,canonicalDecisions(digital.id,decisions),HOUSE_A.priva
 await call('digital-decided','POST',d+'/decisions','OfferResponse',200,{decisions,signature});
 await call('digital-settled','POST',d+'/settle','SettlementResponse',200,{});
 await call('digital-read-back','GET',d+'/settlement','SettlementResponse',200);
+// §6.4, question 62. A set the household decides with every line returned
+// owes nothing, so it settles at 0 inside the decision and never reads
+// `decided`; a client that waits for a presenter to settle it waits forever.
+const returned=await call('returned-created','POST','/offers','OfferResponse',201,input('digital',HOUSE_RETURNED.household));
+const r='/offers/'+returned.id;
+await call('returned-presented','POST',r+'/present','OfferResponse',200,{});
+const returnedDecisions=returned.candidates.map((c:any)=>({candidate:c.id,valence:'returned'}));
+const returnedSignature=sign(null,canonicalDecisions(returned.id,returnedDecisions),HOUSE_RETURNED.privateKey).toString('base64');
+await call('returned-decided','POST',r+'/decisions','OfferResponse',200,{decisions:returnedDecisions,signature:returnedSignature});
+await call('returned-read-back','GET',r+'/settlement','SettlementResponse',200);
 const physical=await call('physical-created','POST','/offers','OfferResponse',201,input('physical',HOUSE_PHYSICAL.household));
 const p='/offers/'+physical.id;
 await call('physical-presented','POST',p+'/present','OfferResponse',200,{});
@@ -73,6 +83,7 @@ for (const [id, code] of Object.entries({'approval-missing':'no_deliberation','q
 }
 if(byID('house-a-list').offers.length!==1 || byID('empty-presenter').offers.length!==0)throw new Error('query scope');
 if(byID('digital-settled').charged!==1200 || byID('physical-settled').charged!==0 || byID('physical-settled').disputed_amount!==1200)throw new Error('goods/gift/dispute totals');
+if(byID('returned-decided').state!=='settled' || byID('returned-read-back').charged!==0)throw new Error('a set that owes nothing settles at its decision');
 if(byID('physical-settled').receipt!==byID('physical-read-back').receipt || byID('physical-settled').receipt!==byID('physical-same-asserted-bytes').receipt)throw new Error('original receipt');
 if(JSON.stringify(cases).includes('fixture-private-delivery-code'))throw new Error('delivery code leaked');
 // Publication/mandate increment. Only public test signatures are captured.

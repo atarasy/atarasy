@@ -5,7 +5,7 @@ p=argparse.ArgumentParser();p.add_argument('--engine-repo',required=True);args=p
 root=Path(__file__).resolve().parents[2]
 manifest=json.loads((root/'contracts/ios-first/manifest.json').read_text())
 commit=next(s['commit'] for s in manifest['sources'] if s['repo']=='valence')
-files=['engine/src/shared/decisions.ts','engine/src/shared/statement.ts','engine/src/hub/mandates.ts','engine/src/common/errors.ts','engine/src/common/store.ts']
+files=['engine/src/shared/decisions.ts','engine/src/shared/statement.ts','engine/src/hub/mandates.ts','engine/src/common/errors.ts','engine/src/common/store.ts','engine/src/common/names.ts']
 with tempfile.TemporaryDirectory(prefix='atarasy-vector-check-') as directory:
     target=Path(directory)
     for name in files:
