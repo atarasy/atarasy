@@ -18,7 +18,8 @@ final class MandateResponseTests: XCTestCase {
         XCTAssertNil(first.ceilingDaily); XCTAssertNil(first.coolingSeconds)
         XCTAssertEqual(tight.ceilingDaily, 0); XCTAssertEqual(tight.coolingSeconds, 60)
         XCTAssertNil(loose.ceilingDaily); XCTAssertEqual(loose.coSigners, []); XCTAssertEqual(loose.version, 3)
-        XCTAssertNotEqual(try Canonical.mandate(first), try Canonical.mandate(tight))
+        XCTAssertNotEqual(try Canonical.mandate(first, host: "hub.example"), try Canonical.mandate(tight, host: "hub.example"))
+        XCTAssertNotEqual(try Canonical.mandate(first, host: "hub.example"), try Canonical.mandate(first, host: "other.example"))
     }
     /// §13.2, question 55. A household's identifier carries a colon and a mandate's carries one and
     /// a full stop. Both sit on lines of their own in the signed form, so the colon the decision and
@@ -27,10 +28,11 @@ final class MandateResponseTests: XCTestCase {
         let household = "key:L7zIqTWzxcxLB9T_L9Z--Rewkt-8DAkgRYtgcIIsC-E"
         let m = Mandate(id: household + ".1", household: household, ceilingOutOfNetwork: 1,
                         ceilingDaily: nil, coolingSeconds: nil, coSigners: [], lapsesAt: 1, version: 1)
-        let bytes = try Canonical.mandate(m)
-        XCTAssertTrue(bytes.hasPrefix(household + ".1\n" + household + "\n"))
+        let bytes = try Canonical.mandate(m, host: "hub.example")
+        XCTAssertTrue(bytes.hasPrefix("valence.mandate.2\nhub.example\n" + household + ".1\n" + household + "\n"))
         var broken = m; broken.id = household + ".1\nkey:other"
-        XCTAssertThrowsError(try Canonical.mandate(broken))
+        XCTAssertThrowsError(try Canonical.mandate(broken, host: "hub.example"))
+        XCTAssertThrowsError(try Canonical.mandate(m, host: "hub.example\nother.example"))
     }
 
     func testMandateCannotChangeResourceHouseholdOrRegressBelowKnownVersion() throws {

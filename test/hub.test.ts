@@ -470,7 +470,7 @@ describe("the hub in front of an engine", () => {
     };
     const recorded = await post(HUB, "/api/_node/mandates", {
       ...mandate,
-      assertions: { [HOUSEHOLD]: assertOver(canonicalMandate(mandate)) },
+      assertions: { [HOUSEHOLD]: assertOver(canonicalMandate(mandate, RP)) },
     });
     expect(recorded.status).toBe(201);
     const read = await (await fetch(`${HUB}/api/_node/mandates/${encodeURIComponent(MANDATE)}`)).json();
@@ -524,7 +524,7 @@ describe("the hub in front of an engine", () => {
     const mandate = { ...base, ceiling_daily: 1, version };
     const recorded = await post(HUB, "/api/_node/mandates", {
       ...mandate,
-      assertions: { [HOUSEHOLD]: assertOver(canonicalMandate(mandate)) },
+      assertions: { [HOUSEHOLD]: assertOver(canonicalMandate(mandate, RP)) },
     });
     expect(recorded.status).toBe(201);
     const decisions = offer.candidates.map((c) => ({ candidate: c.id, valence: "kept" as const, kept_as: "self" as const }));

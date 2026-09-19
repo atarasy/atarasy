@@ -9,7 +9,7 @@
       "status": 201,
       "schema": "OfferResponse",
       "value": {
-        "id": "a9c71259-8aa7-4c2f-a7ea-604a7fda0f65",
+        "id": "b96df783-f0ef-40e9-bffd-a6aac7085e0f",
         "binding": "digital",
         "household": "key:XWR3GGba5jj_9b7X-RJndScsqylXJd3GthDDuF3CmZo",
         "presenter": "merchant-1",
@@ -19,13 +19,13 @@
         "giver": null,
         "config_version": "cfg-1",
         "presented_at": null,
-        "expires_at": 1789778848709,
+        "expires_at": 1789787406511,
         "state": "drafted",
         "exploration_floor_met": true,
         "mandate": "key:XWR3GGba5jj_9b7X-RJndScsqylXJd3GthDDuF3CmZo.1",
         "candidates": [
           {
-            "id": "560c4c70-a1ac-4272-a903-abb3740054a6",
+            "id": "fec853c4-b007-477c-a1b6-344a5ccdfe09",
             "product": "tea-a",
             "quantity": 1,
             "unit_price": 1200,
@@ -43,7 +43,7 @@
             "collected_as": null
           },
           {
-            "id": "50493c12-66c1-42d6-bfed-ececdbcf57a9",
+            "id": "7ee53350-4407-411a-bd8f-484b93dfd7af",
             "product": "tea-b",
             "quantity": 1,
             "unit_price": 900,
@@ -80,7 +80,7 @@
                 "value": "as the merchant published"
               }
             ],
-            "signature": "wiJ/HXaIOVBSuuKh++42CWIkiU1+d9zycAqZvDnw0lhUip+srMo7YmavxKaMzo5JrlfW1EORjfLPd3pwc1KACQ=="
+            "signature": "mTacfONsXUnYkKodUfHz5bXUdxsgW6wySsF3cpPsXMXZOGNSk0x5EQK9gH7n/A95IwbtbJwQEz0OfSSvcWz9Dw=="
           }
         ]
       }
@@ -88,11 +88,11 @@
     {
       "id": "digital-presented",
       "method": "POST",
-      "path": "/offers/a9c71259-8aa7-4c2f-a7ea-604a7fda0f65/present",
+      "path": "/offers/b96df783-f0ef-40e9-bffd-a6aac7085e0f/present",
       "status": 200,
       "schema": "OfferResponse",
       "value": {
-        "id": "a9c71259-8aa7-4c2f-a7ea-604a7fda0f65",
+        "id": "b96df783-f0ef-40e9-bffd-a6aac7085e0f",
         "binding": "digital",
         "household": "key:XWR3GGba5jj_9b7X-RJndScsqylXJd3GthDDuF3CmZo",
         "presenter": "merchant-1",
@@ -101,14 +101,14 @@
         "price_band": null,
         "giver": null,
         "config_version": "cfg-1",
-        "presented_at": 1789775248723,
-        "expires_at": 1789778848709,
+        "presented_at": 1789783806525,
+        "expires_at": 1789787406511,
         "state": "presented",
         "exploration_floor_met": true,
         "mandate": "key:XWR3GGba5jj_9b7X-RJndScsqylXJd3GthDDuF3CmZo.1",
         "candidates": [
           {
-            "id": "560c4c70-a1ac-4272-a903-abb3740054a6",
+            "id": "fec853c4-b007-477c-a1b6-344a5ccdfe09",
             "product": "tea-a",
             "quantity": 1,
             "unit_price": 1200,
@@ -126,7 +126,7 @@
             "collected_as": null
           },
           {
-            "id": "50493c12-66c1-42d6-bfed-ececdbcf57a9",
+            "id": "7ee53350-4407-411a-bd8f-484b93dfd7af",
             "product": "tea-b",
             "quantity": 1,
             "unit_price": 900,
@@ -163,7 +163,7 @@
                 "value": "as the merchant published"
               }
             ],
-            "signature": "wiJ/HXaIOVBSuuKh++42CWIkiU1+d9zycAqZvDnw0lhUip+srMo7YmavxKaMzo5JrlfW1EORjfLPd3pwc1KACQ=="
+            "signature": "mTacfONsXUnYkKodUfHz5bXUdxsgW6wySsF3cpPsXMXZOGNSk0x5EQK9gH7n/A95IwbtbJwQEz0OfSSvcWz9Dw=="
           }
         ]
       }
@@ -171,7 +171,7 @@
     {
       "id": "approval-missing",
       "method": "GET",
-      "path": "/offers/a9c71259-8aa7-4c2f-a7ea-604a7fda0f65/approval",
+      "path": "/offers/b96df783-f0ef-40e9-bffd-a6aac7085e0f/approval",
       "status": 422,
       "schema": "ErrorResponse",
       "value": {
@@ -182,13 +182,13 @@
     {
       "id": "digital-approval",
       "method": "GET",
-      "path": "/offers/a9c71259-8aa7-4c2f-a7ea-604a7fda0f65/approval",
+      "path": "/offers/b96df783-f0ef-40e9-bffd-a6aac7085e0f/approval",
       "status": 200,
       "schema": "ApprovalResponse",
       "value": {
-        "offer": "a9c71259-8aa7-4c2f-a7ea-604a7fda0f65",
+        "offer": "b96df783-f0ef-40e9-bffd-a6aac7085e0f",
         "presenter": "merchant-1",
-        "expires_at": 1789778848709,
+        "expires_at": 1789787406511,
         "carriage": null,
         "reminded": false,
         "mandate": {
@@ -216,12 +216,12 @@
                 "value": "as the merchant published"
               }
             ],
-            "signature": "wiJ/HXaIOVBSuuKh++42CWIkiU1+d9zycAqZvDnw0lhUip+srMo7YmavxKaMzo5JrlfW1EORjfLPd3pwc1KACQ=="
+            "signature": "mTacfONsXUnYkKodUfHz5bXUdxsgW6wySsF3cpPsXMXZOGNSk0x5EQK9gH7n/A95IwbtbJwQEz0OfSSvcWz9Dw=="
           }
         ],
         "candidates": [
           {
-            "id": "560c4c70-a1ac-4272-a903-abb3740054a6",
+            "id": "fec853c4-b007-477c-a1b6-344a5ccdfe09",
             "product": "tea-a",
             "quantity": 1,
             "unit_price": 1200,
@@ -242,7 +242,7 @@
             }
           },
           {
-            "id": "50493c12-66c1-42d6-bfed-ececdbcf57a9",
+            "id": "7ee53350-4407-411a-bd8f-484b93dfd7af",
             "product": "tea-b",
             "quantity": 1,
             "unit_price": 900,
@@ -269,11 +269,11 @@
     {
       "id": "digital-offer",
       "method": "GET",
-      "path": "/offers/a9c71259-8aa7-4c2f-a7ea-604a7fda0f65",
+      "path": "/offers/b96df783-f0ef-40e9-bffd-a6aac7085e0f",
       "status": 200,
       "schema": "OfferResponse",
       "value": {
-        "id": "a9c71259-8aa7-4c2f-a7ea-604a7fda0f65",
+        "id": "b96df783-f0ef-40e9-bffd-a6aac7085e0f",
         "binding": "digital",
         "household": "key:XWR3GGba5jj_9b7X-RJndScsqylXJd3GthDDuF3CmZo",
         "presenter": "merchant-1",
@@ -282,14 +282,14 @@
         "price_band": null,
         "giver": null,
         "config_version": "cfg-1",
-        "presented_at": 1789775248723,
-        "expires_at": 1789778848709,
+        "presented_at": 1789783806525,
+        "expires_at": 1789787406511,
         "state": "presented",
         "exploration_floor_met": true,
         "mandate": "key:XWR3GGba5jj_9b7X-RJndScsqylXJd3GthDDuF3CmZo.1",
         "candidates": [
           {
-            "id": "560c4c70-a1ac-4272-a903-abb3740054a6",
+            "id": "fec853c4-b007-477c-a1b6-344a5ccdfe09",
             "product": "tea-a",
             "quantity": 1,
             "unit_price": 1200,
@@ -307,7 +307,7 @@
             "collected_as": null
           },
           {
-            "id": "50493c12-66c1-42d6-bfed-ececdbcf57a9",
+            "id": "7ee53350-4407-411a-bd8f-484b93dfd7af",
             "product": "tea-b",
             "quantity": 1,
             "unit_price": 900,
@@ -344,7 +344,7 @@
                 "value": "as the merchant published"
               }
             ],
-            "signature": "wiJ/HXaIOVBSuuKh++42CWIkiU1+d9zycAqZvDnw0lhUip+srMo7YmavxKaMzo5JrlfW1EORjfLPd3pwc1KACQ=="
+            "signature": "mTacfONsXUnYkKodUfHz5bXUdxsgW6wySsF3cpPsXMXZOGNSk0x5EQK9gH7n/A95IwbtbJwQEz0OfSSvcWz9Dw=="
           }
         ]
       }
@@ -356,7 +356,7 @@
       "status": 201,
       "schema": "OfferResponse",
       "value": {
-        "id": "5f9b72fa-f911-4ca0-a433-c15ac4d9dbc1",
+        "id": "bc959baf-0522-474e-90b6-6784ff440dc0",
         "binding": "digital",
         "household": "key:GqDbj5OV3JOzVuhgQH_dJRqDdwDv9XEYhGYIWijIuY0",
         "presenter": "merchant-1",
@@ -366,13 +366,13 @@
         "giver": null,
         "config_version": "cfg-1",
         "presented_at": null,
-        "expires_at": 1789778848727,
+        "expires_at": 1789787406528,
         "state": "drafted",
         "exploration_floor_met": true,
         "mandate": "key:GqDbj5OV3JOzVuhgQH_dJRqDdwDv9XEYhGYIWijIuY0.1",
         "candidates": [
           {
-            "id": "cd04ff76-a01a-45cf-8c42-f062be0196c7",
+            "id": "466a7f57-379d-41e5-94de-ebfa7a8e6cf3",
             "product": "tea-a",
             "quantity": 1,
             "unit_price": 1200,
@@ -390,7 +390,7 @@
             "collected_as": null
           },
           {
-            "id": "51ca3097-39a0-4cf0-9531-2d13a0f669c9",
+            "id": "8af074de-dd31-4a00-a234-719b3befbe03",
             "product": "tea-b",
             "quantity": 1,
             "unit_price": 900,
@@ -427,7 +427,7 @@
                 "value": "as the merchant published"
               }
             ],
-            "signature": "wiJ/HXaIOVBSuuKh++42CWIkiU1+d9zycAqZvDnw0lhUip+srMo7YmavxKaMzo5JrlfW1EORjfLPd3pwc1KACQ=="
+            "signature": "mTacfONsXUnYkKodUfHz5bXUdxsgW6wySsF3cpPsXMXZOGNSk0x5EQK9gH7n/A95IwbtbJwQEz0OfSSvcWz9Dw=="
           }
         ]
       }
@@ -441,7 +441,7 @@
       "value": {
         "offers": [
           {
-            "id": "a9c71259-8aa7-4c2f-a7ea-604a7fda0f65",
+            "id": "b96df783-f0ef-40e9-bffd-a6aac7085e0f",
             "binding": "digital",
             "household": "key:XWR3GGba5jj_9b7X-RJndScsqylXJd3GthDDuF3CmZo",
             "presenter": "merchant-1",
@@ -450,14 +450,14 @@
             "price_band": null,
             "giver": null,
             "config_version": "cfg-1",
-            "presented_at": 1789775248723,
-            "expires_at": 1789778848709,
+            "presented_at": 1789783806525,
+            "expires_at": 1789787406511,
             "state": "presented",
             "exploration_floor_met": true,
             "mandate": "key:XWR3GGba5jj_9b7X-RJndScsqylXJd3GthDDuF3CmZo.1",
             "candidates": [
               {
-                "id": "560c4c70-a1ac-4272-a903-abb3740054a6",
+                "id": "fec853c4-b007-477c-a1b6-344a5ccdfe09",
                 "product": "tea-a",
                 "quantity": 1,
                 "unit_price": 1200,
@@ -475,7 +475,7 @@
                 "collected_as": null
               },
               {
-                "id": "50493c12-66c1-42d6-bfed-ececdbcf57a9",
+                "id": "7ee53350-4407-411a-bd8f-484b93dfd7af",
                 "product": "tea-b",
                 "quantity": 1,
                 "unit_price": 900,
@@ -512,7 +512,7 @@
                     "value": "as the merchant published"
                   }
                 ],
-                "signature": "wiJ/HXaIOVBSuuKh++42CWIkiU1+d9zycAqZvDnw0lhUip+srMo7YmavxKaMzo5JrlfW1EORjfLPd3pwc1KACQ=="
+                "signature": "mTacfONsXUnYkKodUfHz5bXUdxsgW6wySsF3cpPsXMXZOGNSk0x5EQK9gH7n/A95IwbtbJwQEz0OfSSvcWz9Dw=="
               }
             ]
           }
@@ -554,18 +554,18 @@
     {
       "id": "settlement-missing",
       "method": "GET",
-      "path": "/offers/a9c71259-8aa7-4c2f-a7ea-604a7fda0f65/settlement",
+      "path": "/offers/b96df783-f0ef-40e9-bffd-a6aac7085e0f/settlement",
       "status": 404,
       "schema": "ErrorResponse",
       "value": {
         "error": "not_found",
-        "message": "offer a9c71259-8aa7-4c2f-a7ea-604a7fda0f65 has no settlement"
+        "message": "offer b96df783-f0ef-40e9-bffd-a6aac7085e0f has no settlement"
       }
     },
     {
       "id": "role-mismatch",
       "method": "GET",
-      "path": "/offers/a9c71259-8aa7-4c2f-a7ea-604a7fda0f65/approval",
+      "path": "/offers/b96df783-f0ef-40e9-bffd-a6aac7085e0f/approval",
       "status": 404,
       "schema": "ErrorResponse",
       "value": {
@@ -576,11 +576,11 @@
     {
       "id": "digital-decided",
       "method": "POST",
-      "path": "/offers/a9c71259-8aa7-4c2f-a7ea-604a7fda0f65/decisions",
+      "path": "/offers/b96df783-f0ef-40e9-bffd-a6aac7085e0f/decisions",
       "status": 200,
       "schema": "OfferResponse",
       "value": {
-        "id": "a9c71259-8aa7-4c2f-a7ea-604a7fda0f65",
+        "id": "b96df783-f0ef-40e9-bffd-a6aac7085e0f",
         "binding": "digital",
         "household": "key:XWR3GGba5jj_9b7X-RJndScsqylXJd3GthDDuF3CmZo",
         "presenter": "merchant-1",
@@ -589,14 +589,14 @@
         "price_band": null,
         "giver": null,
         "config_version": "cfg-1",
-        "presented_at": 1789775248723,
-        "expires_at": 1789778848709,
+        "presented_at": 1789783806525,
+        "expires_at": 1789787406511,
         "state": "decided",
         "exploration_floor_met": true,
         "mandate": "key:XWR3GGba5jj_9b7X-RJndScsqylXJd3GthDDuF3CmZo.1",
         "candidates": [
           {
-            "id": "560c4c70-a1ac-4272-a903-abb3740054a6",
+            "id": "fec853c4-b007-477c-a1b6-344a5ccdfe09",
             "product": "tea-a",
             "quantity": 1,
             "unit_price": 1200,
@@ -608,13 +608,13 @@
             "is_exploration": true,
             "given_by": null,
             "valence": "kept",
-            "decided_at": 1789775248729,
+            "decided_at": 1789783806529,
             "kept_as": "self",
             "lineage": null,
             "collected_as": null
           },
           {
-            "id": "50493c12-66c1-42d6-bfed-ececdbcf57a9",
+            "id": "7ee53350-4407-411a-bd8f-484b93dfd7af",
             "product": "tea-b",
             "quantity": 1,
             "unit_price": 900,
@@ -626,7 +626,7 @@
             "is_exploration": true,
             "given_by": "fixture-giver",
             "valence": "kept",
-            "decided_at": 1789775248729,
+            "decided_at": 1789783806529,
             "kept_as": "self",
             "lineage": null,
             "collected_as": null
@@ -651,7 +651,7 @@
                 "value": "as the merchant published"
               }
             ],
-            "signature": "wiJ/HXaIOVBSuuKh++42CWIkiU1+d9zycAqZvDnw0lhUip+srMo7YmavxKaMzo5JrlfW1EORjfLPd3pwc1KACQ=="
+            "signature": "mTacfONsXUnYkKodUfHz5bXUdxsgW6wySsF3cpPsXMXZOGNSk0x5EQK9gH7n/A95IwbtbJwQEz0OfSSvcWz9Dw=="
           }
         ]
       }
@@ -659,12 +659,12 @@
     {
       "id": "digital-settled",
       "method": "POST",
-      "path": "/offers/a9c71259-8aa7-4c2f-a7ea-604a7fda0f65/settle",
+      "path": "/offers/b96df783-f0ef-40e9-bffd-a6aac7085e0f/settle",
       "status": 200,
       "schema": "SettlementResponse",
       "value": {
-        "offer": "a9c71259-8aa7-4c2f-a7ea-604a7fda0f65",
-        "settled_at": 1789775248730,
+        "offer": "b96df783-f0ef-40e9-bffd-a6aac7085e0f",
+        "settled_at": 1789783806530,
         "kept_amount": 1200,
         "consumed_amount": 0,
         "disputed_amount": 0,
@@ -672,7 +672,7 @@
         "charged": 1200,
         "lines": [
           {
-            "candidate": "560c4c70-a1ac-4272-a903-abb3740054a6",
+            "candidate": "fec853c4-b007-477c-a1b6-344a5ccdfe09",
             "product": "tea-a",
             "merchant": "maker-a",
             "maker": "made-by-tea",
@@ -682,7 +682,7 @@
             "disputed": false
           },
           {
-            "candidate": "50493c12-66c1-42d6-bfed-ececdbcf57a9",
+            "candidate": "7ee53350-4407-411a-bd8f-484b93dfd7af",
             "product": "tea-b",
             "merchant": "maker-a",
             "maker": "made-by-tea",
@@ -696,18 +696,18 @@
         "payer": "key:XWR3GGba5jj_9b7X-RJndScsqylXJd3GthDDuF3CmZo",
         "signed_by": "merchant-1",
         "signed_as": "agent",
-        "receipt": "e9ddbc9e83a5c89357c0553ea0b826a1359f4f43770688ffaa12dcd8db79b21c"
+        "receipt": "2fb4881e8440918fd98af574a0d4529b46a27864d1408fc0ae2ea22e72158d42"
       }
     },
     {
       "id": "digital-read-back",
       "method": "GET",
-      "path": "/offers/a9c71259-8aa7-4c2f-a7ea-604a7fda0f65/settlement",
+      "path": "/offers/b96df783-f0ef-40e9-bffd-a6aac7085e0f/settlement",
       "status": 200,
       "schema": "SettlementResponse",
       "value": {
-        "offer": "a9c71259-8aa7-4c2f-a7ea-604a7fda0f65",
-        "settled_at": 1789775248730,
+        "offer": "b96df783-f0ef-40e9-bffd-a6aac7085e0f",
+        "settled_at": 1789783806530,
         "kept_amount": 1200,
         "consumed_amount": 0,
         "disputed_amount": 0,
@@ -715,7 +715,7 @@
         "charged": 1200,
         "lines": [
           {
-            "candidate": "560c4c70-a1ac-4272-a903-abb3740054a6",
+            "candidate": "fec853c4-b007-477c-a1b6-344a5ccdfe09",
             "product": "tea-a",
             "merchant": "maker-a",
             "maker": "made-by-tea",
@@ -725,7 +725,7 @@
             "disputed": false
           },
           {
-            "candidate": "50493c12-66c1-42d6-bfed-ececdbcf57a9",
+            "candidate": "7ee53350-4407-411a-bd8f-484b93dfd7af",
             "product": "tea-b",
             "merchant": "maker-a",
             "maker": "made-by-tea",
@@ -739,7 +739,7 @@
         "payer": "key:XWR3GGba5jj_9b7X-RJndScsqylXJd3GthDDuF3CmZo",
         "signed_by": "merchant-1",
         "signed_as": "agent",
-        "receipt": "e9ddbc9e83a5c89357c0553ea0b826a1359f4f43770688ffaa12dcd8db79b21c"
+        "receipt": "2fb4881e8440918fd98af574a0d4529b46a27864d1408fc0ae2ea22e72158d42"
       }
     },
     {
@@ -749,7 +749,7 @@
       "status": 201,
       "schema": "OfferResponse",
       "value": {
-        "id": "2457b1ca-9775-45fb-8181-5c62ff5f4417",
+        "id": "929cbb1e-0251-4356-9c0a-bbfa27082ad4",
         "binding": "digital",
         "household": "key:2tLcDtMa2BrryFYtuASTHiotRqdA6VZ7zbl3rYIF2MU",
         "presenter": "merchant-1",
@@ -759,13 +759,13 @@
         "giver": null,
         "config_version": "cfg-1",
         "presented_at": null,
-        "expires_at": 1789778848732,
+        "expires_at": 1789787406531,
         "state": "drafted",
         "exploration_floor_met": true,
         "mandate": "key:2tLcDtMa2BrryFYtuASTHiotRqdA6VZ7zbl3rYIF2MU.1",
         "candidates": [
           {
-            "id": "f41a19fd-25ed-4f1b-aae4-e626b8aa4489",
+            "id": "748122dc-d634-475c-b55c-7994c8a7974c",
             "product": "tea-a",
             "quantity": 1,
             "unit_price": 1200,
@@ -783,7 +783,7 @@
             "collected_as": null
           },
           {
-            "id": "adc9ad0f-2475-4d44-906c-f729b74fd70d",
+            "id": "377a192c-787b-47cc-b45e-2aea96becf05",
             "product": "tea-b",
             "quantity": 1,
             "unit_price": 900,
@@ -820,7 +820,7 @@
                 "value": "as the merchant published"
               }
             ],
-            "signature": "wiJ/HXaIOVBSuuKh++42CWIkiU1+d9zycAqZvDnw0lhUip+srMo7YmavxKaMzo5JrlfW1EORjfLPd3pwc1KACQ=="
+            "signature": "mTacfONsXUnYkKodUfHz5bXUdxsgW6wySsF3cpPsXMXZOGNSk0x5EQK9gH7n/A95IwbtbJwQEz0OfSSvcWz9Dw=="
           }
         ]
       }
@@ -828,11 +828,11 @@
     {
       "id": "returned-presented",
       "method": "POST",
-      "path": "/offers/2457b1ca-9775-45fb-8181-5c62ff5f4417/present",
+      "path": "/offers/929cbb1e-0251-4356-9c0a-bbfa27082ad4/present",
       "status": 200,
       "schema": "OfferResponse",
       "value": {
-        "id": "2457b1ca-9775-45fb-8181-5c62ff5f4417",
+        "id": "929cbb1e-0251-4356-9c0a-bbfa27082ad4",
         "binding": "digital",
         "household": "key:2tLcDtMa2BrryFYtuASTHiotRqdA6VZ7zbl3rYIF2MU",
         "presenter": "merchant-1",
@@ -841,14 +841,14 @@
         "price_band": null,
         "giver": null,
         "config_version": "cfg-1",
-        "presented_at": 1789775248732,
-        "expires_at": 1789778848732,
+        "presented_at": 1789783806531,
+        "expires_at": 1789787406531,
         "state": "presented",
         "exploration_floor_met": true,
         "mandate": "key:2tLcDtMa2BrryFYtuASTHiotRqdA6VZ7zbl3rYIF2MU.1",
         "candidates": [
           {
-            "id": "f41a19fd-25ed-4f1b-aae4-e626b8aa4489",
+            "id": "748122dc-d634-475c-b55c-7994c8a7974c",
             "product": "tea-a",
             "quantity": 1,
             "unit_price": 1200,
@@ -866,7 +866,7 @@
             "collected_as": null
           },
           {
-            "id": "adc9ad0f-2475-4d44-906c-f729b74fd70d",
+            "id": "377a192c-787b-47cc-b45e-2aea96becf05",
             "product": "tea-b",
             "quantity": 1,
             "unit_price": 900,
@@ -903,7 +903,7 @@
                 "value": "as the merchant published"
               }
             ],
-            "signature": "wiJ/HXaIOVBSuuKh++42CWIkiU1+d9zycAqZvDnw0lhUip+srMo7YmavxKaMzo5JrlfW1EORjfLPd3pwc1KACQ=="
+            "signature": "mTacfONsXUnYkKodUfHz5bXUdxsgW6wySsF3cpPsXMXZOGNSk0x5EQK9gH7n/A95IwbtbJwQEz0OfSSvcWz9Dw=="
           }
         ]
       }
@@ -911,11 +911,11 @@
     {
       "id": "returned-decided",
       "method": "POST",
-      "path": "/offers/2457b1ca-9775-45fb-8181-5c62ff5f4417/decisions",
+      "path": "/offers/929cbb1e-0251-4356-9c0a-bbfa27082ad4/decisions",
       "status": 200,
       "schema": "OfferResponse",
       "value": {
-        "id": "2457b1ca-9775-45fb-8181-5c62ff5f4417",
+        "id": "929cbb1e-0251-4356-9c0a-bbfa27082ad4",
         "binding": "digital",
         "household": "key:2tLcDtMa2BrryFYtuASTHiotRqdA6VZ7zbl3rYIF2MU",
         "presenter": "merchant-1",
@@ -924,14 +924,14 @@
         "price_band": null,
         "giver": null,
         "config_version": "cfg-1",
-        "presented_at": 1789775248732,
-        "expires_at": 1789778848732,
+        "presented_at": 1789783806531,
+        "expires_at": 1789787406531,
         "state": "settled",
         "exploration_floor_met": true,
         "mandate": "key:2tLcDtMa2BrryFYtuASTHiotRqdA6VZ7zbl3rYIF2MU.1",
         "candidates": [
           {
-            "id": "f41a19fd-25ed-4f1b-aae4-e626b8aa4489",
+            "id": "748122dc-d634-475c-b55c-7994c8a7974c",
             "product": "tea-a",
             "quantity": 1,
             "unit_price": 1200,
@@ -943,13 +943,13 @@
             "is_exploration": true,
             "given_by": null,
             "valence": "returned",
-            "decided_at": 1789775248732,
+            "decided_at": 1789783806531,
             "kept_as": null,
             "lineage": null,
             "collected_as": null
           },
           {
-            "id": "adc9ad0f-2475-4d44-906c-f729b74fd70d",
+            "id": "377a192c-787b-47cc-b45e-2aea96becf05",
             "product": "tea-b",
             "quantity": 1,
             "unit_price": 900,
@@ -961,7 +961,7 @@
             "is_exploration": true,
             "given_by": "fixture-giver",
             "valence": "returned",
-            "decided_at": 1789775248732,
+            "decided_at": 1789783806531,
             "kept_as": null,
             "lineage": null,
             "collected_as": null
@@ -986,7 +986,7 @@
                 "value": "as the merchant published"
               }
             ],
-            "signature": "wiJ/HXaIOVBSuuKh++42CWIkiU1+d9zycAqZvDnw0lhUip+srMo7YmavxKaMzo5JrlfW1EORjfLPd3pwc1KACQ=="
+            "signature": "mTacfONsXUnYkKodUfHz5bXUdxsgW6wySsF3cpPsXMXZOGNSk0x5EQK9gH7n/A95IwbtbJwQEz0OfSSvcWz9Dw=="
           }
         ]
       }
@@ -994,12 +994,12 @@
     {
       "id": "returned-read-back",
       "method": "GET",
-      "path": "/offers/2457b1ca-9775-45fb-8181-5c62ff5f4417/settlement",
+      "path": "/offers/929cbb1e-0251-4356-9c0a-bbfa27082ad4/settlement",
       "status": 200,
       "schema": "SettlementResponse",
       "value": {
-        "offer": "2457b1ca-9775-45fb-8181-5c62ff5f4417",
-        "settled_at": 1789775248732,
+        "offer": "929cbb1e-0251-4356-9c0a-bbfa27082ad4",
+        "settled_at": 1789783806531,
         "kept_amount": 0,
         "consumed_amount": 0,
         "disputed_amount": 0,
@@ -1010,7 +1010,7 @@
         "payer": "key:2tLcDtMa2BrryFYtuASTHiotRqdA6VZ7zbl3rYIF2MU",
         "signed_by": "merchant-1",
         "signed_as": "agent",
-        "receipt": "12c8a2b5eda3eb503f7d34219a4882b4b7c5cf1ad8f2782478433f7c605c27ce"
+        "receipt": "11c37da5f1a8a470aa09f2bcad6b0edc65e7be160ec829bbb547e3d7e7f194bd"
       }
     },
     {
@@ -1020,7 +1020,7 @@
       "status": 201,
       "schema": "OfferResponse",
       "value": {
-        "id": "653edb4f-5b37-4a04-a3a2-f95b3d95bc33",
+        "id": "2b3fd616-ebb4-443b-a74c-0b4d1c0a945c",
         "binding": "physical",
         "household": "key:6PAMy23Chlh2E4b2BmKOGbA2zhO6ce9w9STICmy3bR4",
         "presenter": "merchant-1",
@@ -1030,13 +1030,13 @@
         "giver": null,
         "config_version": "cfg-1",
         "presented_at": null,
-        "expires_at": 1789778848732,
+        "expires_at": 1789787406532,
         "state": "drafted",
         "exploration_floor_met": true,
         "mandate": "key:6PAMy23Chlh2E4b2BmKOGbA2zhO6ce9w9STICmy3bR4.1",
         "candidates": [
           {
-            "id": "49d29419-abc1-4648-a3b1-687016f68d5c",
+            "id": "45c62562-ee20-44e0-8050-59a14db40d5b",
             "product": "tea-a",
             "quantity": 1,
             "unit_price": 1200,
@@ -1054,7 +1054,7 @@
             "collected_as": null
           },
           {
-            "id": "13a163e6-ac09-493e-8a3b-e61243adc3b6",
+            "id": "fae4bb28-395f-4b65-96e7-6a2aaf1bf977",
             "product": "tea-b",
             "quantity": 1,
             "unit_price": 900,
@@ -1091,7 +1091,7 @@
                 "value": "as the merchant published"
               }
             ],
-            "signature": "wiJ/HXaIOVBSuuKh++42CWIkiU1+d9zycAqZvDnw0lhUip+srMo7YmavxKaMzo5JrlfW1EORjfLPd3pwc1KACQ=="
+            "signature": "mTacfONsXUnYkKodUfHz5bXUdxsgW6wySsF3cpPsXMXZOGNSk0x5EQK9gH7n/A95IwbtbJwQEz0OfSSvcWz9Dw=="
           }
         ]
       }
@@ -1099,11 +1099,11 @@
     {
       "id": "physical-presented",
       "method": "POST",
-      "path": "/offers/653edb4f-5b37-4a04-a3a2-f95b3d95bc33/present",
+      "path": "/offers/2b3fd616-ebb4-443b-a74c-0b4d1c0a945c/present",
       "status": 200,
       "schema": "OfferResponse",
       "value": {
-        "id": "653edb4f-5b37-4a04-a3a2-f95b3d95bc33",
+        "id": "2b3fd616-ebb4-443b-a74c-0b4d1c0a945c",
         "binding": "physical",
         "household": "key:6PAMy23Chlh2E4b2BmKOGbA2zhO6ce9w9STICmy3bR4",
         "presenter": "merchant-1",
@@ -1112,14 +1112,14 @@
         "price_band": null,
         "giver": null,
         "config_version": "cfg-1",
-        "presented_at": 1789775248733,
-        "expires_at": 1789778848732,
+        "presented_at": 1789783806532,
+        "expires_at": 1789787406532,
         "state": "presented",
         "exploration_floor_met": true,
         "mandate": "key:6PAMy23Chlh2E4b2BmKOGbA2zhO6ce9w9STICmy3bR4.1",
         "candidates": [
           {
-            "id": "49d29419-abc1-4648-a3b1-687016f68d5c",
+            "id": "45c62562-ee20-44e0-8050-59a14db40d5b",
             "product": "tea-a",
             "quantity": 1,
             "unit_price": 1200,
@@ -1137,7 +1137,7 @@
             "collected_as": null
           },
           {
-            "id": "13a163e6-ac09-493e-8a3b-e61243adc3b6",
+            "id": "fae4bb28-395f-4b65-96e7-6a2aaf1bf977",
             "product": "tea-b",
             "quantity": 1,
             "unit_price": 900,
@@ -1174,7 +1174,7 @@
                 "value": "as the merchant published"
               }
             ],
-            "signature": "wiJ/HXaIOVBSuuKh++42CWIkiU1+d9zycAqZvDnw0lhUip+srMo7YmavxKaMzo5JrlfW1EORjfLPd3pwc1KACQ=="
+            "signature": "mTacfONsXUnYkKodUfHz5bXUdxsgW6wySsF3cpPsXMXZOGNSk0x5EQK9gH7n/A95IwbtbJwQEz0OfSSvcWz9Dw=="
           }
         ]
       }
@@ -1182,12 +1182,12 @@
     {
       "id": "collection-before",
       "method": "GET",
-      "path": "/offers/653edb4f-5b37-4a04-a3a2-f95b3d95bc33/recovery",
+      "path": "/offers/2b3fd616-ebb4-443b-a74c-0b4d1c0a945c/recovery",
       "status": 200,
       "schema": "RecoveryResponse",
       "value": {
-        "offer": "653edb4f-5b37-4a04-a3a2-f95b3d95bc33",
-        "due_at": 1789778848732,
+        "offer": "2b3fd616-ebb4-443b-a74c-0b4d1c0a945c",
+        "due_at": 1789787406532,
         "grace_days": 3,
         "collected_at": null,
         "returned": [],
@@ -1199,7 +1199,7 @@
     {
       "id": "collection-unknown",
       "method": "POST",
-      "path": "/offers/653edb4f-5b37-4a04-a3a2-f95b3d95bc33/recovery",
+      "path": "/offers/2b3fd616-ebb4-443b-a74c-0b4d1c0a945c/recovery",
       "status": 422,
       "schema": "ErrorResponse",
       "value": {
@@ -1210,18 +1210,18 @@
     {
       "id": "physical-collected",
       "method": "POST",
-      "path": "/offers/653edb4f-5b37-4a04-a3a2-f95b3d95bc33/recovery",
+      "path": "/offers/2b3fd616-ebb4-443b-a74c-0b4d1c0a945c/recovery",
       "status": 200,
       "schema": "RecoveryResponse",
       "value": {
-        "offer": "653edb4f-5b37-4a04-a3a2-f95b3d95bc33",
-        "due_at": 1789778848732,
+        "offer": "2b3fd616-ebb4-443b-a74c-0b4d1c0a945c",
+        "due_at": 1789787406532,
         "grace_days": 3,
-        "collected_at": 1789775248733,
+        "collected_at": 1789783806533,
         "returned": [],
         "consumed": [
-          "49d29419-abc1-4648-a3b1-687016f68d5c",
-          "13a163e6-ac09-493e-8a3b-e61243adc3b6"
+          "45c62562-ee20-44e0-8050-59a14db40d5b",
+          "fae4bb28-395f-4b65-96e7-6a2aaf1bf977"
         ],
         "missing": [],
         "missing_notes": {}
@@ -1230,16 +1230,16 @@
     {
       "id": "statement-no-delivery",
       "method": "GET",
-      "path": "/offers/653edb4f-5b37-4a04-a3a2-f95b3d95bc33/statement",
+      "path": "/offers/2b3fd616-ebb4-443b-a74c-0b4d1c0a945c/statement",
       "status": 200,
       "schema": "StatementResponse",
       "value": {
-        "offer": "653edb4f-5b37-4a04-a3a2-f95b3d95bc33",
+        "offer": "2b3fd616-ebb4-443b-a74c-0b4d1c0a945c",
         "household": "key:6PAMy23Chlh2E4b2BmKOGbA2zhO6ce9w9STICmy3bR4",
-        "expires_at": 1789778848732,
+        "expires_at": 1789787406532,
         "lines": [
           {
-            "candidate": "49d29419-abc1-4648-a3b1-687016f68d5c",
+            "candidate": "45c62562-ee20-44e0-8050-59a14db40d5b",
             "product": "tea-a",
             "merchant": "maker-a",
             "maker": "made-by-tea",
@@ -1256,7 +1256,7 @@
             }
           },
           {
-            "candidate": "13a163e6-ac09-493e-8a3b-e61243adc3b6",
+            "candidate": "fae4bb28-395f-4b65-96e7-6a2aaf1bf977",
             "product": "tea-b",
             "merchant": "maker-a",
             "maker": "made-by-tea",
@@ -1292,26 +1292,26 @@
                 "value": "as the merchant published"
               }
             ],
-            "signature": "wiJ/HXaIOVBSuuKh++42CWIkiU1+d9zycAqZvDnw0lhUip+srMo7YmavxKaMzo5JrlfW1EORjfLPd3pwc1KACQ=="
+            "signature": "mTacfONsXUnYkKodUfHz5bXUdxsgW6wySsF3cpPsXMXZOGNSk0x5EQK9gH7n/A95IwbtbJwQEz0OfSSvcWz9Dw=="
           }
         ],
         "carriage": null,
-        "challenge": "nU4DqyK0dv2HYmkJyPjRyHWYTUQjMseqNVdv5ixoVYg"
+        "challenge": "qHWKi_kjsXwRKZbsj_-5GfAuBXP77ALoeNuJ8ZsoFco"
       }
     },
     {
       "id": "physical-statement",
       "method": "GET",
-      "path": "/offers/653edb4f-5b37-4a04-a3a2-f95b3d95bc33/statement",
+      "path": "/offers/2b3fd616-ebb4-443b-a74c-0b4d1c0a945c/statement",
       "status": 200,
       "schema": "StatementResponse",
       "value": {
-        "offer": "653edb4f-5b37-4a04-a3a2-f95b3d95bc33",
+        "offer": "2b3fd616-ebb4-443b-a74c-0b4d1c0a945c",
         "household": "key:6PAMy23Chlh2E4b2BmKOGbA2zhO6ce9w9STICmy3bR4",
-        "expires_at": 1789778848732,
+        "expires_at": 1789787406532,
         "lines": [
           {
-            "candidate": "49d29419-abc1-4648-a3b1-687016f68d5c",
+            "candidate": "45c62562-ee20-44e0-8050-59a14db40d5b",
             "product": "tea-a",
             "merchant": "maker-a",
             "maker": "made-by-tea",
@@ -1328,7 +1328,7 @@
             }
           },
           {
-            "candidate": "13a163e6-ac09-493e-8a3b-e61243adc3b6",
+            "candidate": "fae4bb28-395f-4b65-96e7-6a2aaf1bf977",
             "product": "tea-b",
             "merchant": "maker-a",
             "maker": "made-by-tea",
@@ -1364,17 +1364,17 @@
                 "value": "as the merchant published"
               }
             ],
-            "signature": "wiJ/HXaIOVBSuuKh++42CWIkiU1+d9zycAqZvDnw0lhUip+srMo7YmavxKaMzo5JrlfW1EORjfLPd3pwc1KACQ=="
+            "signature": "mTacfONsXUnYkKodUfHz5bXUdxsgW6wySsF3cpPsXMXZOGNSk0x5EQK9gH7n/A95IwbtbJwQEz0OfSSvcWz9Dw=="
           }
         ],
         "carriage": 550,
-        "challenge": "B7pr3vgHfuz4QLiMi2dadJrpV65ZYd1LObGBMz9eGI8"
+        "challenge": "O3jW3v1_xIpp57N37rVrtkr2SASBjL2jinyNslCrkWc"
       }
     },
     {
       "id": "statement-unsigned",
       "method": "POST",
-      "path": "/offers/653edb4f-5b37-4a04-a3a2-f95b3d95bc33/settle",
+      "path": "/offers/2b3fd616-ebb4-443b-a74c-0b4d1c0a945c/settle",
       "status": 422,
       "schema": "ErrorResponse",
       "value": {
@@ -1385,12 +1385,12 @@
     {
       "id": "physical-settled",
       "method": "POST",
-      "path": "/offers/653edb4f-5b37-4a04-a3a2-f95b3d95bc33/settle",
+      "path": "/offers/2b3fd616-ebb4-443b-a74c-0b4d1c0a945c/settle",
       "status": 200,
       "schema": "SettlementResponse",
       "value": {
-        "offer": "653edb4f-5b37-4a04-a3a2-f95b3d95bc33",
-        "settled_at": 1789775248735,
+        "offer": "2b3fd616-ebb4-443b-a74c-0b4d1c0a945c",
+        "settled_at": 1789783806534,
         "kept_amount": 0,
         "consumed_amount": 0,
         "disputed_amount": 1200,
@@ -1398,7 +1398,7 @@
         "charged": 0,
         "lines": [
           {
-            "candidate": "49d29419-abc1-4648-a3b1-687016f68d5c",
+            "candidate": "45c62562-ee20-44e0-8050-59a14db40d5b",
             "product": "tea-a",
             "merchant": "maker-a",
             "maker": "made-by-tea",
@@ -1408,7 +1408,7 @@
             "disputed": true
           },
           {
-            "candidate": "13a163e6-ac09-493e-8a3b-e61243adc3b6",
+            "candidate": "fae4bb28-395f-4b65-96e7-6a2aaf1bf977",
             "product": "tea-b",
             "merchant": "maker-a",
             "maker": "made-by-tea",
@@ -1418,22 +1418,22 @@
             "disputed": false
           }
         ],
-        "confirmation": "sxRY5gDOSfsq8emOWJHLirk8bhDisz+MzbXSQBoJCsE3h2ZKCXMcckKA6Gqq38/AycIcsobKDgZ5T4uAj8/ZAw==",
+        "confirmation": "LLRq4mKTygtSrnUWHDxn1DrF2/uFuRWZFFr3Mrww+3SclzCpt5sHFWSr+GQAGVjrq+xrfK8ny25ly/4vbAmJBA==",
         "payer": "key:6PAMy23Chlh2E4b2BmKOGbA2zhO6ce9w9STICmy3bR4",
         "signed_by": "merchant-1",
         "signed_as": "agent",
-        "receipt": "b8c68e30b3f29124f62eae7060a9b79f2e777c9e53455abfcfe811d2d3cf2511"
+        "receipt": "49ec5aaef0f18ff77340c1d572af28f123418a4b011744eb78067027a543f0e9"
       }
     },
     {
       "id": "physical-same-asserted-bytes",
       "method": "POST",
-      "path": "/offers/653edb4f-5b37-4a04-a3a2-f95b3d95bc33/settle",
+      "path": "/offers/2b3fd616-ebb4-443b-a74c-0b4d1c0a945c/settle",
       "status": 200,
       "schema": "SettlementResponse",
       "value": {
-        "offer": "653edb4f-5b37-4a04-a3a2-f95b3d95bc33",
-        "settled_at": 1789775248735,
+        "offer": "2b3fd616-ebb4-443b-a74c-0b4d1c0a945c",
+        "settled_at": 1789783806534,
         "kept_amount": 0,
         "consumed_amount": 0,
         "disputed_amount": 1200,
@@ -1441,7 +1441,7 @@
         "charged": 0,
         "lines": [
           {
-            "candidate": "49d29419-abc1-4648-a3b1-687016f68d5c",
+            "candidate": "45c62562-ee20-44e0-8050-59a14db40d5b",
             "product": "tea-a",
             "merchant": "maker-a",
             "maker": "made-by-tea",
@@ -1451,7 +1451,7 @@
             "disputed": true
           },
           {
-            "candidate": "13a163e6-ac09-493e-8a3b-e61243adc3b6",
+            "candidate": "fae4bb28-395f-4b65-96e7-6a2aaf1bf977",
             "product": "tea-b",
             "merchant": "maker-a",
             "maker": "made-by-tea",
@@ -1461,22 +1461,22 @@
             "disputed": false
           }
         ],
-        "confirmation": "sxRY5gDOSfsq8emOWJHLirk8bhDisz+MzbXSQBoJCsE3h2ZKCXMcckKA6Gqq38/AycIcsobKDgZ5T4uAj8/ZAw==",
+        "confirmation": "LLRq4mKTygtSrnUWHDxn1DrF2/uFuRWZFFr3Mrww+3SclzCpt5sHFWSr+GQAGVjrq+xrfK8ny25ly/4vbAmJBA==",
         "payer": "key:6PAMy23Chlh2E4b2BmKOGbA2zhO6ce9w9STICmy3bR4",
         "signed_by": "merchant-1",
         "signed_as": "agent",
-        "receipt": "b8c68e30b3f29124f62eae7060a9b79f2e777c9e53455abfcfe811d2d3cf2511"
+        "receipt": "49ec5aaef0f18ff77340c1d572af28f123418a4b011744eb78067027a543f0e9"
       }
     },
     {
       "id": "physical-read-back",
       "method": "GET",
-      "path": "/offers/653edb4f-5b37-4a04-a3a2-f95b3d95bc33/settlement",
+      "path": "/offers/2b3fd616-ebb4-443b-a74c-0b4d1c0a945c/settlement",
       "status": 200,
       "schema": "SettlementResponse",
       "value": {
-        "offer": "653edb4f-5b37-4a04-a3a2-f95b3d95bc33",
-        "settled_at": 1789775248735,
+        "offer": "2b3fd616-ebb4-443b-a74c-0b4d1c0a945c",
+        "settled_at": 1789783806534,
         "kept_amount": 0,
         "consumed_amount": 0,
         "disputed_amount": 1200,
@@ -1484,7 +1484,7 @@
         "charged": 0,
         "lines": [
           {
-            "candidate": "49d29419-abc1-4648-a3b1-687016f68d5c",
+            "candidate": "45c62562-ee20-44e0-8050-59a14db40d5b",
             "product": "tea-a",
             "merchant": "maker-a",
             "maker": "made-by-tea",
@@ -1494,7 +1494,7 @@
             "disputed": true
           },
           {
-            "candidate": "13a163e6-ac09-493e-8a3b-e61243adc3b6",
+            "candidate": "fae4bb28-395f-4b65-96e7-6a2aaf1bf977",
             "product": "tea-b",
             "merchant": "maker-a",
             "maker": "made-by-tea",
@@ -1504,17 +1504,17 @@
             "disputed": false
           }
         ],
-        "confirmation": "sxRY5gDOSfsq8emOWJHLirk8bhDisz+MzbXSQBoJCsE3h2ZKCXMcckKA6Gqq38/AycIcsobKDgZ5T4uAj8/ZAw==",
+        "confirmation": "LLRq4mKTygtSrnUWHDxn1DrF2/uFuRWZFFr3Mrww+3SclzCpt5sHFWSr+GQAGVjrq+xrfK8ny25ly/4vbAmJBA==",
         "payer": "key:6PAMy23Chlh2E4b2BmKOGbA2zhO6ce9w9STICmy3bR4",
         "signed_by": "merchant-1",
         "signed_as": "agent",
-        "receipt": "b8c68e30b3f29124f62eae7060a9b79f2e777c9e53455abfcfe811d2d3cf2511"
+        "receipt": "49ec5aaef0f18ff77340c1d572af28f123418a4b011744eb78067027a543f0e9"
       }
     },
     {
       "id": "physical-changed-confirmation",
       "method": "POST",
-      "path": "/offers/653edb4f-5b37-4a04-a3a2-f95b3d95bc33/settle",
+      "path": "/offers/2b3fd616-ebb4-443b-a74c-0b4d1c0a945c/settle",
       "status": 409,
       "schema": "ErrorResponse",
       "value": {
@@ -1604,11 +1604,11 @@
     {
       "id": "old-offer-frozen",
       "method": "GET",
-      "path": "/offers/a9c71259-8aa7-4c2f-a7ea-604a7fda0f65",
+      "path": "/offers/b96df783-f0ef-40e9-bffd-a6aac7085e0f",
       "status": 200,
       "schema": "OfferResponse",
       "value": {
-        "id": "a9c71259-8aa7-4c2f-a7ea-604a7fda0f65",
+        "id": "b96df783-f0ef-40e9-bffd-a6aac7085e0f",
         "binding": "digital",
         "household": "key:XWR3GGba5jj_9b7X-RJndScsqylXJd3GthDDuF3CmZo",
         "presenter": "merchant-1",
@@ -1617,14 +1617,14 @@
         "price_band": null,
         "giver": null,
         "config_version": "cfg-1",
-        "presented_at": 1789775248723,
-        "expires_at": 1789778848709,
+        "presented_at": 1789783806525,
+        "expires_at": 1789787406511,
         "state": "settled",
         "exploration_floor_met": true,
         "mandate": "key:XWR3GGba5jj_9b7X-RJndScsqylXJd3GthDDuF3CmZo.1",
         "candidates": [
           {
-            "id": "560c4c70-a1ac-4272-a903-abb3740054a6",
+            "id": "fec853c4-b007-477c-a1b6-344a5ccdfe09",
             "product": "tea-a",
             "quantity": 1,
             "unit_price": 1200,
@@ -1636,13 +1636,13 @@
             "is_exploration": true,
             "given_by": null,
             "valence": "kept",
-            "decided_at": 1789775248729,
+            "decided_at": 1789783806529,
             "kept_as": "self",
             "lineage": null,
             "collected_as": null
           },
           {
-            "id": "50493c12-66c1-42d6-bfed-ececdbcf57a9",
+            "id": "7ee53350-4407-411a-bd8f-484b93dfd7af",
             "product": "tea-b",
             "quantity": 1,
             "unit_price": 900,
@@ -1654,7 +1654,7 @@
             "is_exploration": true,
             "given_by": "fixture-giver",
             "valence": "kept",
-            "decided_at": 1789775248729,
+            "decided_at": 1789783806529,
             "kept_as": "self",
             "lineage": null,
             "collected_as": null
@@ -1679,7 +1679,7 @@
                 "value": "as the merchant published"
               }
             ],
-            "signature": "wiJ/HXaIOVBSuuKh++42CWIkiU1+d9zycAqZvDnw0lhUip+srMo7YmavxKaMzo5JrlfW1EORjfLPd3pwc1KACQ=="
+            "signature": "mTacfONsXUnYkKodUfHz5bXUdxsgW6wySsF3cpPsXMXZOGNSk0x5EQK9gH7n/A95IwbtbJwQEz0OfSSvcWz9Dw=="
           }
         ]
       }
@@ -1691,7 +1691,7 @@
       "status": 201,
       "schema": "OfferResponse",
       "value": {
-        "id": "d41b8ce4-35fa-4732-b076-9a92a6d6e479",
+        "id": "978d156b-64f5-46e8-9b89-bb8ed3aa7a6e",
         "binding": "digital",
         "household": "key:zScmgfB4lOfqyHxBXYa-LgVP_kNA650xEFa7NVKJxpQ",
         "presenter": "merchant-1",
@@ -1701,13 +1701,13 @@
         "giver": null,
         "config_version": "fixture-cfg-2",
         "presented_at": null,
-        "expires_at": 1789778848737,
+        "expires_at": 1789787406537,
         "state": "drafted",
         "exploration_floor_met": true,
         "mandate": "key:zScmgfB4lOfqyHxBXYa-LgVP_kNA650xEFa7NVKJxpQ.1",
         "candidates": [
           {
-            "id": "db755d4c-f785-4dd2-b34f-9f34b9737dc3",
+            "id": "2a70f8be-20b0-4d9f-bcfb-5ebf45cee456",
             "product": "tea-a",
             "quantity": 1,
             "unit_price": 2400,
@@ -1736,7 +1736,7 @@
                 "value": "Updated fixture terms. No legal completeness claim."
               }
             ],
-            "signature": "k4nzg3EnXmNuxXBnMt9+5klCQeSkxGEXIFGkiy0GLUbPHsV+dBF7nKTnA8OhD2SreukpbFHTeAJEUpoZcR1LCQ=="
+            "signature": "+V0r8JjIWQz0TsRqcblxp+krP20sibMcweyfDKX+0DAedxXLfJ3caQJJNQ1BygaWmuGlGoiiFE+YedhXfT0XAw=="
           }
         ]
       }
@@ -1759,34 +1759,34 @@
       "status": 201,
       "schema": "MandateResponse",
       "value": {
-        "id": "key:REkCiku4kwYnDs6t_Tqj3UsWNFJgQ5TmFVq25ngunPw.protection",
-        "household": "key:REkCiku4kwYnDs6t_Tqj3UsWNFJgQ5TmFVq25ngunPw",
+        "id": "key:7AW7vAspBAooGUx5yp97oQNoTpEiCXtcEOo9pLWppcw.protection",
+        "household": "key:7AW7vAspBAooGUx5yp97oQNoTpEiCXtcEOo9pLWppcw",
         "ceiling_out_of_network": 10000,
         "ceiling_daily": null,
         "cooling_seconds": null,
         "co_signers": [
-          "key:SZ1o-lFRxgROJ-aDUkwUpfLK_5PFAYyAKnSlz6w79J0"
+          "key:SLAOqjHQ4ETZ4Su-pfC4zjsuThrotGVhI5th3ED3IpM"
         ],
-        "lapses_at": 1789778848738,
+        "lapses_at": 1789787406538,
         "version": 1
       }
     },
     {
       "id": "mandate-read",
       "method": "GET",
-      "path": "/_node/mandates/key%3AREkCiku4kwYnDs6t_Tqj3UsWNFJgQ5TmFVq25ngunPw.protection",
+      "path": "/_node/mandates/key%3A7AW7vAspBAooGUx5yp97oQNoTpEiCXtcEOo9pLWppcw.protection",
       "status": 200,
       "schema": "MandateResponse",
       "value": {
-        "id": "key:REkCiku4kwYnDs6t_Tqj3UsWNFJgQ5TmFVq25ngunPw.protection",
-        "household": "key:REkCiku4kwYnDs6t_Tqj3UsWNFJgQ5TmFVq25ngunPw",
+        "id": "key:7AW7vAspBAooGUx5yp97oQNoTpEiCXtcEOo9pLWppcw.protection",
+        "household": "key:7AW7vAspBAooGUx5yp97oQNoTpEiCXtcEOo9pLWppcw",
         "ceiling_out_of_network": 10000,
         "ceiling_daily": null,
         "cooling_seconds": null,
         "co_signers": [
-          "key:SZ1o-lFRxgROJ-aDUkwUpfLK_5PFAYyAKnSlz6w79J0"
+          "key:SLAOqjHQ4ETZ4Su-pfC4zjsuThrotGVhI5th3ED3IpM"
         ],
-        "lapses_at": 1789778848738,
+        "lapses_at": 1789787406538,
         "version": 1
       }
     },
@@ -1798,7 +1798,7 @@
       "schema": "ErrorResponse",
       "value": {
         "error": "stale_version",
-        "message": "mandate key:REkCiku4kwYnDs6t_Tqj3UsWNFJgQ5TmFVq25ngunPw.protection is at version 1"
+        "message": "mandate key:7AW7vAspBAooGUx5yp97oQNoTpEiCXtcEOo9pLWppcw.protection is at version 1"
       }
     },
     {
@@ -1808,15 +1808,15 @@
       "status": 201,
       "schema": "MandateResponse",
       "value": {
-        "id": "key:REkCiku4kwYnDs6t_Tqj3UsWNFJgQ5TmFVq25ngunPw.protection",
-        "household": "key:REkCiku4kwYnDs6t_Tqj3UsWNFJgQ5TmFVq25ngunPw",
+        "id": "key:7AW7vAspBAooGUx5yp97oQNoTpEiCXtcEOo9pLWppcw.protection",
+        "household": "key:7AW7vAspBAooGUx5yp97oQNoTpEiCXtcEOo9pLWppcw",
         "ceiling_out_of_network": 10000,
         "ceiling_daily": 0,
         "cooling_seconds": 60,
         "co_signers": [
-          "key:SZ1o-lFRxgROJ-aDUkwUpfLK_5PFAYyAKnSlz6w79J0"
+          "key:SLAOqjHQ4ETZ4Su-pfC4zjsuThrotGVhI5th3ED3IpM"
         ],
-        "lapses_at": 1789778848738,
+        "lapses_at": 1789787406538,
         "version": 2
       }
     },
@@ -1828,7 +1828,7 @@
       "schema": "ErrorResponse",
       "value": {
         "error": "unsigned",
-        "message": "this change is signed by key:REkCiku4kwYnDs6t_Tqj3UsWNFJgQ5TmFVq25ngunPw and key:SZ1o-lFRxgROJ-aDUkwUpfLK_5PFAYyAKnSlz6w79J0; key:SZ1o-lFRxgROJ-aDUkwUpfLK_5PFAYyAKnSlz6w79J0 is missing"
+        "message": "this change is signed by key:7AW7vAspBAooGUx5yp97oQNoTpEiCXtcEOo9pLWppcw and key:SLAOqjHQ4ETZ4Su-pfC4zjsuThrotGVhI5th3ED3IpM; key:SLAOqjHQ4ETZ4Su-pfC4zjsuThrotGVhI5th3ED3IpM is missing"
       }
     },
     {
@@ -1838,13 +1838,13 @@
       "status": 201,
       "schema": "MandateResponse",
       "value": {
-        "id": "key:REkCiku4kwYnDs6t_Tqj3UsWNFJgQ5TmFVq25ngunPw.protection",
-        "household": "key:REkCiku4kwYnDs6t_Tqj3UsWNFJgQ5TmFVq25ngunPw",
+        "id": "key:7AW7vAspBAooGUx5yp97oQNoTpEiCXtcEOo9pLWppcw.protection",
+        "household": "key:7AW7vAspBAooGUx5yp97oQNoTpEiCXtcEOo9pLWppcw",
         "ceiling_out_of_network": 10000,
         "ceiling_daily": null,
         "cooling_seconds": 60,
         "co_signers": [],
-        "lapses_at": 1789778848738,
+        "lapses_at": 1789787406538,
         "version": 3
       }
     },
@@ -1856,7 +1856,7 @@
       "schema": "ErrorResponse",
       "value": {
         "error": "name_is_not_the_key",
-        "message": "mandate key:REkCiku4kwYnDs6t_Tqj3UsWNFJgQ5TmFVq25ngunPw.protection is not this household's"
+        "message": "mandate key:7AW7vAspBAooGUx5yp97oQNoTpEiCXtcEOo9pLWppcw.protection is not this household's"
       }
     },
     {
@@ -1892,7 +1892,7 @@
             }
           }
         },
-        "signature": "CVRawTlKmSMro1R33lY68RBx3a/JYMmwZo9WZ2R3xBV8hAywoYvkSD3awtKQIpREtgzpXKJmb5Op7lGhE7yqDA=="
+        "signature": "haUW13sAOReZW8qfF8/+xA9vn4kYRE2o1vyzuYx0QiabVzGqA8BNURwdUbGRzAaMnNNqRCyRhrBoJma7iuAEBg=="
       },
       "valid": true
     },
@@ -1932,7 +1932,7 @@
             "value": "Updated fixture terms. No legal completeness claim."
           }
         ],
-        "signature": "k4nzg3EnXmNuxXBnMt9+5klCQeSkxGEXIFGkiy0GLUbPHsV+dBF7nKTnA8OhD2SreukpbFHTeAJEUpoZcR1LCQ=="
+        "signature": "+V0r8JjIWQz0TsRqcblxp+krP20sibMcweyfDKX+0DAedxXLfJ3caQJJNQ1BygaWmuGlGoiiFE+YedhXfT0XAw=="
       },
       "valid": true
     },
@@ -1944,7 +1944,7 @@
         "household": "key:zScmgfB4lOfqyHxBXYa-LgVP_kNA650xEFa7NVKJxpQ",
         "purpose": "replenish",
         "config_version": "fixture-cfg-2",
-        "expires_at": 1789778848737,
+        "expires_at": 1789787406537,
         "mandate": "key:zScmgfB4lOfqyHxBXYa-LgVP_kNA650xEFa7NVKJxpQ.1",
         "candidates": [
           {
@@ -1964,7 +1964,7 @@
         "household": "key:zScmgfB4lOfqyHxBXYa-LgVP_kNA650xEFa7NVKJxpQ",
         "purpose": "replenish",
         "config_version": "fixture-cfg-2",
-        "expires_at": 1789778848737,
+        "expires_at": 1789787406537,
         "mandate": "key:zScmgfB4lOfqyHxBXYa-LgVP_kNA650xEFa7NVKJxpQ.1",
         "candidates": [
           {
@@ -1979,7 +1979,7 @@
     }
   ],
   "source": {
-    "commit": "1e2b39dd1817b0a327c0e5c40b36f5337b95fce6",
+    "commit": "181081418ba4b15064f6fd55e0e13c299bb8d23b",
     "files": {
       "engine/src/common/errors.ts": "d84cd11ad8a2fbda6b5d013e4a35d3c58246e4c7cdb90af34a46c972f6452ffe",
       "engine/src/common/names.ts": "63ff4db8ed513e7ba5babb9a647e1a29ee44f3afbf5d28c6f3695d64ab51b8bc",
@@ -1992,13 +1992,13 @@
       "engine/src/engine/ledger.ts": "ef7b979d2c899e3f7a23e68e008ab8e8ca5224e17f9216408d2c9759d53f2a5e",
       "engine/src/engine/mandate-source.ts": "d463f959521f0ed66ca759bfd68ad9f8b01705522eaf6850682802cc3d2a770d",
       "engine/src/engine/meter-ledger.ts": "29c84a135c27925eb596f434293202b4e58893a73a21712140a2508cb3691ded",
-      "engine/src/engine/offers.ts": "04a2006416407ff27d6ee88876efe1fbeaf434dbf3094f485f41d6175f6aa48f",
+      "engine/src/engine/offers.ts": "8dcc85a6fb9763e159ba8aab6ae839f09eb295eb28b218d7e399a84e72058059",
       "engine/src/engine/physical.ts": "94ab8616809468d6199b33673d05b4afae18c10fe1bcd5fb4e8b02b336dec2f9",
-      "engine/src/http.ts": "f4e8c565ea612978c41773c33b82dd272aec3cfe63ac733648c6cf783cc137fa",
+      "engine/src/http.ts": "fa1ed4b4f182beb7e54c8064f431855a07162a67365626c9f3ee2573ab1e8233",
       "engine/src/hub/approval.ts": "1c068aa2bbad9c628ca49d528a6e6eda0021d698e6ca547c459a1e704dcc700b",
       "engine/src/hub/delivery.ts": "822306117c3729e7335d343a892bccf59f8850ed8c05f94ed2e8e31a7eb8aca1",
       "engine/src/hub/household-ledger.ts": "4a4d56832ae2f21e9ccb6f69c855888323c53cf1fef007e97b4041632ff49d58",
-      "engine/src/hub/mandates.ts": "7f015e2a2861e0a3c5a0e9f53858b8b8593b6881762228863fe20862e70f2618",
+      "engine/src/hub/mandates.ts": "6ab18e4f92cdc8ec66ddc025a5afe459ebb76d72f012f9f6220983fd41d4ee1d",
       "engine/src/hub/node.ts": "12c3a08d2e96df9be627d688d70e2e6cf02b5583eed1e52f8142e0ab6ab19fde",
       "engine/src/hub/permissions.ts": "e659dc769c023bb427bd0d0a53c72a50b6d536570d678343bbe5d699001058ab",
       "engine/src/hub/statement.ts": "08177fae9f81e971b9b3f38fb4ba12cd025dc5a07ef70bd2b83e14e2e6fac5d3",
@@ -2007,13 +2007,13 @@
       "engine/src/shared/collected.ts": "dc97bc23fdef2ec17de1fa982773a9e193241c2ae017517a2c428c407f3b85a3",
       "engine/src/shared/decisions.ts": "d76009dd22471f34f737a2193ca02ba7f86a3169eddcceba8e6f92f4bd01cd04",
       "engine/src/shared/disclosure.ts": "3af495965c7805ed7acde4645fec0a4e4084048a7c55934defe9ed85a5fe1cfc",
-      "engine/src/shared/gift.ts": "0ffa4248a53725109de219617f929154d06eec75683e6851c2bf72dddd04e7be",
+      "engine/src/shared/gift.ts": "45016a71d5871540772b2d56ccca6f5e8a475307f15dec0cf88d2ca51d03b20e",
       "engine/src/shared/lineage.ts": "2a651248529f6c33b5d9f0be6e2645bfd67e562cfe72ca05d98914d221110c05",
       "engine/src/shared/member-statement.ts": "e7deda6e5ad1f0c01e2f16806733644e5903e534934493665c54749c1a09c16c",
       "engine/src/shared/registry.ts": "6b1ebc77d6b76af20632e675bb1bd15b7b36aed039c955ec83128b8e075eff88",
       "engine/src/shared/statement.ts": "044fdcf79575f3995e3414437a8fb187c530c7c82fbcc9f36163764d5a4b5f2c",
       "engine/test/helpers.ts": "e3b2243a17445aa7f7186755eab3b2c678c4dfca6de6ae92e6ca5324901a2907"
     },
-    "harness_sha256": "42ed6a2c629bb75376858182f8396d164cb1053af13721e2c2406556c66ea634"
+    "harness_sha256": "86fc268b7e8db4cda724ee335a6a16a207cfcc613234d891aeaf8121fba5f11d"
   }
 }

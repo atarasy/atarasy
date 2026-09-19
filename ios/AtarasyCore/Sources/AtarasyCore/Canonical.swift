@@ -48,11 +48,17 @@ public enum Canonical {
         for line in lines { try identifier(line.candidate); try integer(line.amount); guard ["kept","defaulted","consumed","lost"].contains(line.valence), line.valence != "lost" || line.amount == 0, !line.disputed || ["consumed","lost"].contains(line.valence) else { throw ContractError.invalidValue } }
         return (["valence.statement.1",offer,String(carriage)] + lines.sorted { ordered($0.candidate,$1.candidate) }.map { "\($0.candidate):\($0.valence):\($0.amount):\($0.disputed ? "disputed" : "")" }).joined(separator:"\n")
     }
-    public static func mandate(_ m: Mandate) throws -> String {
+    /// Whether a mandate's fields can be written into the signed form at all.
+    public static func validateMandate(_ m: Mandate) throws {
         try line(m.id); try line(m.household)
         for value in [m.ceilingOutOfNetwork,m.ceilingDaily,m.coolingSeconds,m.lapsesAt,m.version].compactMap({$0}) { try integer(value) }
         guard m.version >= 1 else { throw ContractError.invalidValue }
-        return [m.id,m.household,String(m.ceilingOutOfNetwork),m.ceilingDaily.map(String.init) ?? "",m.coolingSeconds.map(String.init) ?? "",m.coSigners.sorted(by:ordered).map(encoded).joined(separator:","),String(m.lapsesAt),String(m.version)].joined(separator:"\n")
+    }
+    /// §16.1, question 58. The form names itself and the host the version is recorded at, which is
+    /// the relying party that host asserts for, so a version signed for one host records nowhere else.
+    public static func mandate(_ m: Mandate, host: String) throws -> String {
+        try validateMandate(m); try line(host)
+        return ["valence.mandate.2",host,m.id,m.household,String(m.ceilingOutOfNetwork),m.ceilingDaily.map(String.init) ?? "",m.coolingSeconds.map(String.init) ?? "",m.coSigners.sorted(by:ordered).map(encoded).joined(separator:","),String(m.lapsesAt),String(m.version)].joined(separator:"\n")
     }
     public static func digest(_ text: String) -> String { SHA256.hash(data:Data(text.utf8)).map { String(format:"%02x",$0) }.joined() }
     public static func challenge(_ text: String) -> String { Data(SHA256.hash(data:Data(text.utf8))).base64EncodedString().replacingOccurrences(of:"+",with:"-").replacingOccurrences(of:"/",with:"_").replacingOccurrences(of:"=",with:"") }

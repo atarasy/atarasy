@@ -15,7 +15,7 @@ with tempfile.TemporaryDirectory(prefix='atarasy-vector-check-') as directory:
 import { canonicalStatement } from './engine/src/shared/statement.ts';
 import { canonicalMandate } from './engine/src/hub/mandates.ts';
 const vectors = await Bun.file(process.argv[2]).json();
-for(const v of vectors){const b=v.kind==='decision'?canonicalDecisions(v.offer,v.decisions):v.kind==='statement'?canonicalStatement(v.offer,v.carriage,v.lines):canonicalMandate(v.mandate);if(b.toString('utf8')!==v.canonical)throw new Error(v.id);}
+for(const v of vectors){const b=v.kind==='decision'?canonicalDecisions(v.offer,v.decisions):v.kind==='statement'?canonicalStatement(v.offer,v.carriage,v.lines):canonicalMandate(v.mandate,v.host);if(b.toString('utf8')!==v.canonical)throw new Error(v.id);}
 console.log(JSON.stringify({vectors:vectors.length,result:'matched pinned engine bytes',serverStarted:false}));
 ''')
     subprocess.run(['bun',str(target/'check.ts'),str(root/'contracts/ios-first/canonical-vectors.json')],check=True)

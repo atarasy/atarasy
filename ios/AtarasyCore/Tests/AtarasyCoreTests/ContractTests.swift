@@ -1,14 +1,14 @@
 import XCTest
 @testable import AtarasyCore
 final class ContractTests: XCTestCase {
-    struct Vector: Decodable { var id:String; var kind:String; var offer:String?; var decisions:[Decision]?; var lines:[StatementLine]?; var carriage:Int64?; var mandate:Mandate?; var canonical:String; var sha256:String; var challenge:String }
+    struct Vector: Decodable { var id:String; var kind:String; var offer:String?; var decisions:[Decision]?; var lines:[StatementLine]?; var carriage:Int64?; var mandate:Mandate?; var host:String?; var canonical:String; var sha256:String; var challenge:String }
     func data(_ name:String) throws -> Data { try Data(contentsOf: XCTUnwrap(Bundle.module.url(forResource:name,withExtension:"json",subdirectory:"Fixtures"))) }
     func testIndependentCanonicalVectors() throws {
         let d=JSONDecoder(); d.keyDecodingStrategy = .convertFromSnakeCase
         let vectors=try d.decode([Vector].self,from:data("canonical-vectors")); XCTAssertEqual(vectors.count,11)
         for v in vectors {
             let text:String
-            switch v.kind { case "decision": text=try Canonical.decisions(offer:XCTUnwrap(v.offer),lines:XCTUnwrap(v.decisions)); case "statement": text=try Canonical.statement(offer:XCTUnwrap(v.offer),carriage:v.carriage,lines:XCTUnwrap(v.lines)); default: text=try Canonical.mandate(XCTUnwrap(v.mandate)) }
+            switch v.kind { case "decision": text=try Canonical.decisions(offer:XCTUnwrap(v.offer),lines:XCTUnwrap(v.decisions)); case "statement": text=try Canonical.statement(offer:XCTUnwrap(v.offer),carriage:v.carriage,lines:XCTUnwrap(v.lines)); default: text=try Canonical.mandate(XCTUnwrap(v.mandate),host:XCTUnwrap(v.host)) }
             XCTAssertEqual(text,v.canonical,v.id); XCTAssertEqual(Canonical.digest(text),v.sha256,v.id); XCTAssertEqual(Canonical.challenge(text),v.challenge,v.id)
         }
     }
