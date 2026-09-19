@@ -76,7 +76,7 @@ public enum ReferenceResponseReader {
               Data(value.id.utf8) == Data(expectedID.utf8), Data(value.household.utf8) == Data(expectedHousehold.utf8)
         else { throw ReferenceReadFailure.mismatchedResource }
         guard minimumVersion >= 1, value.version >= minimumVersion, value.coSigners.allSatisfy({ !$0.isEmpty }) else { throw ReferenceReadFailure.inconsistentMandate }
-        do { _ = try Canonical.mandate(value) } catch { throw ReferenceReadFailure.inconsistentMandate }
+        do { try Canonical.validateMandate(value) } catch { throw ReferenceReadFailure.inconsistentMandate }
         return value
     }
 

@@ -29,8 +29,18 @@ export type Mandate = {
 /** Absent is not zero: an empty line is no ceiling and no cooling. */
 const optional = (v: number | null | undefined) => (v === null || v === undefined ? "" : String(v));
 
-export function canonicalMandate(m: Mandate): string {
+/**
+ * §16.1, question 58, decided 2026-09-19. The form names itself and the host
+ * the version is recorded at, which is the relying party that host asserts
+ * for. It named no host before, so a signature made for one host recorded the
+ * same version at any other that held none of the household's history.
+ */
+export const MANDATE_DOMAIN = "valence.mandate.2";
+
+export function canonicalMandate(m: Mandate, host: string): string {
   return [
+    MANDATE_DOMAIN,
+    host,
     m.id,
     m.household,
     String(m.ceiling_out_of_network),

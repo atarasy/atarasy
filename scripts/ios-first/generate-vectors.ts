@@ -11,9 +11,9 @@ const cases:any[] = [
  {id:'statement-zero',kind:'statement',offer:'physical-zero',carriage:0,lines:[{candidate:'gift',valence:'consumed',amount:0,disputed:false}]},
  {id:'statement-missing',kind:'statement',offer:'physical-missing',carriage:300,lines:[{candidate:'d',valence:'lost',amount:0,disputed:true},{candidate:'b',valence:'consumed',amount:600,disputed:false},{candidate:'c',valence:'lost',amount:0,disputed:false},{candidate:'a',valence:'kept',amount:800,disputed:false}]},
  {id:'statement-only-missing',kind:'statement',offer:'physical-only-missing',carriage:0,lines:[{candidate:'gone',valence:'lost',amount:0,disputed:false}]},
- {id:'mandate-null',kind:'mandate',mandate},
- {id:'mandate-zero',kind:'mandate',mandate:{...mandate,ceiling_daily:0,cooling_seconds:0}},
- {id:'mandate-empty-signers',kind:'mandate',mandate:{...mandate,co_signers:[]}}
+ {id:'mandate-null',kind:'mandate',host:'hub.example',mandate},
+ {id:'mandate-zero',kind:'mandate',host:'hub.example',mandate:{...mandate,ceiling_daily:0,cooling_seconds:0}},
+ {id:'mandate-empty-signers',kind:'mandate',host:'hub.example',mandate:{...mandate,co_signers:[]}}
 ];
-for(const v of cases){v.canonical=v.kind==='decision'?canonicalDecisions(v.offer,v.decisions):v.kind==='statement'?canonicalStatement(v.offer,v.carriage,v.lines):canonicalMandate(v.mandate);const digest=createHash('sha256').update(v.canonical,'utf8');v.sha256=digest.digest('hex');v.challenge=createHash('sha256').update(v.canonical,'utf8').digest('base64url');}
+for(const v of cases){v.canonical=v.kind==='decision'?canonicalDecisions(v.offer,v.decisions):v.kind==='statement'?canonicalStatement(v.offer,v.carriage,v.lines):canonicalMandate(v.mandate,v.host);const digest=createHash('sha256').update(v.canonical,'utf8');v.sha256=digest.digest('hex');v.challenge=createHash('sha256').update(v.canonical,'utf8').digest('base64url');}
 await Bun.write('contracts/ios-first/canonical-vectors.json',JSON.stringify(cases,null,2)+'\n');

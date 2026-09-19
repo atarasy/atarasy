@@ -117,7 +117,7 @@ engine.registerIdentity(HOUSEHOLD,MANDATE_PAIR.publicKey.export({type:'spki',for
 const CO=nameOf(co.publicKey.export({type:'spki',format:'pem'}).toString());
 engine.registerIdentity(CO,co.publicKey.export({type:'spki',format:'pem'}).toString());
 const mandate={id:`${HOUSEHOLD}.protection`,household:HOUSEHOLD,ceiling_out_of_network:10000,ceiling_daily:null,cooling_seconds:null,co_signers:[CO],lapses_at:Date.now()+3600000,version:1};
-function signedMandate(m:any,withCo=false){const signatures:any={[HOUSEHOLD]:sign(null,canonicalMandate(m),MANDATE_PAIR.privateKey).toString('base64')};if(withCo)signatures[CO]=sign(null,canonicalMandate(m),co.privateKey).toString('base64');return {...m,signatures};}
+function signedMandate(m:any,withCo=false){const signatures:any={[HOUSEHOLD]:sign(null,canonicalMandate(m,'unit.example'),MANDATE_PAIR.privateKey).toString('base64')};if(withCo)signatures[CO]=sign(null,canonicalMandate(m,'unit.example'),co.privateKey).toString('base64');return {...m,signatures};}
 await call('mandate-created','POST','/_node/mandates','MandateResponse',201,signedMandate(mandate));
 await call('mandate-read','GET','/_node/mandates/'+encodeURIComponent(mandate.id),'MandateResponse',200);
 await call('mandate-stale','POST','/_node/mandates','ErrorResponse',409,signedMandate(mandate));

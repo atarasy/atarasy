@@ -1170,7 +1170,9 @@ async function protections(member: Member) {
         version: (current?.version ?? 0) + 1,
         ...patch,
       };
-      const bytes = new TextEncoder().encode(canonicalMandate(next));
+      // §16.1, question 58. Signed for this host, which is the relying party
+      // the engine behind it asserts for, so the version records nowhere else.
+      const bytes = new TextEncoder().encode(canonicalMandate(next, location.hostname));
       const recorded = await api<{ error?: string; message?: string }>("POST", "/_node/mandates", {
         ...next,
         signatures: { [member.household]: await signOver(member, bytes) },

@@ -170,6 +170,7 @@
   {
     "id": "mandate-null",
     "kind": "mandate",
+    "host": "hub.example",
     "mandate": {
       "id": "mandate-fixture-a",
       "household": "household-fixture-a",
@@ -184,13 +185,14 @@
       "lapses_at": 1800000000000,
       "version": 1
     },
-    "canonical": "mandate-fixture-a\nhousehold-fixture-a\n2000\n\n\nkey%20a,key%2Cb,key%2F%C3%A9\n1800000000000\n1",
-    "sha256": "d7f9aabe77da3b3edd52bfccb2dc55465cf83616458d8d466dd471d79f24a33c",
-    "challenge": "1_mqvnfaOz7dUr_MstxVRlz4NhZFjY1GbdRx158kozw"
+    "canonical": "valence.mandate.2\nhub.example\nmandate-fixture-a\nhousehold-fixture-a\n2000\n\n\nkey%20a,key%2Cb,key%2F%C3%A9\n1800000000000\n1",
+    "sha256": "9703d6a764f55fdae7134e9607a7b14d03617288e9ba5b639c2fac5a6e32d258",
+    "challenge": "lwPWp2T1X9rnE06WB6exTQNhcojpultjnC-sWm4y0lg"
   },
   {
     "id": "mandate-zero",
     "kind": "mandate",
+    "host": "hub.example",
     "mandate": {
       "id": "mandate-fixture-a",
       "household": "household-fixture-a",
@@ -205,13 +207,14 @@
       "lapses_at": 1800000000000,
       "version": 1
     },
-    "canonical": "mandate-fixture-a\nhousehold-fixture-a\n2000\n0\n0\nkey%20a,key%2Cb,key%2F%C3%A9\n1800000000000\n1",
-    "sha256": "0d2cb8443be37f4d12f4e98981fdd1911484b0f3abc021d9f4ae03b096dfc6de",
-    "challenge": "DSy4RDvjf00S9OmJgf3RkRSEsPOrwCHZ9K4DsJbfxt4"
+    "canonical": "valence.mandate.2\nhub.example\nmandate-fixture-a\nhousehold-fixture-a\n2000\n0\n0\nkey%20a,key%2Cb,key%2F%C3%A9\n1800000000000\n1",
+    "sha256": "62293dffa446206ba2b001b39ca524dddcd0d9b234645e8a127ac754202cf6f9",
+    "challenge": "Yik9_6RGIGuisAGznKUk3dzQ2bI0ZF6KEnrHVCAs9vk"
   },
   {
     "id": "mandate-empty-signers",
     "kind": "mandate",
+    "host": "hub.example",
     "mandate": {
       "id": "mandate-fixture-a",
       "household": "household-fixture-a",
@@ -222,8 +225,8 @@
       "lapses_at": 1800000000000,
       "version": 1
     },
-    "canonical": "mandate-fixture-a\nhousehold-fixture-a\n2000\n\n\n\n1800000000000\n1",
-    "sha256": "0e1cf0ec1803528cf826f57c4bc67553402e8043ef450cef144b69b41811587c",
-    "challenge": "Dhzw7BgDUoz4JvV8S8Z1U0AugEPvRQzvFEtptBgRWHw"
+    "canonical": "valence.mandate.2\nhub.example\nmandate-fixture-a\nhousehold-fixture-a\n2000\n\n\n\n1800000000000\n1",
+    "sha256": "7e950ff09a3bb743368fc19c062008139ecd007afca8ca4b1bfbea5881dd0cb1",
+    "challenge": "fpUP8Jo7t0M2j8GcBiAIE57NAHr8qMpLG_vqWIHdDLE"
   }
 ]

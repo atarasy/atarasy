@@ -16,20 +16,21 @@ const base: Mandate = {
 describe("§16.1: the bytes a mandate version is signed over", () => {
   test("the record's own order, with the two protections inside it", () => {
     // Seven lines since 2026-09-12, when §16.4 was withdrawn and the category
-    // list left the form. There were eight.
-    expect(canonicalMandate(base)).toBe(
-      ["key:L7zIqTWzxcxLB9T_L9Z--Rewkt-8DAkgRYtgcIIsC-E.x", "key:L7zIqTWzxcxLB9T_L9Z--Rewkt-8DAkgRYtgcIIsC-E", "100000", "", "", "key-a", "1800000000000", "1"].join("\n")
+    // list left the form. There were eight. Question 58 put the form's name
+    // and the host in front of them on 2026-09-19.
+    expect(canonicalMandate(base, "hub.example")).toBe(
+      ["valence.mandate.2", "hub.example", "key:L7zIqTWzxcxLB9T_L9Z--Rewkt-8DAkgRYtgcIIsC-E.x", "key:L7zIqTWzxcxLB9T_L9Z--Rewkt-8DAkgRYtgcIIsC-E", "100000", "", "", "key-a", "1800000000000", "1"].join("\n")
     );
   });
 
   test("absent is an empty line and not a zero", () => {
     // A daily ceiling of 0 would refuse everything; no daily ceiling refuses
     // nothing. The signed bytes have to tell them apart.
-    const none = canonicalMandate({ ...base, ceiling_daily: null });
-    const zero = canonicalMandate({ ...base, ceiling_daily: 0 });
+    const none = canonicalMandate({ ...base, ceiling_daily: null }, "hub.example");
+    const zero = canonicalMandate({ ...base, ceiling_daily: 0 }, "hub.example");
     expect(none).not.toBe(zero);
-    expect(zero.split("\n")[3]).toBe("0");
-    expect(none.split("\n")[3]).toBe("");
+    expect(zero.split("\n")[5]).toBe("0");
+    expect(none.split("\n")[5]).toBe("");
   });
 
   test("an item that contains a comma cannot pass for two (§16.1)", () => {
@@ -37,15 +38,19 @@ describe("§16.1: the bytes a mandate version is signed over", () => {
     // person could sign two co-signers and a relay post one, under the same
     // signature, after which no loosening could ever be signed. It read the
     // category list until §16.4 was withdrawn; the defect was on both.
-    const two = canonicalMandate({ ...base, co_signers: ["key-a", "key-b"] });
-    const one = canonicalMandate({ ...base, co_signers: ["key-a,key-b"] });
+    const two = canonicalMandate({ ...base, co_signers: ["key-a", "key-b"] }, "hub.example");
+    const one = canonicalMandate({ ...base, co_signers: ["key-a,key-b"] }, "hub.example");
     expect(two).not.toBe(one);
   });
 
   test("the list is sorted, so the same mandate signs the same bytes", () => {
-    const one = canonicalMandate({ ...base, co_signers: ["b", "a"] });
-    const other = canonicalMandate({ ...base, co_signers: ["a", "b"] });
+    const one = canonicalMandate({ ...base, co_signers: ["b", "a"] }, "hub.example");
+    const other = canonicalMandate({ ...base, co_signers: ["a", "b"] }, "hub.example");
     expect(one).toBe(other);
+  });
+
+  test("the host is inside the bytes, so a version signed for one host is not one signed for another (question 58)", () => {
+    expect(canonicalMandate(base, "hub.example")).not.toBe(canonicalMandate(base, "other.example"));
   });
 });
 
