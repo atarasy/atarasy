@@ -3,15 +3,15 @@
   "sources": [
     {
       "repo": "atarasy",
-      "commit": "ebce7c0f96d336271c5b05e7dc37f3e0a5ab51f0",
+      "commit": "7d404ca4912f48b4852cc9ed0de4b34a3c349129",
       "path": "src/shared/canonical.ts",
       "sha256": "23dbb565b21efe20562c1066d063d7853e560620743d97633442aba4eef3ffcb"
     },
     {
       "repo": "atarasy",
-      "commit": "ebce7c0f96d336271c5b05e7dc37f3e0a5ab51f0",
+      "commit": "7d404ca4912f48b4852cc9ed0de4b34a3c349129",
       "path": "src/shared/mandate.ts",
-      "sha256": "8002ea2d4731aadb293ae46871c7a957a24e0a2a16da7dfb224bb194c302e140"
+      "sha256": "41dda871c24ad7d4a0072d69c2abda662adb04c1f483fcac1838633096064279"
     },
     {
       "repo": "valence",
