@@ -74,6 +74,11 @@ export function loosens(before: Mandate, after: Mandate): boolean {
              after.cooling_seconds === null ? null : -after.cooling_seconds)) return true;
   if (after.ceiling_out_of_network > before.ceiling_out_of_network) return true;
   if (after.lapses_at > before.lapses_at) return true;
+  // §16.1, question 68. Bringing the lapse forward takes the co-signers'
+  // protection away sooner, so where the mandate names any it is a loosening
+  // and needs them, as the engine rules. Without it the hub would ask for the
+  // household's signature alone and the engine would refuse the change.
+  if (before.co_signers.length > 0 && after.lapses_at < before.lapses_at) return true;
   for (const k of before.co_signers) {
     if (!after.co_signers.includes(k)) return true;
   }

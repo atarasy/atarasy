@@ -60,7 +60,6 @@ describe("§16.1, clause 47: a tightening is the person's alone", () => {
     ["a lower daily ceiling", { ceiling_daily: 5000 }],
     ["a cooling window where there was none", { cooling_seconds: 3600 }],
     ["a lower out-of-network ceiling", { ceiling_out_of_network: 1000 }],
-    ["an earlier lapse", { lapses_at: base.lapses_at - 1 }],
     ["another co-signer", { co_signers: ["key-a", "key-b"] }],
   ];
   for (const [what, over] of tighter) {
@@ -77,12 +76,19 @@ describe("§16.1, clause 47: a tightening is the person's alone", () => {
     ["raising the out-of-network ceiling", base, { ceiling_out_of_network: 200000 }],
     ["a later lapse", base, { lapses_at: base.lapses_at + 1 }],
     ["dropping a co-signer", base, { co_signers: [] }],
+    // Question 68: an earlier lapse removes the co-signers' protection sooner.
+    ["an earlier lapse where a co-signer is named", base, { lapses_at: base.lapses_at - 1 }],
   ];
   for (const [what, from, over] of looser) {
     test(`${what} is a loosening`, () => {
       expect(loosens(from, { ...from, ...over, version: from.version + 1 })).toBe(true);
     });
   }
+
+  test("an earlier lapse is a tightening where nobody is named (question 68)", () => {
+    const alone = { ...base, co_signers: [] };
+    expect(loosens(alone, { ...alone, lapses_at: alone.lapses_at - 1, version: 2 })).toBe(false);
+  });
 
   test("no change is not a loosening", () => {
     expect(loosens(base, { ...base, version: 2 })).toBe(false);
