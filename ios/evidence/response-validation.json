@@ -1,12 +1,12 @@
 {
   "date": "2026-09-19",
-  "baseline_commit": "897d2cb6ee3cb5835c4d273cec0c71220878e04c",
+  "baseline_commit": "7d404ca4912f48b4852cc9ed0de4b34a3c349129",
   "source_hashes": {
     "contracts/ios-first/ApprovalResponse.schema.json": "d7e95151cda70fba720eea11c6164f92d0d06d630ad6e87d2a137feddd11f916",
     "contracts/ios-first/ErrorResponse.schema.json": "0b6dc74f655b9286a19b398f34e2ec6e166ba725a640060c8e7456935bc7c68e",
     "contracts/ios-first/OfferListResponse.schema.json": "bd6fe28063bc093d748d0e4c615b553a7513e74ce86c8d5359dbbe6918ba062c",
     "contracts/ios-first/OfferResponse.schema.json": "c25ef40d0c0736cd74a23ec44fded457430ca158c81a0a9b610cbffcf6ae9bc5",
-    "contracts/ios-first/README.md": "7d644fc7baff324f5e396ac8b2a91225e91fef101437b3f692b5c1d5b3f06c2d",
+    "contracts/ios-first/README.md": "f0610cfb03b009652d2172a43ec29d2ee71dacc5a75799fb576e07bd1df2f9fd",
     "contracts/ios-first/RecoveryResponse.schema.json": "3dbd3e609dfa575d0bc6d39907c0523c13f1e1ad06b1b6a67b666453a86065b3",
     "contracts/ios-first/SettlementResponse.schema.json": "ed31e6e1cb378d0bccd08f4f29f851e69649c171646e20d6524a2094cc4dae3d",
     "contracts/ios-first/openapi.json": "3050b339a18eddf4115a3bcf2e54f924e9c66a23c01ddc7d0efcb8d7f6022049",
