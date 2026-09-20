@@ -31,6 +31,7 @@ targets:
     settings:
       configs:
         Development:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: "DEBUG ATARASY_DEVICE_ACCEPTANCE"
           DEVELOPMENT_TEAM: 83W4J65UE6
           GENERATE_INFOPLIST_FILE: NO
           INFOPLIST_FILE: development/Info.plist

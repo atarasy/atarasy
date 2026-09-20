@@ -71,14 +71,29 @@ private struct ConfiguredMemberAccount: View {
         .task {
             guard holder.account == nil else { return }
             do {
-                let transport = try URLSessionMemberTransport(timeout: 30, maximumResponseBytes: 1_048_576)
+                let base = try URLSessionMemberTransport(timeout: 30, maximumResponseBytes: 1_048_576)
+                let transport: any MemberHTTPTransport
+                #if ATARASY_DEVICE_ACCEPTANCE
+                if ProcessInfo.processInfo.arguments.contains("--acceptance-drop-statement-response") {
+                    transport = try DevelopmentResponseLossTransport(base: base, environment: environment) {
+                        // Only a non-secret event marker; never log the response or request.
+                        print("ATARASY_DEVICE_ACCEPTANCE: discarded one successful statement response")
+                    }
+                } else { transport = base }
+                #else
+                transport = base
+                #endif
                 let vault = try KeychainMemberSessionVault(namespace: "dev.atarasy.native")
                 let service = MemberClient(environment: environment, transport: transport, vault: vault)
                 let reference = holder.window
                 let passkeys = NativePasskeyAuthoriser(environment: environment, anchor: { [weak reference] in reference?.window })
                 let directory = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true).appendingPathComponent("MemberOperations", isDirectory: true)
                 let store = try FileMemberOperationStore(directory: directory)
-                let statements = MemberStatementFlow(environment: environment, service: service, passkeys: passkeys, store: store)
+                let statements = MemberStatementFlow(environment: environment, service: service, passkeys: passkeys, store: store, diagnostic: { event in
+                    #if ATARASY_DEVICE_ACCEPTANCE
+                    print("ATARASY_DEVICE_ACCEPTANCE: approval stopped " + event)
+                    #endif
+                })
                 holder.account = MemberAccount(service: service, passkeys: passkeys, statements: statements)
             } catch { dismiss() }
         }
