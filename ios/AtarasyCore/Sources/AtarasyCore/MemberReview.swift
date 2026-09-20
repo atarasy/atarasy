@@ -7,20 +7,20 @@ public enum MemberReview: Equatable, Sendable {
     /// settlement that stands is shown instead of a statement to prepare.
     case settlement(ProtocolSettlement)
 }
-public struct MemberDisclosureReference: Decodable, Equatable, Sendable {
+public struct MemberDisclosureReference: Codable, Equatable, Sendable {
     public let merchant: String; public let product: String?
 }
-public struct MemberApproval: Decodable, Equatable, Sendable {
-    public struct MandateTerms: Decodable, Equatable, Sendable {
+public struct MemberApproval: Codable, Equatable, Sendable {
+    public struct MandateTerms: Codable, Equatable, Sendable {
         public let kind: String; public let scope: String; public let lapsesAt: Int64?
     }
-    public struct Candidate: Decodable, Equatable, Sendable {
+    public struct Candidate: Codable, Equatable, Sendable {
         public let id: String; public let product: String; public let merchant: String; public let maker: String; public let ships: String
         public let givenBy: String?; public let quantity: Int64; public let unitPrice: Int64
         public let isExploration: Bool; public let valence: String
         public let alternatives: [String]; public let argumentAgainst: String; public let disclosure: MemberDisclosureReference
     }
-    public struct Excluded: Decodable, Equatable, Sendable { public let product: String; public let reason: String }
+    public struct Excluded: Codable, Equatable, Sendable { public let product: String; public let reason: String }
     public let offer: String; public let presenter: String; public let expiresAt: Int64; public let carriage: Int64?
     public let priceBand: MemberOfferDetail.PriceBand?; public let disclosures: [MemberOfferDetail.Disclosure]
     public let reminded: Bool; public let mandate: MandateTerms; public let candidates: [Candidate]; public let excluded: [Excluded]

@@ -34,7 +34,9 @@ struct MemberAccountSheet: View {
     var body: some View {
         NavigationStack {
             #if ATARASY_UI_TEST_FIXTURES
-            if ProcessInfo.processInfo.arguments.contains("--member-statement-fixture") {
+            if ProcessInfo.processInfo.arguments.contains("--member-digital-fixture") {
+                MemberDigitalFixtureView()
+            } else if ProcessInfo.processInfo.arguments.contains("--member-statement-fixture") {
                 MemberStatementFixtureView()
             } else if ProcessInfo.processInfo.arguments.contains("--member-list-fixture") {
                 MemberProposalFixtureView()
@@ -94,7 +96,8 @@ private struct ConfiguredMemberAccount: View {
                     print("ATARASY_DEVICE_ACCEPTANCE: approval stopped " + event)
                     #endif
                 })
-                holder.account = MemberAccount(service: service, passkeys: passkeys, statements: statements)
+                let decisions = MemberDigitalFlow(environment: environment, service: service, passkeys: passkeys, store: store)
+                holder.account = MemberAccount(service: service, passkeys: passkeys, statements: statements, decisions: decisions)
             } catch { dismiss() }
         }
         .onChange(of: scenePhase) { _, phase in if phase == .active { holder.account?.clearExpired(now: Int64(Date().timeIntervalSince1970 * 1000)) } }
@@ -120,8 +123,9 @@ private struct MemberAccountForm: View {
                     Button("Sign out") { perform { await account.signOut() } }.accessibilityIdentifier("memberSignOut")
                 }
                 MemberMandateSection(account: account)
-                MemberProposalSections(model: account.proposals, statements: account.statements)
+                MemberProposalSections(model: account.proposals, statements: account.statements, decisions: account.decisions)
                 if let statements = account.statements { SavedMemberOperationSections(flow: statements) }
+                if let decisions = account.decisions { SavedMemberDecisionSections(flow: decisions) }
             } else {
                 Section {
                     Button("Sign in with a passkey") { perform { await account.signIn() } }.accessibilityIdentifier("memberSignIn")

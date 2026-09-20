@@ -17,6 +17,14 @@ public struct MemberDigitalDraft: Sendable {
         guard approval.candidates.contains(where: { Data($0.id.utf8) == Data(id.utf8) && $0.valence == "offered" }) else { throw ContractError.invalidTransition }
         choices[Data(id.utf8)] = choice
     }
+    public func decisions(now: Int64) throws -> [Decision] {
+        _ = try summary(now: now)
+        return approval.candidates.map { candidate in
+            choice(for: candidate.id) == .keep
+                ? Decision(candidate: candidate.id, valence: "kept", keptAs: "self")
+                : Decision(candidate: candidate.id, valence: "returned")
+        }
+    }
     public mutating func discard() { choices.removeAll() }
 
     /// Unknown carriage, incomplete choices, expired terms and unsafe arithmetic never become a zero total.

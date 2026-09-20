@@ -106,6 +106,21 @@ final class PrototypeUITests: XCTestCase {
         for _ in 0..<14 { if choice.isHittable { break }; app.swipeUp() }
         XCTAssertTrue(choice.label.contains("Choose"))
     }
+    @MainActor func testDigitalReviewLostResponseAndResultReadback() {
+        let app = launch("--member-digital-fixture")
+        tap("memberAccount", app); tap("prepareDigitalDecision", app)
+        XCTAssertTrue(app.staticTexts["frozenDigitalTotal"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["frozenDigitalTotal"].label, "Goods and carriage: 1,750")
+        for _ in 0..<20 { if app.buttons["approveDigitalDecision"].isHittable { break }; app.swipeUp() }
+        XCTAssertFalse(app.buttons["approveDigitalDecision"].isEnabled)
+        tap("acknowledgeDigitalDecision", app); tap("approveDigitalDecision", app)
+        XCTAssertTrue(app.staticTexts["digitalFlowNotice"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["digitalFlowNotice"].label.contains("result could not be read"))
+        XCTAssertFalse(app.buttons["approveDigitalDecision"].exists)
+        tap("checkDigitalDecision", app)
+        XCTAssertTrue(app.staticTexts["digitalFlowNotice"].label.contains("Decision recorded"))
+        let image = XCTAttachment(screenshot: app.screenshot()); image.name = "Synthetic digital decision recovered after response loss"; image.lifetime = .keepAlways; add(image)
+    }
     @MainActor func testNativeStatementReviewAndUnresolvedResult() {
         let app = launch("--member-statement-fixture")
         tap("memberAccount", app); tap("prepareMemberStatement", app)

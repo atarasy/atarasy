@@ -4,9 +4,10 @@ import AtarasyCore
 struct MemberReviewSections: View {
     let review: MemberReview
     var digitalDraft: Binding<MemberDigitalDraft?>? = nil
+    var frozenDecisions: [Decision]? = nil
     var body: some View {
-        Section("Read-only review") {
-            Text("These refreshed records were read separately. They are not a signed agreement or a payment result.").font(.footnote)
+        Section(frozenDecisions == nil ? "Read-only review" : "Frozen proposal terms") {
+            Text(frozenDecisions == nil ? "These refreshed records were read separately. They are not a signed agreement or a payment result." : "These terms and your choices form the prepared review. Nothing has been signed or submitted yet.").font(.footnote)
             Text("Currency was not supplied. All amounts are in the merchant's supplied units.").font(.footnote)
         }
         switch review {
@@ -26,7 +27,9 @@ struct MemberReviewSections: View {
                     parties(candidate.merchant, candidate.maker, candidate.ships)
                     Text("Quantity: \(candidate.quantity); catalogue unit price: \(candidate.unitPrice)")
                     gift(candidate.givenBy)
-                    Text("Choice status: \(candidate.valence)")
+                    if let choice = frozenDecisions?.first(where: { Data($0.candidate.utf8) == Data(candidate.id.utf8) }) {
+                        Text(choice.valence == "kept" ? "Your choice: keep for myself" : "Your choice: decline").font(.headline)
+                    } else { Text("Choice status: \(candidate.valence)") }
                     Text("Exploratory proposal: \(candidate.isExploration ? "Yes" : "No")")
                     Text("Alternatives").font(.headline)
                     ForEach(Array(candidate.alternatives.enumerated()), id: \.offset) { _, alternative in Text(verbatim: alternative) }

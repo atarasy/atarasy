@@ -87,7 +87,7 @@ public struct FrozenMemberStatement: Sendable {
         guard let session, session.expiresAt > now() else { saved = []; return }
         do {
             saved = try store.handles().filter {
-                Data($0.environment.utf8) == Data(environment.name.utf8) && $0.origin == environment.origin &&
+                $0.operationProfile == "atarasy.member-statement-authorisation.1" && Data($0.environment.utf8) == Data(environment.name.utf8) && $0.origin == environment.origin &&
                 Data($0.household.utf8) == Data(session.household.utf8) &&
                 session.presenters.contains($0.presenter)
             }

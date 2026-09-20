@@ -209,8 +209,8 @@ public actor MemberClient {
         try mandateIdentifier(id); let (reply, info) = try await read("/_node/mandates/" + id)
         return try ReferenceResponseReader.mandate(status: reply.status, contentType: reply.contentType, data: reply.data, expectedID: id, expectedHousehold: info.household)
     }
-    private func operationScope(_ handle: MemberOperationHandle) throws {
-        guard UUID(uuidString: handle.id)?.uuidString.lowercased() == handle.id,
+    private func operationScope(_ handle: MemberOperationHandle, profile: String = "atarasy.member-statement-authorisation.1") throws {
+        guard handle.operationProfile == profile, UUID(uuidString: handle.id)?.uuidString.lowercased() == handle.id,
               let session = active?.info, live(session.expiresAt),
               same(handle.environment, environment.name), handle.origin == environment.origin,
               // Not the session id: binding to it stranded a result after signing in again. The journal
@@ -337,7 +337,8 @@ public actor MemberClient {
         } catch { return .unresolved }
     }
     public func cancelOperation(_ handle: MemberOperationHandle) async throws {
-        try operationScope(handle)
+        guard ["atarasy.member-statement-authorisation.1", memberDecisionProfile].contains(handle.operationProfile) else { throw MemberFailure.scopeMismatch }
+        try operationScope(handle, profile: handle.operationProfile)
         let (reply, _) = try await read("/member/operations/" + handle.id + "/cancel", body: Data("{}".utf8))
         // The public cancellation route returns only an acknowledgement, not the journal row.
         guard reply.status == 200 else { throw MemberFailure.http(reply.status) }
@@ -408,5 +409,90 @@ extension MemberClient {
             let recorded = try decode(MemberMandate.self, reply)
             guard recorded == held.mandate else { throw MemberFailure.scopeMismatch }
         } catch { throw MemberFailure.uncertainVerification }
+    }
+}
+
+extension MemberClient {
+    private func digitalPrepared(_ reply: MemberHTTPReply, canonical: String) throws -> MemberPreparedDecision {
+        let value = try decode(MemberPreparedDecision.self, reply, keys: ["profile", "operationID", "requestDigest", "reviewedRevision", "expiresAt", "canonical", "review", "operationState", "publicKey"])
+        try value.validate(environment: environment, canonical: canonical)
+        return value
+    }
+    public func prepareDecision(_ local: PreparedMemberDecision, store: any MemberOperationStore) async throws -> (MemberOperationHandle, MemberPreparedDecision) {
+        guard let info = active?.info, same(local.session.id, info.id), local.environment == environment,
+              same(local.detail.household, info.household), info.presenters.contains(where: { same($0, local.detail.presenter) }) else { throw MemberFailure.scopeMismatch }
+        let rows = local.decisions.map { d -> MemberJSON in
+            var row: [String: MemberJSON] = ["candidate": .string(d.candidate), "valence": .string(d.valence)]
+            if let keptAs = d.keptAs { row["kept_as"] = .string(keptAs) }
+            return .object(row)
+        }
+        let body = try JSONEncoder().encode(MemberJSON.object(["offer": .string(local.detail.id), "decisions": .array(rows)]))
+        let (reply, _) = try await read("/member/decisions/prepare", body: body)
+        let prepared = try digitalPrepared(reply, canonical: local.canonical)
+        _ = try FrozenMemberDecision(prepared, local: local, now: now())
+        guard prepared.operationState == "prepared", live(prepared.expiresAt), prepared.expiresAt <= info.expiresAt,
+              case .string(let challenge) = prepared.publicKey["challenge"], case .array(let credentials) = prepared.publicKey["allowCredentials"],
+              case .object(let credential) = credentials[0], case .string(let id) = credential["id"] else { throw MemberFailure.malformed }
+        let handle = MemberOperationHandle(id: prepared.operationID, environment: environment.name, origin: environment.origin, sessionID: info.id, household: info.household, presenter: local.detail.presenter, offer: local.detail.id, canonical: local.canonical, expiresAt: prepared.expiresAt, requestDigest: prepared.requestDigest, reviewedRevision: prepared.reviewedRevision, challenge: challenge, credentialID: id, attempted: false, profile: memberDecisionProfile, digitalTermsDigest: try digitalTermsDigest(local.detail))
+        do { try store.save(handle); return (try store.load(id: handle.id) ?? handle, prepared) } catch { throw MemberFailure.storage }
+    }
+    public func decisionReview(_ handle: MemberOperationHandle) async throws -> MemberPreparedDecision {
+        try operationScope(handle, profile: memberDecisionProfile)
+        let (reply, _) = try await read("/member/operations/" + handle.id)
+        let value = try digitalPrepared(reply, canonical: handle.canonical)
+        guard value.operationID == handle.id, value.expiresAt == handle.expiresAt, value.requestDigest == handle.requestDigest,
+              value.reviewedRevision == handle.reviewedRevision, value.publicKey["challenge"] == .string(handle.challenge),
+              case .array(let credentials) = value.publicKey["allowCredentials"], case .object(let credential) = credentials[0], credential["id"] == .string(handle.credentialID) else { throw MemberFailure.scopeMismatch }
+        return value
+    }
+    private func decisionOutcome(_ reply: MemberHTTPReply, handle: MemberOperationHandle) throws -> MemberDecisionOutcome {
+        struct Envelope: Decodable { let operationID: String; let operationState: String; let decision: MemberJSON }
+        let value = try decode(Envelope.self, reply, keys: ["operationID", "operationState", "decision"])
+        guard value.operationID == handle.id else { throw MemberFailure.scopeMismatch }
+        if value.operationState != "committed" {
+            guard ["prepared", "dispatching", "uncertain", "cancelled", "refused"].contains(value.operationState), value.decision == .null else { throw MemberFailure.malformed }
+            return .pending(value.operationState)
+        }
+        // The operation stores a raw immutable engine offer, including its reminder count.
+        guard case .object(var object) = value.decision, case .integer(let reminders) = object.removeValue(forKey: "reminders_sent"),
+              (0...1).contains(reminders) else { throw MemberFailure.malformed }
+        let detail = try MemberOfferDetail.decode(JSONEncoder().encode(MemberJSON.object(object)), expectedID: handle.offer, household: handle.household, presenter: handle.presenter)
+        guard detail.binding == "digital", ["decided", "settled"].contains(detail.state), let decidedAt = detail.decidedAt,
+              decidedAt < handle.expiresAt, let expected = handle.digitalTermsDigest,
+              try same(digitalTermsDigest(detail), expected), detail.candidates.allSatisfy({ c in
+                  c.decidedAt == decidedAt && c.lineage == nil &&
+                  ((c.valence == "kept" && c.keptAs == "self") || (c.valence == "returned" && c.keptAs == nil))
+              }) else { throw MemberFailure.scopeMismatch }
+        let decisions = detail.candidates.map { Decision(candidate: $0.id, valence: $0.valence, keptAs: $0.keptAs) }
+        guard same(try Canonical.decisions(offer: detail.id, lines: decisions), handle.canonical) else { throw MemberFailure.scopeMismatch }
+        return .recorded(detail)
+    }
+    public func decisionOutcome(_ handle: MemberOperationHandle) async -> MemberDecisionOutcome {
+        do {
+            try Task.checkCancellation(); try operationScope(handle, profile: memberDecisionProfile)
+            let (reply, _) = try await read("/member/operations/" + handle.id + "/outcome")
+            try Task.checkCancellation()
+            return try decisionOutcome(reply, handle: handle)
+        } catch { return .unresolved }
+    }
+    public func submitDecision(_ handle: MemberOperationHandle, assertion: MemberPasskeyResponse, store: any MemberOperationStore) async throws -> MemberDecisionOutcome {
+        try Task.checkCancellation(); try operationScope(handle, profile: memberDecisionProfile)
+        guard live(handle.expiresAt), !handle.attempted, handle.digitalTermsDigest != nil else { throw MemberFailure.expired }
+        guard same(assertion.id, handle.credentialID), case .string(let encoded) = assertion.response["clientDataJSON"] else { throw MemberFailure.invalidInput }
+        let b64 = encoded.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+        guard let bytes = Data(base64Encoded: b64 + String(repeating: "=", count: (4 - b64.count % 4) % 4)),
+              let data = try JSONSerialization.jsonObject(with: bytes) as? [String: Any], data["type"] as? String == "webauthn.get",
+              data["challenge"] as? String == handle.challenge, data["origin"] as? String == environment.origin.absoluteString,
+              data["topOrigin"] == nil, data["crossOrigin"] == nil || data["crossOrigin"] as? Bool == false,
+              case .string(let signature) = assertion.response["signature"], !signature.isEmpty else { throw MemberFailure.scopeMismatch }
+        struct Input: Encodable { let assertion: MemberPasskeyResponse }
+        let body = try JSONEncoder().encode(Input(assertion: assertion))
+        guard body.count <= 16_384 else { throw MemberFailure.invalidInput }
+        try store.claim(handle, confirmation: signature)
+        do {
+            let (reply, _) = try await read("/member/operations/" + handle.id + "/submit", body: body)
+            try Task.checkCancellation()
+            return try decisionOutcome(reply, handle: handle.markedAttempted(confirmation: signature))
+        } catch { return .unresolved }
     }
 }

@@ -6,6 +6,7 @@ struct MemberOfferDetailView: View {
     @ObservedObject var model: MemberProposals
     let selected: MemberOfferSummary
     var statements: MemberStatementFlow? = nil
+    var decisions: MemberDigitalFlow? = nil
     @State private var digitalDraft: MemberDigitalDraft?
     @State private var draftNow = Date()
     private let clock = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
@@ -37,7 +38,11 @@ struct MemberOfferDetailView: View {
                                 } else {
                                     Text("A draft total requires a choice for every item, known carriage and unexpired terms.")
                                 }
-                                Text("Submitting a digital decision is not available in this build.").font(.footnote)
+                                if let decisions {
+                                    NavigationLink("Review digital decision") { MemberDigitalScreen(flow: decisions, detail: detail, draft: draft) }
+                                        .disabled((try? draft.summary(now: Int64(draftNow.timeIntervalSince1970 * 1000))) == nil)
+                                        .accessibilityIdentifier("openDigitalDecision")
+                                } else { Text("Submitting a digital decision is not available in this view.").font(.footnote) }
                                 Button("Discard choices") { digitalDraft?.discard() }
                             }
                         }

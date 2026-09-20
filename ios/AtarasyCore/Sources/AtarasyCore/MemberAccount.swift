@@ -20,19 +20,20 @@ public extension MemberAccountService {
 }
 
 @MainActor public final class MemberAccount: ObservableObject {
-    @Published public private(set) var session: MemberSessionInfo? { didSet { statements?.setSession(session); mandates = []; mandateReview = nil } }
+    @Published public private(set) var session: MemberSessionInfo? { didSet { statements?.setSession(session); decisions?.setSession(session); mandates = []; mandateReview = nil } }
     @Published public private(set) var busy = false
     @Published public private(set) var notice = ""
     @Published public private(set) var mandates: [MemberMandate] = []
     @Published public private(set) var mandateReview: MemberMandateReview?
     @Published public private(set) var mandateNotice = ""
     public let statements: MemberStatementFlow?
+    public let decisions: MemberDigitalFlow?
     public let proposals: MemberProposals
     private let service: any MemberAccountService
     private let passkeys: any MemberPasskeyAuthorising
     private var generation: UInt64 = 0
-    public init(service: any MemberAccountService, passkeys: any MemberPasskeyAuthorising, statements: MemberStatementFlow? = nil) {
-        self.service = service; self.passkeys = passkeys; self.statements = statements
+    public init(service: any MemberAccountService, passkeys: any MemberPasskeyAuthorising, statements: MemberStatementFlow? = nil, decisions: MemberDigitalFlow? = nil) {
+        self.service = service; self.passkeys = passkeys; self.statements = statements; self.decisions = decisions
         proposals = MemberProposals(service: service)
         proposals.onSessionUnavailable = { [weak self] in
             guard let self else { return }
