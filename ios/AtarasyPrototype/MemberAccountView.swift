@@ -71,7 +71,18 @@ private struct ConfiguredMemberAccount: View {
         .task {
             guard holder.account == nil else { return }
             do {
-                let transport = try URLSessionMemberTransport(timeout: 30, maximumResponseBytes: 1_048_576)
+                let base = try URLSessionMemberTransport(timeout: 30, maximumResponseBytes: 1_048_576)
+                let transport: any MemberHTTPTransport
+                #if ATARASY_DEVICE_ACCEPTANCE
+                if ProcessInfo.processInfo.arguments.contains("--acceptance-drop-statement-response") {
+                    transport = try DevelopmentResponseLossTransport(base: base, environment: environment) {
+                        // Only a non-secret event marker; never log the response or request.
+                        print("ATARASY_DEVICE_ACCEPTANCE: discarded one successful statement response")
+                    }
+                } else { transport = base }
+                #else
+                transport = base
+                #endif
                 let vault = try KeychainMemberSessionVault(namespace: "dev.atarasy.native")
                 let service = MemberClient(environment: environment, transport: transport, vault: vault)
                 let reference = holder.window
