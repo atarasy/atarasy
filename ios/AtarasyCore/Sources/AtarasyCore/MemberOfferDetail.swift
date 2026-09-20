@@ -18,6 +18,8 @@ public struct MemberOfferDetail: Decodable, Equatable, Sendable {
     public let id: String; public let binding: String; public let household: String; public let presenter: String
     public let presenterAttested: Bool; public let purpose: String; public let priceBand: PriceBand?; public let giver: String?
     public let configVersion: String; public let presentedAt: Int64?; public let expiresAt: Int64; public let state: String
+    /// Q68: absent on older engines; never infer it from a candidate timestamp.
+    public private(set) var decidedAt: Int64? = nil
     public let explorationFloorMet: Bool; public let mandate: String
     public let candidates: [Candidate]; public let disclosures: [Disclosure]
     /// Whether the engine sent `collected_as`, which is what lets a nil there mean "no collection named it".
@@ -25,7 +27,7 @@ public struct MemberOfferDetail: Decodable, Equatable, Sendable {
 
     public static func decode(_ data: Data, expectedID: String, household: String, presenter: String? = nil) throws -> Self {
         guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              Set(object.keys) == Set("id binding household presenter presenter_attested purpose price_band giver config_version presented_at expires_at state exploration_floor_met mandate candidates disclosures".split(separator: " ").map(String.init)),
+              Set(object.keys).subtracting(["decided_at"]) == Set("id binding household presenter presenter_attested purpose price_band giver config_version presented_at expires_at state exploration_floor_met mandate candidates disclosures".split(separator: " ").map(String.init)),
               let candidates = object["candidates"] as? [[String: Any]],
               candidates.allSatisfy({ Set($0.keys).subtracting(["collected_as"]) == Set("id product quantity unit_price merchant maker ships category predicted_conversion is_exploration given_by valence decided_at kept_as lineage".split(separator: " ").map(String.init)) }),
               let disclosures = object["disclosures"] as? [[String: Any]],
@@ -46,7 +48,7 @@ public struct MemberOfferDetail: Decodable, Equatable, Sendable {
         guard ["digital", "physical"].contains(value.binding), states.contains(value.state),
               ["gift", "replenish", "trial", "ceremonial", "assortment"].contains(value.purpose),
               !value.presenter.isEmpty, !value.household.isEmpty, !value.configVersion.isEmpty, !value.mandate.isEmpty,
-              safe(value.expiresAt), value.presentedAt.map(safe) ?? true,
+              safe(value.expiresAt), value.presentedAt.map(safe) ?? true, value.decidedAt.map(safe) ?? true,
               value.candidates.allSatisfy({ c in
                   !c.id.isEmpty && ids.insert(Data(c.id.utf8)).inserted && !c.product.isEmpty && !c.merchant.isEmpty && !c.maker.isEmpty && !c.ships.isEmpty && c.quantity > 0 && safe(c.quantity) && safe(c.unitPrice) && ["offered", "kept", "returned", "consumed", "defaulted", "lost"].contains(c.valence) && (c.decidedAt.map(safe) ?? true) && (c.predictedConversion.map { $0.isFinite && (0...1).contains($0) } ?? true) && (c.keptAs.map { ["self", "gift", "order"].contains($0) } ?? true) && (c.givenBy.map { !$0.isEmpty } ?? true)
               }), value.disclosures.allSatisfy({ d in
