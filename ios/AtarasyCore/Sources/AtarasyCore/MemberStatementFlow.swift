@@ -163,7 +163,7 @@ public struct FrozenMemberStatement: Sendable {
         do {
             try await service.cancelOperation(handle)
             guard current == generation else { return }
-            review = nil; prepared = nil; notice = "Prepared statement cancelled. No approval was submitted by this action."
+            self.handle = nil; review = nil; prepared = nil; notice = "Prepared statement cancelled. No approval was submitted by this action."
         } catch { if current == generation { review = nil; prepared = nil; notice = "Cancellation could not be confirmed. Check the saved result." } }
     }
     private func show(_ outcome: MemberOperationOutcome) {
