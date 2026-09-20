@@ -89,6 +89,23 @@ final class PrototypeUITests: XCTestCase {
         tap("refreshMemberDetail", app)
         XCTAssertFalse(app.staticTexts["reviewCarriageUnknown"].exists)
     }
+    @MainActor func testDigitalChoicesRemainUnsentAndRefreshDiscardsThem() {
+        let app = launch("--member-list-fixture")
+        tap("memberAccount", app); tap("memberProposal-fixture-member-offer", app); tap("loadMemberReview", app)
+        let choice = app.buttons["digitalChoice-1795cde3-6d08-48a1-8082-2b39e1b41e11"]
+        for _ in 0..<14 { if choice.isHittable { break }; app.swipeUp() }
+        XCTAssertTrue(choice.isHittable)
+        choice.tap(); app.buttons["Decline"].tap()
+        XCTAssertTrue(choice.label.contains("Decline"))
+        XCTAssertFalse(app.staticTexts["digitalDraftTotal"].exists)
+        XCTAssertFalse(app.buttons["signButton"].exists)
+        tap("refreshMemberDetail", app)
+        XCTAssertFalse(choice.exists)
+        for _ in 0..<14 { if app.buttons["loadMemberReview"].isHittable { break }; app.swipeDown() }
+        tap("loadMemberReview", app)
+        for _ in 0..<14 { if choice.isHittable { break }; app.swipeUp() }
+        XCTAssertTrue(choice.label.contains("Choose"))
+    }
     @MainActor func testNativeStatementReviewAndUnresolvedResult() {
         let app = launch("--member-statement-fixture")
         tap("memberAccount", app); tap("prepareMemberStatement", app)

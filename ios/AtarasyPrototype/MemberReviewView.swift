@@ -3,6 +3,7 @@ import AtarasyCore
 
 struct MemberReviewSections: View {
     let review: MemberReview
+    var digitalDraft: Binding<MemberDigitalDraft?>? = nil
     var body: some View {
         Section("Read-only review") {
             Text("These refreshed records were read separately. They are not a signed agreement or a payment result.").font(.footnote)
@@ -32,6 +33,20 @@ struct MemberReviewSections: View {
                     Text("Argument against").font(.headline)
                     Text(verbatim: candidate.argumentAgainst).accessibilityIdentifier("reviewArgumentAgainst")
                     disclosures(approval.disclosures, merchant: candidate.merchant, product: candidate.product)
+                    if let digitalDraft, digitalDraft.wrappedValue != nil, candidate.valence == "offered" {
+                        Picker("Your unsent choice", selection: Binding(
+                            get: { digitalDraft.wrappedValue?.choice(for: candidate.id) ?? .undecided },
+                            set: { choice in
+                                guard var draft = digitalDraft.wrappedValue else { return }
+                                do { try draft.choose(choice, candidate: candidate.id); digitalDraft.wrappedValue = draft }
+                                catch { digitalDraft.wrappedValue = nil }
+                            }
+                        )) {
+                            Text("Choose").tag(MemberDigitalDraft.Choice.undecided)
+                            Text("Keep for myself").tag(MemberDigitalDraft.Choice.keep)
+                            Text("Decline").tag(MemberDigitalDraft.Choice.decline)
+                        }.accessibilityIdentifier("digitalChoice-" + candidate.id)
+                    }
                 }
             }
             Section("Excluded products") {
