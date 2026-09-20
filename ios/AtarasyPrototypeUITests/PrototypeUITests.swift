@@ -108,7 +108,7 @@ final class PrototypeUITests: XCTestCase {
     }
     @MainActor func testPermissionRequestGrantReadbackAndCancellation() {
         let app = launch("--member-request-fixture"); tap("memberAccount", app)
-        let request = app.buttons.containing(.staticText, identifier: "Check for a duplicate before proposing a gift").firstMatch
+        let request = app.buttons.containing(.staticText, identifier: "Check whether you already have synthetic tea").firstMatch
         XCTAssertTrue(request.waitForExistence(timeout: 8)); request.tap()
         XCTAssertTrue(app.staticTexts["Requested by: Example giver"].waitForExistence(timeout: 5))
         tap("Allow this access", app)
