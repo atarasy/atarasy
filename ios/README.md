@@ -84,3 +84,5 @@ The core now includes [member operation transport](MEMBER_OPERATION_TRANSPORT.md
 [Native statement flow](NATIVE_STATEMENT_FLOW.md) connects physical review, selected-credential platform requests and saved result checking in the configured member account. The dedicated UI-test fixture exercises the screen without network or an authenticator; real-device ceremony verification remains outstanding.
 
 [Native digital withdrawal](NATIVE_WITHDRAWAL_FLOW.md) connects saved decisions to cooling review, a separate passkey profile, durable submission and historical outcome recovery. Refresh the proposal before choosing again after withdrawal.
+
+[Native permissions](NATIVE_PERMISSIONS.md) adds authenticated grant history and individual revocation under Account, with confirmation cancellation and GET-only recovery after an uncertain response. Action-specific new grants remain separate work.

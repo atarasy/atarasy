@@ -1,0 +1,100 @@
+{
+  "scope": "Synthetic PostgreSQL permission list and individual revocation; no native UI or new-grant ceremony.",
+  "environment": {
+    "name": "test",
+    "origin": "https://unit.example"
+  },
+  "session": {
+    "id": "b2291e66-8d55-4f1b-bda6-d7e777becb27",
+    "household": "key:blbBK68wtQ22wagHsmzBU4bKopBUWwYDBzMi1CKNIW8",
+    "presenters": [
+      "merchant-1"
+    ],
+    "expiresAt": 1800000090001
+  },
+  "listed": {
+    "household": "key:blbBK68wtQ22wagHsmzBU4bKopBUWwYDBzMi1CKNIW8",
+    "checkedAt": 1800000000001,
+    "permissions": [
+      {
+        "id": "b9e46d69-cc9e-4d3d-b116-c319a365475c",
+        "kind": "party",
+        "result_form": null,
+        "grantee": "first",
+        "scope": [
+          "offers"
+        ],
+        "purpose": "Synthetic limited permission",
+        "granted_at": 1800000000001,
+        "expires_at": 1800000005001,
+        "asked_from": "63a65a12-0b92-4485-a17b-ac2f4bb7ded3",
+        "revoked_at": null
+      },
+      {
+        "id": "2c9db4af-1ddb-4020-b985-7b300425eccc",
+        "kind": "party",
+        "result_form": null,
+        "grantee": "second",
+        "scope": [
+          "offers"
+        ],
+        "purpose": "Synthetic limited permission",
+        "granted_at": 1800000000001,
+        "expires_at": 1800000005001,
+        "asked_from": "63a65a12-0b92-4485-a17b-ac2f4bb7ded3",
+        "revoked_at": null
+      }
+    ]
+  },
+  "revoked": {
+    "household": "key:blbBK68wtQ22wagHsmzBU4bKopBUWwYDBzMi1CKNIW8",
+    "permission": {
+      "id": "b9e46d69-cc9e-4d3d-b116-c319a365475c",
+      "kind": "party",
+      "result_form": null,
+      "grantee": "first",
+      "scope": [
+        "offers"
+      ],
+      "purpose": "Synthetic limited permission",
+      "granted_at": 1800000000001,
+      "expires_at": 1800000005001,
+      "asked_from": "63a65a12-0b92-4485-a17b-ac2f4bb7ded3",
+      "revoked_at": 1800000000001
+    }
+  },
+  "after": {
+    "household": "key:blbBK68wtQ22wagHsmzBU4bKopBUWwYDBzMi1CKNIW8",
+    "checkedAt": 1800000000001,
+    "permissions": [
+      {
+        "id": "b9e46d69-cc9e-4d3d-b116-c319a365475c",
+        "kind": "party",
+        "result_form": null,
+        "grantee": "first",
+        "scope": [
+          "offers"
+        ],
+        "purpose": "Synthetic limited permission",
+        "granted_at": 1800000000001,
+        "expires_at": 1800000005001,
+        "asked_from": "63a65a12-0b92-4485-a17b-ac2f4bb7ded3",
+        "revoked_at": 1800000000001
+      },
+      {
+        "id": "2c9db4af-1ddb-4020-b985-7b300425eccc",
+        "kind": "party",
+        "result_form": null,
+        "grantee": "second",
+        "scope": [
+          "offers"
+        ],
+        "purpose": "Synthetic limited permission",
+        "granted_at": 1800000000001,
+        "expires_at": 1800000005001,
+        "asked_from": "63a65a12-0b92-4485-a17b-ac2f4bb7ded3",
+        "revoked_at": null
+      }
+    ]
+  }
+}

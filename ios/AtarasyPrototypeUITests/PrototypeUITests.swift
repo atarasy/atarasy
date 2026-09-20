@@ -106,6 +106,18 @@ final class PrototypeUITests: XCTestCase {
         for _ in 0..<14 { if choice.isHittable { break }; app.swipeUp() }
         XCTAssertTrue(choice.label.contains("Choose"))
     }
+    @MainActor func testPermissionCancelAndLostResponseReadback() {
+        let app = launch("--member-permission-fixture"); tap("memberAccount", app)
+        let revoke = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "revokePermission-")).firstMatch
+        XCTAssertTrue(revoke.waitForExistence(timeout: 8)); revoke.tap()
+        app.buttons["Cancel"].tap(); XCTAssertFalse(app.staticTexts["Revoked"].exists)
+        revoke.tap(); app.buttons["Revoke permission"].tap()
+        for _ in 0..<6 { if app.staticTexts["permissionNotice"].isHittable { break }; app.swipeUp() }
+        XCTAssertTrue(app.staticTexts["permissionNotice"].label.contains("could not be confirmed"))
+        for _ in 0..<6 { if app.buttons["refreshPermissions"].isHittable { break }; app.swipeDown() }
+        tap("refreshPermissions", app); XCTAssertTrue(app.staticTexts["Revoked"].waitForExistence(timeout: 5)); XCTAssertTrue(app.staticTexts["Active"].exists)
+        let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "Permission revoked and unrelated grant retained"; shot.lifetime = .keepAlways; add(shot)
+    }
     @MainActor func testWithdrawalReviewLostResponseAndResultReadback() {
         let app = launch("--member-withdrawal-fixture")
         tap("memberAccount", app); tap("prepareWithdrawal", app)

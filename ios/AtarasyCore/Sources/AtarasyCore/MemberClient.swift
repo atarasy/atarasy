@@ -564,3 +564,26 @@ extension MemberClient {
         } catch { return .unresolved }
     }
 }
+
+extension MemberClient {
+    public func permissionList() async throws -> MemberPermissionList {
+        let (reply, session) = try await read("/member/permissions/list")
+        let value = try decode(MemberJSON.self, reply)
+        guard case .object(let object) = value, Set(object.keys) == ["household", "checkedAt", "permissions"], object["household"] == .string(session.household),
+              case .integer(let at) = object["checkedAt"], ReviewValidation.safe(at), case .array(let raw) = object["permissions"] else { throw MemberFailure.scopeMismatch }
+        let rows = try raw.map { try MemberPermission.decode($0, household: session.household) }
+        guard Set(rows.map(\.id)).count == rows.count, rows.allSatisfy({ $0.granted_at <= at && ($0.revoked_at.map { $0 <= at } ?? true) }) else { throw MemberFailure.malformed }
+        return .init(household: session.household, checkedAt: at, permissions: rows)
+    }
+    public func revokePermission(_ permission: MemberPermission) async throws -> MemberPermission {
+        try Task.checkCancellation()
+        guard let session = active?.info, session.expiresAt > now(), permission.revoked_at == nil else { throw MemberFailure.unavailable }
+        let (reply, info) = try await read("/member/permissions/revoke", body: JSONEncoder().encode(["permission": permission.id]))
+        guard info.id == session.id else { throw MemberFailure.scopeMismatch }
+        let value = try decode(MemberJSON.self, reply)
+        guard case .object(let object) = value, Set(object.keys) == ["household", "permission"], object["household"] == .string(session.household), let raw = object["permission"] else { throw MemberFailure.scopeMismatch }
+        let result = try MemberPermission.decode(raw, household: session.household)
+        guard result.sameGrant(permission), result.revoked_at != nil else { throw MemberFailure.scopeMismatch }
+        return result
+    }
+}

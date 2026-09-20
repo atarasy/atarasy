@@ -34,7 +34,9 @@ struct MemberAccountSheet: View {
     var body: some View {
         NavigationStack {
             #if ATARASY_UI_TEST_FIXTURES
-            if ProcessInfo.processInfo.arguments.contains("--member-withdrawal-fixture") {
+            if ProcessInfo.processInfo.arguments.contains("--member-permission-fixture") {
+                MemberPermissionFixtureView()
+            } else if ProcessInfo.processInfo.arguments.contains("--member-withdrawal-fixture") {
                 MemberWithdrawalFixtureView()
             } else if ProcessInfo.processInfo.arguments.contains("--member-digital-fixture") {
                 MemberDigitalFixtureView()
@@ -100,7 +102,7 @@ private struct ConfiguredMemberAccount: View {
                 })
                 let decisions = MemberDigitalFlow(environment: environment, service: service, passkeys: passkeys, store: store)
                 let withdrawals = MemberWithdrawalFlow(environment: environment, service: service, passkeys: passkeys, store: store)
-                holder.account = MemberAccount(service: service, passkeys: passkeys, statements: statements, decisions: decisions, withdrawals: withdrawals)
+                holder.account = MemberAccount(service: service, passkeys: passkeys, statements: statements, decisions: decisions, withdrawals: withdrawals, permissions: MemberPermissions(service: service))
             } catch { dismiss() }
         }
         .onChange(of: scenePhase) { _, phase in if phase == .active { holder.account?.clearExpired(now: Int64(Date().timeIntervalSince1970 * 1000)) } }
@@ -125,6 +127,7 @@ private struct MemberAccountForm: View {
                     Text("Expires \(Date(timeIntervalSince1970: Double(session.expiresAt) / 1000).formatted())")
                     Button("Sign out") { perform { await account.signOut() } }.accessibilityIdentifier("memberSignOut")
                 }
+                if let permissions = account.permissions { Section { NavigationLink("Permissions") { MemberPermissionsView(model: permissions) } } }
                 MemberMandateSection(account: account)
                 MemberProposalSections(model: account.proposals, statements: account.statements, decisions: account.decisions)
                 if let statements = account.statements { SavedMemberOperationSections(flow: statements) }
