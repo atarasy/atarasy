@@ -18,7 +18,7 @@ struct MemberPermissionsView: View {
                 ForEach(model.rows) { row in
                     Section(row.purpose) {
                         Text(row.kind == "computation" ? "Aggregate computation" : "Shared access")
-                        Text(row.status(at: now))
+                        Text(row.status(at: now)).accessibilityIdentifier("permissionStatus-" + row.id)
                         Text("Expires \(Date(timeIntervalSince1970: Double(row.expires_at) / 1000).formatted())")
                         DisclosureGroup("Permission details") {
                             Text("Recipient: \(row.grantee)").textSelection(.enabled)
@@ -31,6 +31,7 @@ struct MemberPermissionsView: View {
             if model.busy { ProgressView("Checking permissions") }
             if !model.notice.isEmpty { Text(model.notice).accessibilityIdentifier("permissionNotice") }
         }
+        .buttonStyle(.borderless)
         .navigationTitle("Permissions")
         .disabled(model.busy || action != nil)
         .alert("Revoke this permission?", isPresented: Binding(get: { model.selected != nil }, set: { if !$0 { model.cancel() } })) {

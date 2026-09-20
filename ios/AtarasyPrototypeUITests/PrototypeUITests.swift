@@ -106,16 +106,32 @@ final class PrototypeUITests: XCTestCase {
         for _ in 0..<14 { if choice.isHittable { break }; app.swipeUp() }
         XCTAssertTrue(choice.label.contains("Choose"))
     }
+    @MainActor func testPermissionRequestGrantReadbackAndCancellation() {
+        let app = launch("--member-request-fixture"); tap("memberAccount", app)
+        let request = app.buttons.containing(.staticText, identifier: "Check for a duplicate before proposing a gift").firstMatch
+        XCTAssertTrue(request.waitForExistence(timeout: 8)); request.tap()
+        XCTAssertTrue(app.staticTexts["Requested by: Example giver"].waitForExistence(timeout: 5))
+        tap("Allow this access", app)
+        XCTAssertTrue(app.staticTexts["requestNotice"].label.contains("could not be confirmed"))
+        XCTAssertFalse(app.buttons["Allow this access"].isEnabled)
+        tap("Check this request again", app)
+        XCTAssertTrue(app.staticTexts["Granted"].waitForExistence(timeout: 5))
+        let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "Frozen permission request recovered after response loss"; shot.lifetime = .keepAlways; add(shot)
+        app.terminate(); app.launch(); tap("memberAccount", app)
+        XCTAssertTrue(request.waitForExistence(timeout: 8)); request.tap(); tap("Cancel request", app)
+        XCTAssertTrue(app.staticTexts["Cancelled"].waitForExistence(timeout: 5)); XCTAssertFalse(app.buttons["Allow this access"].exists)
+    }
     @MainActor func testPermissionCancelAndLostResponseReadback() {
         let app = launch("--member-permission-fixture"); tap("memberAccount", app)
         let revoke = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "revokePermission-")).firstMatch
-        XCTAssertTrue(revoke.waitForExistence(timeout: 8)); revoke.tap()
+        XCTAssertTrue(revoke.waitForExistence(timeout: 8)); let selectedID = revoke.identifier.replacingOccurrences(of: "revokePermission-", with: ""); revoke.tap()
         app.buttons["Cancel"].tap(); XCTAssertFalse(app.staticTexts["Revoked"].exists)
         revoke.tap(); app.buttons["Revoke permission"].tap()
         for _ in 0..<6 { if app.staticTexts["permissionNotice"].isHittable { break }; app.swipeUp() }
         XCTAssertTrue(app.staticTexts["permissionNotice"].label.contains("could not be confirmed"))
         for _ in 0..<6 { if app.buttons["refreshPermissions"].isHittable { break }; app.swipeDown() }
         tap("refreshPermissions", app); XCTAssertTrue(app.staticTexts["Revoked"].waitForExistence(timeout: 5)); XCTAssertTrue(app.staticTexts["Active"].exists)
+        XCTAssertEqual(app.staticTexts["permissionStatus-" + selectedID].label, "Revoked")
         let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "Permission revoked and unrelated grant retained"; shot.lifetime = .keepAlways; add(shot)
     }
     @MainActor func testWithdrawalReviewLostResponseAndResultReadback() {

@@ -587,3 +587,27 @@ extension MemberClient {
         return result
     }
 }
+
+extension MemberClient {
+    public func permissionRequests() async throws -> [MemberPermissionRequest] {
+        let (reply, session) = try await read("/member/permissions/requests")
+        let value = try decode(MemberJSON.self, reply)
+        guard case .object(let o) = value, Set(o.keys) == ["household","checkedAt","requests"], o["household"] == .string(session.household), case .integer(let at) = o["checkedAt"], ReviewValidation.safe(at), case .array(let raw) = o["requests"] else { throw MemberFailure.malformed }
+        let rows = try raw.map { try MemberPermissionRequest.decode($0, household: session.household) }
+        guard Set(rows.map(\.id)).count == rows.count, rows.allSatisfy({ $0.terms.createdAt <= at && ($0.decidedAt.map { $0 <= at } ?? true) }) else { throw MemberFailure.malformed }
+        return rows
+    }
+    public func permissionRequest(_ id: String) async throws -> MemberPermissionRequest {
+        guard UUID(uuidString: id)?.uuidString.lowercased() == id else { throw MemberFailure.invalidInput }
+        let (reply, session) = try await read("/member/permissions/requests/" + id)
+        let row = try MemberPermissionRequest.decode(decode(MemberJSON.self, reply), household: session.household)
+        guard row.id == id else { throw MemberFailure.scopeMismatch }; return row
+    }
+    public func decidePermissionRequest(_ review: MemberPermissionRequest, grant: Bool) async throws -> MemberPermissionRequest {
+        try Task.checkCancellation()
+        guard let session = active?.info, session.expiresAt > now(), session.household == review.terms.household, review.canDecide(at: now()) else { throw MemberFailure.expired }
+        let (reply, info) = try await read("/member/permissions/requests/" + review.id + (grant ? "/grant" : "/cancel"), body: JSONEncoder().encode(["digest": review.digest]))
+        let row = try MemberPermissionRequest.decode(decode(MemberJSON.self, reply), household: info.household)
+        guard info.id == session.id, row.digest == review.digest, row.state == (grant ? "granted" : "cancelled") else { throw MemberFailure.scopeMismatch }; return row
+    }
+}

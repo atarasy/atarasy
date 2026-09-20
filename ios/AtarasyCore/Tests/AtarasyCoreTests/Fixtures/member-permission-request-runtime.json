@@ -1,0 +1,118 @@
+{
+  "environment": {
+    "name": "test",
+    "origin": "https://unit.example"
+  },
+  "session": {
+    "id": "81e3a63e-fc87-4592-8c75-891df86fb228",
+    "household": "key:2IVGuT8fsmj6aKI_FyBUCzm_91pNNuQE6gmfgqSpUxE",
+    "presenters": [
+      "merchant-1"
+    ],
+    "expiresAt": 1800000090001
+  },
+  "review": {
+    "terms": {
+      "profile": "atarasy.permission-review.1",
+      "requestID": "32169706-4090-4fe0-a6c5-a2f8a6f61dc0",
+      "household": "key:2IVGuT8fsmj6aKI_FyBUCzm_91pNNuQE6gmfgqSpUxE",
+      "action": "Check for a duplicate before proposing a gift",
+      "requester": {
+        "id": "giver-one",
+        "name": "Example giver"
+      },
+      "purpose": "Avoid proposing a product you already have",
+      "fields": [
+        {
+          "id": "duplicate_check",
+          "label": "Whether you already have a product"
+        }
+      ],
+      "createdAt": 1800000000001,
+      "reviewExpiresAt": 1800000005001,
+      "accessExpiresAt": 1800000010001
+    },
+    "digest": "23d7a5ed401d64bee1ff1b1560c0f3ba2e4e31dc4db0c20c93aeb8b6a71ff9c3",
+    "state": "pending",
+    "decidedAt": null,
+    "permission": null
+  },
+  "granted": {
+    "terms": {
+      "profile": "atarasy.permission-review.1",
+      "requestID": "32169706-4090-4fe0-a6c5-a2f8a6f61dc0",
+      "household": "key:2IVGuT8fsmj6aKI_FyBUCzm_91pNNuQE6gmfgqSpUxE",
+      "action": "Check for a duplicate before proposing a gift",
+      "requester": {
+        "id": "giver-one",
+        "name": "Example giver"
+      },
+      "purpose": "Avoid proposing a product you already have",
+      "fields": [
+        {
+          "id": "duplicate_check",
+          "label": "Whether you already have a product"
+        }
+      ],
+      "createdAt": 1800000000001,
+      "reviewExpiresAt": 1800000005001,
+      "accessExpiresAt": 1800000010001
+    },
+    "digest": "23d7a5ed401d64bee1ff1b1560c0f3ba2e4e31dc4db0c20c93aeb8b6a71ff9c3",
+    "state": "granted",
+    "decidedAt": 1800000000001,
+    "permission": {
+      "id": "0e9b7b43-0561-44b2-b881-e32f30ec8666",
+      "kind": "party",
+      "result_form": null,
+      "grantee": "giver-one",
+      "scope": [
+        "duplicate_check"
+      ],
+      "purpose": "Avoid proposing a product you already have",
+      "granted_at": 1800000000001,
+      "expires_at": 1800000010001,
+      "asked_from": "9a6fcb95-4e7e-4e9e-84f6-6f29b0ea4027",
+      "revoked_at": null
+    }
+  },
+  "revoked": {
+    "terms": {
+      "profile": "atarasy.permission-review.1",
+      "requestID": "32169706-4090-4fe0-a6c5-a2f8a6f61dc0",
+      "household": "key:2IVGuT8fsmj6aKI_FyBUCzm_91pNNuQE6gmfgqSpUxE",
+      "action": "Check for a duplicate before proposing a gift",
+      "requester": {
+        "id": "giver-one",
+        "name": "Example giver"
+      },
+      "purpose": "Avoid proposing a product you already have",
+      "fields": [
+        {
+          "id": "duplicate_check",
+          "label": "Whether you already have a product"
+        }
+      ],
+      "createdAt": 1800000000001,
+      "reviewExpiresAt": 1800000005001,
+      "accessExpiresAt": 1800000010001
+    },
+    "digest": "23d7a5ed401d64bee1ff1b1560c0f3ba2e4e31dc4db0c20c93aeb8b6a71ff9c3",
+    "state": "granted",
+    "decidedAt": 1800000000001,
+    "permission": {
+      "id": "0e9b7b43-0561-44b2-b881-e32f30ec8666",
+      "kind": "party",
+      "result_form": null,
+      "grantee": "giver-one",
+      "scope": [
+        "duplicate_check"
+      ],
+      "purpose": "Avoid proposing a product you already have",
+      "granted_at": 1800000000001,
+      "expires_at": 1800000010001,
+      "asked_from": "9a6fcb95-4e7e-4e9e-84f6-6f29b0ea4027",
+      "revoked_at": 1800000000001
+    }
+  }
+}

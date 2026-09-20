@@ -20,13 +20,14 @@ public extension MemberAccountService {
 }
 
 @MainActor public final class MemberAccount: ObservableObject {
-    @Published public private(set) var session: MemberSessionInfo? { didSet { statements?.setSession(session); decisions?.setSession(session); withdrawals?.setSession(session); permissions?.setSession(session); mandates = []; mandateReview = nil } }
+    @Published public private(set) var session: MemberSessionInfo? { didSet { statements?.setSession(session); decisions?.setSession(session); withdrawals?.setSession(session); permissions?.setSession(session); permissionRequests?.setSession(session); mandates = []; mandateReview = nil } }
     @Published public private(set) var busy = false
     @Published public private(set) var notice = ""
     @Published public private(set) var mandates: [MemberMandate] = []
     @Published public private(set) var mandateReview: MemberMandateReview?
     @Published public private(set) var mandateNotice = ""
     public let statements: MemberStatementFlow?
+    public let permissionRequests: MemberPermissionRequests?
     public let permissions: MemberPermissions?
     public let withdrawals: MemberWithdrawalFlow?
     public let decisions: MemberDigitalFlow?
@@ -34,8 +35,8 @@ public extension MemberAccountService {
     private let service: any MemberAccountService
     private let passkeys: any MemberPasskeyAuthorising
     private var generation: UInt64 = 0
-    public init(service: any MemberAccountService, passkeys: any MemberPasskeyAuthorising, statements: MemberStatementFlow? = nil, decisions: MemberDigitalFlow? = nil, withdrawals: MemberWithdrawalFlow? = nil, permissions: MemberPermissions? = nil) {
-        self.service = service; self.passkeys = passkeys; self.statements = statements; self.decisions = decisions; self.withdrawals = withdrawals; self.permissions = permissions
+    public init(service: any MemberAccountService, passkeys: any MemberPasskeyAuthorising, statements: MemberStatementFlow? = nil, decisions: MemberDigitalFlow? = nil, withdrawals: MemberWithdrawalFlow? = nil, permissions: MemberPermissions? = nil, permissionRequests: MemberPermissionRequests? = nil) {
+        self.service = service; self.passkeys = passkeys; self.statements = statements; self.decisions = decisions; self.withdrawals = withdrawals; self.permissions = permissions; self.permissionRequests = permissionRequests
         proposals = MemberProposals(service: service)
         proposals.onSessionUnavailable = { [weak self] in
             guard let self else { return }
