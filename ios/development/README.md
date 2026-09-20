@@ -37,3 +37,11 @@ On 2026-09-13 the signed Development build was installed and launched on a physi
 The user completed registration and sign-in on the physical iPhone 13 Pro. Trusted database inspection confirmed one active credential for the expected development test account with zero presenter grants. The user then reported successful sign-out/re-login. A screenshot at 17:26 JST showed Saved session verified and the expected household/18:24 expiry after the requested app restart and restoration. These are observed device outcomes, not an instrumented network trace.
 
 The user excluded physical iPad verification from this acceptance scope. Basic iPhone authentication is accepted; statement approval, offline recovery, lost responses and background expiry remain unverified.
+
+## Unsigned mandate acceptance (2026-09-20)
+
+The current development namespace is `atarasy_api_dev_2`. Old passkeys from the disabled namespace cannot sign in to it. Keep the old records and credentials; enrol the new development account using the trusted device acceptance operator. After the first verified native assertion, the operator's `statement` step adopts the credential's household and prepares an unsigned claim. Before that adoption, verification can return 200 while the client session inspection returns 401. Complete the operator step before requesting another device sign-in; do not repeatedly enrol credentials.
+
+The native account screen now lists unsigned mandates independently of presenter grants. Refresh the list, open a named mandate, read the host and every term, acknowledge them, and sign with the registered passkey. The client compares the prepared terms with the selected record and independently computes the host-bound challenge. Changed terms, host, credential or session are refused. Each prepared submission is consumed before dispatch; an uncertain answer is not retried. Refreshing claims after an uncertain answer does not itself prove that this device's submission succeeded.
+
+Once native signing is observed, the trusted operator checks status and runs `statement` again to prepare the first box. The changed presenter grant revokes the current session, so sign in again to see it. The operator never substitutes a synthetic signature. This screen's implementation and passing tests do not establish completed native mandate or settlement acceptance.

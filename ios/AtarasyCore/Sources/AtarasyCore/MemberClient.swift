@@ -9,6 +9,7 @@ public actor MemberClient {
     private var active: StoredMemberSession?
     private var generation: UInt64 = 0
     private var authenticating = false
+    private var mandateReview: MemberMandateReview?
     public init(environment: MemberEnvironment, transport: any MemberHTTPTransport, vault: any MemberSessionVault, now: @escaping @Sendable () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }) {
         self.environment = environment; self.transport = transport; self.vault = vault; self.now = now
     }
@@ -344,4 +345,59 @@ public actor MemberClient {
               object["id"] as? String == handle.id, object["state"] as? String == "cancelled" else { throw MemberFailure.malformed }
     }
 
+}
+
+
+extension MemberClient {
+    private func checkedMandate(_ mandate: MemberMandate, household: String) throws {
+        try mandateIdentifier(mandate.id)
+        guard same(mandate.household, household), mandate.id.hasPrefix(household + "."), live(mandate.lapsesAt),
+              Set(mandate.coSigners).count == mandate.coSigners.count,
+              mandate.coSigners.allSatisfy({ !$0.isEmpty && !$0.contains("\n") && !$0.contains("\r") }) else { throw MemberFailure.scopeMismatch }
+        _ = try mandate.canonical(host: environment.origin.host!)
+    }
+    public func unsignedMandates() async throws -> [MemberMandate] {
+        struct List: Decodable { let mandates: [MemberMandate] }
+        let (reply, info) = try await read("/member/mandates/list", body: Data("{}".utf8))
+        let list = try decode(List.self, reply, keys: ["mandates"]).mandates
+        guard list.count <= 100, Set(list.map(\.id)).count == list.count else { throw MemberFailure.malformed }
+        for mandate in list { try checkedMandate(mandate, household: info.household) }
+        return list
+    }
+    public func prepareMandate(_ selected: MemberMandate) async throws -> MemberMandateReview {
+        mandateReview = nil
+        struct Prepared: Decodable { let mandate: MemberMandate; let publicKey: [String: MemberJSON] }
+        let (reply, info) = try await read("/member/mandates/prepare", body: JSONEncoder().encode(["mandate": selected.id]))
+        let prepared = try decode(Prepared.self, reply, keys: ["mandate", "publicKey"])
+        try checkedMandate(prepared.mandate, household: info.household)
+        let host = environment.origin.host!
+        guard prepared.mandate == selected, prepared.publicKey["challenge"] == .string(try Canonical.challenge(selected.canonical(host: host))) else { throw MemberFailure.scopeMismatch }
+        // This local review deadline is not a server-issued expiry or operation ID.
+        let ceremony = MemberCeremony(id: UUID().uuidString, expiresAt: min(info.expiresAt, now() + 300_000), publicKey: prepared.publicKey)
+        let options = try NativePasskeyOptions(ceremony: ceremony, environment: environment, kind: .statement, now: now())
+        guard options.allowedCredentialIDs.count == 1 else { throw MemberFailure.scopeMismatch }
+        let review = MemberMandateReview(mandate: selected, host: host, ceremony: ceremony, sessionID: info.id, credentialID: PasskeyBytes.encode(options.allowedCredentialIDs[0]))
+        mandateReview = review
+        return review
+    }
+    public func submitMandate(_ review: MemberMandateReview, assertion: MemberPasskeyResponse) async throws {
+        guard let held = mandateReview, held.ceremony.id == review.ceremony.id, let active,
+              same(active.info.id, held.sessionID), live(active.info.expiresAt), live(held.ceremony.expiresAt),
+              same(assertion.id, held.credentialID), case .string(let encoded) = assertion.response["clientDataJSON"] else { throw MemberFailure.scopeMismatch }
+        let bytes = try PasskeyBytes.decode(encoded, maximum: 8192)
+        guard let clientData = try JSONSerialization.jsonObject(with: bytes) as? [String: Any],
+              clientData["type"] as? String == "webauthn.get", clientData["origin"] as? String == environment.origin.absoluteString,
+              clientData["challenge"] as? String == Canonical.challenge(try held.mandate.canonical(host: held.host)) else { throw MemberFailure.scopeMismatch }
+        struct Input: Encodable { let mandate: String; let assertion: MemberPasskeyResponse }
+        let body = try JSONEncoder().encode(Input(mandate: held.mandate.id, assertion: assertion))
+        guard body.count <= 16_384 else { throw MemberFailure.invalidInput }
+        try Task.checkCancellation()
+        // Consume before suspension. An uncertain answer must be inspected, never replayed.
+        mandateReview = nil
+        do {
+            let (reply, _) = try await read("/member/mandates/submit", body: body)
+            let recorded = try decode(MemberMandate.self, reply)
+            guard recorded == held.mandate else { throw MemberFailure.scopeMismatch }
+        } catch { throw MemberFailure.uncertainVerification }
+    }
 }

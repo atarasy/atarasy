@@ -191,4 +191,74 @@ private actor MemberScript: MemberHTTPTransport {
         let current = try await client.offer(id: "offer"); XCTAssertEqual(current.household, "other")
     }
 
+    private var mandateHousehold: String { "key:" + String(repeating: "A", count: 43) }
+    private func unsignedMandate(_ ceiling: Int64 = 1200) -> MemberMandate {
+        MemberMandate(id: mandateHousehold + ".1", household: mandateHousehold, ceilingOutOfNetwork: ceiling, ceilingDaily: nil, coolingSeconds: nil, coSigners: [], lapsesAt: 4000, version: 1)
+    }
+    private func preparedMandateData(_ m: MemberMandate, challenge: String? = nil, host: String = "unit.example") throws -> Data {
+        let object: [String: Any] = ["mandate": try JSONSerialization.jsonObject(with: data(m)), "publicKey": ["challenge": try challenge ?? Canonical.challenge(m.canonical(host: host)), "rpId": host, "userVerification": "required", "allowCredentials": [["type": "public-key", "id": "YQ"]]]]
+        return try JSONSerialization.data(withJSONObject: object)
+    }
+    private func mandateClient(_ rest: [MemberScript.Step]) throws -> (MemberClient, MemberScript) {
+        let info = MemberSessionInfo(id: "mandate-session", household: mandateHousehold, presenters: [], expiresAt: 5000)
+        let script = MemberScript([.init(status: 200, data: try data(info))] + rest)
+        return (MemberClient(environment: env, transport: script, vault: try vault(info), now: { 1000 }), script)
+    }
+    private func mandateAssertion(_ m: MemberMandate, origin: String = "https://unit.example", credential: String = "YQ") throws -> MemberPasskeyResponse {
+        let client = try JSONSerialization.data(withJSONObject: ["type": "webauthn.get", "origin": origin, "challenge": Canonical.challenge(m.canonical(host: "unit.example"))])
+        return .assertion(id: credential, clientDataJSON: PasskeyBytes.encode(client), authenticatorData: "Yw", signature: "ZA", userHandle: "ZQ")
+    }
+    func testMandateReadsExactTermsAndSubmitsNamedClaimOnce() async throws {
+        let m = unsignedMandate()
+        let (client, script) = try mandateClient([.init(status: 200, data: data(["mandates": [m]])), .init(status: 200, data: preparedMandateData(m)), .init(status: 200, data: data(m))])
+        _ = try await client.restore(household: mandateHousehold)
+        let list = try await client.unsignedMandates(); XCTAssertEqual(list, [m])
+        let review = try await client.prepareMandate(list[0])
+        XCTAssertEqual(review.host, "unit.example")
+        try await client.submitMandate(review, assertion: mandateAssertion(m))
+        do { try await client.submitMandate(review, assertion: mandateAssertion(m)); XCTFail("replayed") } catch {}
+        let requests = await script.requests
+        XCTAssertEqual(requests.count, 4)
+        XCTAssertEqual(requests[3].url?.path, "/member/mandates/submit")
+        let body = try JSONSerialization.jsonObject(with: requests[3].httpBody!) as! [String: Any]
+        XCTAssertEqual(body["mandate"] as? String, m.id)
+        XCTAssertEqual(Set(body.keys), ["mandate", "assertion"])
+    }
+    func testMandateRejectsSubstitutedTermsChallengeAndHostBeforeSigning() async throws {
+        let m = unsignedMandate()
+        for response in [try preparedMandateData(unsignedMandate(9999), challenge: Canonical.challenge(m.canonical(host: "unit.example"))), try preparedMandateData(m, challenge: String(repeating: "A", count: 43)), try preparedMandateData(m, host: "foreign.example")] {
+            let (client, script) = try mandateClient([.init(status: 200, data: response)])
+            _ = try await client.restore(household: mandateHousehold)
+            do { _ = try await client.prepareMandate(m); XCTFail("substitution accepted") } catch {}
+            let requests = await script.requests; XCTAssertEqual(requests.count, 2)
+        }
+    }
+    func testMandateRejectsWrongCredentialAndOriginWithoutSubmitting() async throws {
+        let m = unsignedMandate()
+        let (client, script) = try mandateClient([.init(status: 200, data: preparedMandateData(m))])
+        _ = try await client.restore(household: mandateHousehold)
+        let review = try await client.prepareMandate(m)
+        for assertion in [try mandateAssertion(m, credential: "Yg"), try mandateAssertion(m, origin: "https://foreign.example")] {
+            do { try await client.submitMandate(review, assertion: assertion); XCTFail("foreign assertion") } catch {}
+        }
+        let requests = await script.requests; XCTAssertEqual(requests.count, 2)
+    }
+    func testLostMandateResponseCannotReplayTheSubmission() async throws {
+        let m = unsignedMandate()
+        let (client, script) = try mandateClient([.init(status: 200, data: preparedMandateData(m)), .init(status: 200, data: Data(), fails: true)])
+        _ = try await client.restore(household: mandateHousehold)
+        let review = try await client.prepareMandate(m)
+        do { try await client.submitMandate(review, assertion: mandateAssertion(m)); XCTFail() } catch { XCTAssertEqual(error as? MemberFailure, .uncertainVerification) }
+        do { try await client.submitMandate(review, assertion: mandateAssertion(m)); XCTFail() } catch {}
+        let requests = await script.requests; XCTAssertEqual(requests.count, 3)
+    }
+    func testSignOutInvalidatesMandatePreparedUnderThatSession() async throws {
+        let m = unsignedMandate()
+        let (client, script) = try mandateClient([.init(status: 200, data: preparedMandateData(m)), .init(status: 204, data: Data())])
+        _ = try await client.restore(household: mandateHousehold)
+        let review = try await client.prepareMandate(m); _ = try await client.logout()
+        do { try await client.submitMandate(review, assertion: mandateAssertion(m)); XCTFail() } catch {}
+        let requests = await script.requests; XCTAssertEqual(requests.count, 3)
+    }
+
 }

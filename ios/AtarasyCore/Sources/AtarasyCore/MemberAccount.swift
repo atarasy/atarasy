@@ -7,14 +7,25 @@ public protocol MemberAccountService: MemberProposalService {
     func register(ceremony: MemberCeremony, response: MemberPasskeyResponse) async throws
     func login(ceremony: MemberCeremony, response: MemberPasskeyResponse) async throws -> MemberSessionInfo
     func restore(household: String) async throws -> MemberSessionInfo?
+    func unsignedMandates() async throws -> [MemberMandate]
+    func prepareMandate(_ selected: MemberMandate) async throws -> MemberMandateReview
+    func submitMandate(_ review: MemberMandateReview, assertion: MemberPasskeyResponse) async throws
     func logout() async throws -> MemberLogoutOutcome
 }
 extension MemberClient: MemberAccountService {}
+public extension MemberAccountService {
+    func unsignedMandates() async throws -> [MemberMandate] { throw MemberFailure.unavailable }
+    func prepareMandate(_ selected: MemberMandate) async throws -> MemberMandateReview { throw MemberFailure.unavailable }
+    func submitMandate(_ review: MemberMandateReview, assertion: MemberPasskeyResponse) async throws { throw MemberFailure.unavailable }
+}
 
 @MainActor public final class MemberAccount: ObservableObject {
-    @Published public private(set) var session: MemberSessionInfo? { didSet { statements?.setSession(session) } }
+    @Published public private(set) var session: MemberSessionInfo? { didSet { statements?.setSession(session); mandates = []; mandateReview = nil } }
     @Published public private(set) var busy = false
     @Published public private(set) var notice = ""
+    @Published public private(set) var mandates: [MemberMandate] = []
+    @Published public private(set) var mandateReview: MemberMandateReview?
+    @Published public private(set) var mandateNotice = ""
     public let statements: MemberStatementFlow?
     public let proposals: MemberProposals
     private let service: any MemberAccountService
@@ -95,4 +106,40 @@ extension MemberClient: MemberAccountService {}
             notice = switch result { case .revoked: "Signed out."; case .noLocalSession: "No active session on this device." }
         }
     }
+    public func refreshMandates() async {
+        guard session != nil else { return }
+        await run {
+            let started = generation; mandateReview = nil; mandates = []; mandateNotice = ""
+            let values = try await service.unsignedMandates()
+            guard started == generation, session != nil else { return }
+            mandates = values; mandateNotice = values.isEmpty ? "No unsigned mandates." : "Review each mandate before signing."
+        }
+    }
+    public func reviewMandate(_ selected: MemberMandate) async {
+        guard session != nil else { return }
+        await run {
+            let started = generation; mandateReview = nil; mandateNotice = ""
+            let value = try await service.prepareMandate(selected)
+            guard started == generation, session != nil else { return }
+            mandateReview = value
+        }
+    }
+    public func signMandate() async {
+        guard let review = mandateReview, session != nil else { return }
+        await run {
+            let started = generation; mandateReview = nil
+            let response = try await passkeys.authorise(review.ceremony, kind: .statement)
+            try Task.checkCancellation()
+            guard started == generation, session != nil else { return }
+            do {
+                try await service.submitMandate(review, assertion: response)
+                guard started == generation, session != nil else { return }
+                mandates.removeAll { $0.id == review.mandate.id }; mandateNotice = "Mandate signed."
+            } catch {
+                mandateNotice = "The result is unconfirmed. Refresh unsigned mandates before taking further action; do not repeat this submission."
+                throw error
+            }
+        }
+    }
+
 }
