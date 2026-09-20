@@ -89,7 +89,11 @@ private struct ConfiguredMemberAccount: View {
                 let passkeys = NativePasskeyAuthoriser(environment: environment, anchor: { [weak reference] in reference?.window })
                 let directory = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true).appendingPathComponent("MemberOperations", isDirectory: true)
                 let store = try FileMemberOperationStore(directory: directory)
-                let statements = MemberStatementFlow(environment: environment, service: service, passkeys: passkeys, store: store)
+                let statements = MemberStatementFlow(environment: environment, service: service, passkeys: passkeys, store: store, diagnostic: { event in
+                    #if ATARASY_DEVICE_ACCEPTANCE
+                    print("ATARASY_DEVICE_ACCEPTANCE: approval stopped " + event)
+                    #endif
+                })
                 holder.account = MemberAccount(service: service, passkeys: passkeys, statements: statements)
             } catch { dismiss() }
         }

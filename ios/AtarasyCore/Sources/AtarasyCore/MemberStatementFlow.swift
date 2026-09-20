@@ -55,12 +55,13 @@ public struct FrozenMemberStatement: Sendable {
     private let service: any MemberStatementService
     private let passkeys: any MemberPasskeyAuthorising
     private let store: FileMemberOperationStore
+    private let diagnostic: (String) -> Void
     private let now: () -> Int64
     private var session: MemberSessionInfo?
     private var prepared: MemberPreparedOperation?
     private var generation: UInt64 = 0
-    public init(environment: MemberEnvironment, service: any MemberStatementService, passkeys: any MemberPasskeyAuthorising, store: FileMemberOperationStore, now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }) {
-        self.environment = environment; self.service = service; self.passkeys = passkeys; self.store = store; self.now = now
+    public init(environment: MemberEnvironment, service: any MemberStatementService, passkeys: any MemberPasskeyAuthorising, store: FileMemberOperationStore, diagnostic: @escaping (String) -> Void = { _ in }, now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }) {
+        self.environment = environment; self.service = service; self.passkeys = passkeys; self.store = store; self.diagnostic = diagnostic; self.now = now
     }
     public func setSession(_ session: MemberSessionInfo?) {
         generation &+= 1; self.session = session; handle = nil; prepared = nil; review = nil; saved = []; notice = ""; settledOffers = []
@@ -111,22 +112,38 @@ public struct FrozenMemberStatement: Sendable {
         guard canApprove, let handle, let prepared, let session else { return }
         busy = true; let current = generation; notice = ""; defer { busy = false }
         var dispatchStarted = false
+        var stage = "review-read"
         do {
             let fresh = try await service.operationReview(handle)
             guard current == generation, !Task.isCancelled, session.expiresAt > now(), handle.expiresAt > now() else { return }
+            stage = "review-comparison"
             let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
             guard fresh.operationState == "prepared", fresh.operationID == prepared.operationID,
                   fresh.reviewedRevision == prepared.reviewedRevision, fresh.publicKey == prepared.publicKey,
                   try encoder.encode(fresh.review) == encoder.encode(prepared.review) else { throw MemberFailure.scopeMismatch }
             let ceremony = MemberCeremony(id: handle.id, expiresAt: handle.expiresAt, publicKey: fresh.publicKey)
+            stage = "passkey-presentation"
             let assertion = try await passkeys.authorise(ceremony, kind: .statement)
             guard current == generation, !Task.isCancelled, session.expiresAt > now(), handle.expiresAt > now() else { return }
+            stage = "submission"
             dispatchStarted = true; review = nil; self.prepared = nil
             let outcome = try await service.submitStatement(handle, assertion: assertion, store: store)
             guard current == generation else { return }
             self.handle = try store.load(id: handle.id) ?? handle; show(outcome); refreshSaved()
         } catch {
             guard current == generation else { return }
+            // Fixed labels only: never pass credentials, payloads, or arbitrary error descriptions.
+            let reason: String
+            switch error {
+            case NativePasskeyFailure.unavailable: reason = "passkey-unavailable"
+            case NativePasskeyFailure.invalidOptions: reason = "invalid-options"
+            case NativePasskeyFailure.cancelled: reason = "cancelled"
+            case MemberFailure.scopeMismatch: reason = "scope-mismatch"
+            case MemberFailure.malformed: reason = "malformed"
+            case MemberFailure.expired: reason = "expired"
+            default: reason = "other"
+            }
+            diagnostic(stage + ":" + reason)
             if !dispatchStarted && (error as? NativePasskeyFailure == .cancelled || error is CancellationError) { notice = "Approval cancelled. No assertion was submitted." }
             else { review = nil; self.prepared = nil; notice = "Approval could not be confirmed. Check the saved result before taking another action." }
             refreshSaved()

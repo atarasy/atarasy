@@ -314,7 +314,7 @@ private struct RefusingOperationStore: MemberOperationStore {
     }
 }
 extension MemberOperationTransportTests {
-    private func flowSetup() throws -> (MemberStatementFlow, FlowService, FlowPasskeys, MemberOfferDetail, MemberStatement, MemberSessionInfo) {
+    private func flowSetup(diagnostic: @escaping (String) -> Void = { _ in }) throws -> (MemberStatementFlow, FlowService, FlowPasskeys, MemberOfferDetail, MemberStatement, MemberSessionInfo) {
         let url = Bundle.module.url(forResource: "member-transaction-responses", withExtension: "json", subdirectory: "Fixtures")!
         let cases = (try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: Any])["cases"] as! [[String: Any]]
         func value(_ name: String) -> [String: Any] { cases.first { $0["name"] as? String == name }!["value"] as! [String: Any] }
@@ -332,7 +332,7 @@ extension MemberOperationTransportTests {
         h["household"] = info.household; h["offer"] = detail.id; h["canonical"] = local.canonical; h["expiresAt"] = 2000
         let service = try FlowService(handle: JSONDecoder().decode(MemberOperationHandle.self, from: data(h)), preparation: JSONDecoder().decode(MemberPreparedOperation.self, from: data(p)))
         let passkeys = FlowPasskeys(), (store, _) = try store()
-        let flow = MemberStatementFlow(environment: env, service: service, passkeys: passkeys, store: store, now: { 1000 }); flow.setSession(info)
+        let flow = MemberStatementFlow(environment: env, service: service, passkeys: passkeys, store: store, diagnostic: diagnostic, now: { 1000 }); flow.setSession(info)
         return (flow, service, passkeys, detail, statement, info)
     }
     func testFrozenReviewPrecedesNativeSigningAndUncertaintyDisablesAnotherApproval() async throws {
@@ -351,6 +351,18 @@ extension MemberOperationTransportTests {
             await flow.prepare(detail: detail, statement: statement, disputed: [])
             passkeys.cancel = true; service.changed = changed
             await flow.approve(); XCTAssertEqual(service.submissions, 0); XCTAssertEqual(passkeys.calls, changed ? 0 : 1)
+        }
+    }
+    func testApprovalDiagnosticsIdentifyStageWithoutPayloads() async throws {
+        for changed in [false, true] {
+            var events: [String] = []
+            let (flow, service, passkeys, detail, statement, _) = try flowSetup(diagnostic: { events.append($0) })
+            await flow.prepare(detail: detail, statement: statement, disputed: [])
+            service.changed = changed; passkeys.cancel = true
+            await flow.approve()
+            XCTAssertEqual(events, [changed ? "review-read:scope-mismatch" : "passkey-presentation:cancelled"])
+            XCTAssertEqual(service.submissions, 0)
+            XCTAssertFalse(flow.saved[0].attempted)
         }
     }
     func testClosingDuringNativeCeremonyDropsLateAssertion() async throws {
