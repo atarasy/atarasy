@@ -19,7 +19,7 @@ public enum PasskeyBytes {
 
 // Only the pinned service's platform-passkey subset is accepted. No browser defaults become policy.
 public struct NativePasskeyOptions: Sendable {
-    public enum Kind: Sendable { case registration, assertion, statement, decision }
+    public enum Kind: Sendable { case registration, assertion, statement, decision, withdrawal }
     public let kind: Kind
     public let relyingParty: String
     public let challenge: Data
@@ -30,7 +30,7 @@ public struct NativePasskeyOptions: Sendable {
         guard ceremony.expiresAt > now, ceremony.expiresAt <= 9_007_199_254_740_991 else { throw MemberFailure.expired }
         let p = ceremony.publicKey
         guard UUID(uuidString: ceremony.id) != nil, case .string(let raw) = p["challenge"] else { throw NativePasskeyFailure.invalidOptions }
-        if kind != .statement && kind != .decision { guard case .integer(let timeout) = p["timeout"], timeout > 0 else { throw NativePasskeyFailure.invalidOptions } }
+        if kind != .statement && kind != .decision && kind != .withdrawal { guard case .integer(let timeout) = p["timeout"], timeout > 0 else { throw NativePasskeyFailure.invalidOptions } }
         challenge = try PasskeyBytes.decode(raw, maximum: 32)
         guard challenge.count == 32, let host = environment.origin.host else { throw NativePasskeyFailure.invalidOptions }
         relyingParty = host; self.kind = kind
@@ -45,7 +45,7 @@ public struct NativePasskeyOptions: Sendable {
         case .assertion:
             guard p["rpId"] == .string(host), p["userVerification"] == .string("required"), p["allowCredentials"] == .array([]) else { throw NativePasskeyFailure.invalidOptions }
             allowedCredentialIDs = []; userID = nil; userName = nil
-        case .statement, .decision:
+        case .statement, .decision, .withdrawal:
             guard p["rpId"] == .string(host), p["userVerification"] == .string("required"),
                   case .array(let allowed) = p["allowCredentials"], allowed.count == 1,
                   case .object(let credential) = allowed[0], Set(credential.keys) == ["type", "id"],
@@ -62,7 +62,7 @@ public struct NativePasskeyOptions: Sendable {
             request.userVerificationPreference = .required
             request.attestationPreference = .none
             return request
-        case .assertion, .statement, .decision:
+        case .assertion, .statement, .decision, .withdrawal:
             let request = provider.createCredentialAssertionRequest(challenge: challenge)
             request.userVerificationPreference = .required
             request.allowedCredentials = allowedCredentialIDs.map { ASAuthorizationPlatformPublicKeyCredentialDescriptor(credentialID: $0) }
@@ -121,7 +121,7 @@ public struct NativePasskeyOptions: Sendable {
         case (.registration, let credential as ASAuthorizationPlatformPublicKeyCredentialRegistration):
             guard let attestation = credential.rawAttestationObject, !attestation.isEmpty, !credential.credentialID.isEmpty, !credential.rawClientDataJSON.isEmpty else { finish(.failure(NativePasskeyFailure.invalidCredential)); return }
             finish(.success(.registration(id: PasskeyBytes.encode(credential.credentialID), clientDataJSON: PasskeyBytes.encode(credential.rawClientDataJSON), attestationObject: PasskeyBytes.encode(attestation))))
-        case (.assertion, let credential as ASAuthorizationPlatformPublicKeyCredentialAssertion), (.statement, let credential as ASAuthorizationPlatformPublicKeyCredentialAssertion), (.decision, let credential as ASAuthorizationPlatformPublicKeyCredentialAssertion):
+        case (.assertion, let credential as ASAuthorizationPlatformPublicKeyCredentialAssertion), (.statement, let credential as ASAuthorizationPlatformPublicKeyCredentialAssertion), (.decision, let credential as ASAuthorizationPlatformPublicKeyCredentialAssertion), (.withdrawal, let credential as ASAuthorizationPlatformPublicKeyCredentialAssertion):
             guard !credential.credentialID.isEmpty, !credential.rawClientDataJSON.isEmpty, !credential.rawAuthenticatorData.isEmpty, !credential.signature.isEmpty, !credential.userID.isEmpty else { finish(.failure(NativePasskeyFailure.invalidCredential)); return }
             finish(.success(.assertion(id: PasskeyBytes.encode(credential.credentialID), clientDataJSON: PasskeyBytes.encode(credential.rawClientDataJSON), authenticatorData: PasskeyBytes.encode(credential.rawAuthenticatorData), signature: PasskeyBytes.encode(credential.signature), userHandle: PasskeyBytes.encode(credential.userID))))
         default: finish(.failure(NativePasskeyFailure.invalidCredential))

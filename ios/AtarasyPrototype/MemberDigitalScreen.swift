@@ -60,10 +60,12 @@ struct MemberDigitalScreen: View {
 }
 struct SavedMemberDecisionSections: View {
     @ObservedObject var flow: MemberDigitalFlow
+    var withdrawals: MemberWithdrawalFlow? = nil
     var body: some View {
         Section("Saved digital decisions") {
             Button("Refresh saved decisions") { flow.refreshSaved() }.disabled(flow.busy)
             ForEach(flow.saved, id: \.id) { handle in
+                if let withdrawals { NavigationLink("Review withdrawal for \(handle.offer)") { MemberWithdrawalScreen(flow: withdrawals, original: handle) } }
                 Button("Check \(handle.offer)") { Task { await flow.check(handle) } }.disabled(flow.busy)
             }
             if !flow.notice.isEmpty { Text(flow.notice) }

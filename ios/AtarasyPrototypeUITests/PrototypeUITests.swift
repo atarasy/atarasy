@@ -106,6 +106,19 @@ final class PrototypeUITests: XCTestCase {
         for _ in 0..<14 { if choice.isHittable { break }; app.swipeUp() }
         XCTAssertTrue(choice.label.contains("Choose"))
     }
+    @MainActor func testWithdrawalReviewLostResponseAndResultReadback() {
+        let app = launch("--member-withdrawal-fixture")
+        tap("memberAccount", app); tap("prepareWithdrawal", app)
+        for _ in 0..<20 { if app.buttons["approveWithdrawal"].isHittable { break }; app.swipeUp() }
+        XCTAssertFalse(app.buttons["approveWithdrawal"].isEnabled)
+        tap("acknowledgeWithdrawal", app); tap("approveWithdrawal", app)
+        XCTAssertTrue(app.staticTexts["withdrawalNotice"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["withdrawalNotice"].label.contains("result could not be read"))
+        XCTAssertFalse(app.buttons["approveWithdrawal"].exists)
+        tap("checkWithdrawal", app)
+        XCTAssertTrue(app.staticTexts["withdrawalNotice"].label.contains("Withdrawal recorded"))
+        let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "Synthetic withdrawal recovered after response loss"; shot.lifetime = .keepAlways; add(shot)
+    }
     @MainActor func testDigitalReviewLostResponseAndResultReadback() {
         let app = launch("--member-digital-fixture")
         tap("memberAccount", app); tap("prepareDigitalDecision", app)

@@ -337,7 +337,7 @@ public actor MemberClient {
         } catch { return .unresolved }
     }
     public func cancelOperation(_ handle: MemberOperationHandle) async throws {
-        guard ["atarasy.member-statement-authorisation.1", memberDecisionProfile].contains(handle.operationProfile) else { throw MemberFailure.scopeMismatch }
+        guard ["atarasy.member-statement-authorisation.1", memberDecisionProfile, memberWithdrawalProfile].contains(handle.operationProfile) else { throw MemberFailure.scopeMismatch }
         try operationScope(handle, profile: handle.operationProfile)
         let (reply, _) = try await read("/member/operations/" + handle.id + "/cancel", body: Data("{}".utf8))
         // The public cancellation route returns only an acknowledgement, not the journal row.
@@ -493,6 +493,74 @@ extension MemberClient {
             let (reply, _) = try await read("/member/operations/" + handle.id + "/submit", body: body)
             try Task.checkCancellation()
             return try decisionOutcome(reply, handle: handle.markedAttempted(confirmation: signature))
+        } catch { return .unresolved }
+    }
+}
+
+extension MemberClient {
+    public func prepareWithdrawal(_ originalHandle: MemberOperationHandle, store: any MemberOperationStore) async throws -> (MemberOperationHandle, MemberPreparedDecision, FrozenMemberWithdrawal) {
+        try operationScope(originalHandle, profile: memberDecisionProfile)
+        guard let session = active?.info, case .recorded(let original) = await decisionOutcome(originalHandle) else { throw MemberFailure.unavailable }
+        let originalReview = try await decisionReview(originalHandle)
+        let (reply, info) = try await read("/member/withdrawals/prepare", body: JSONEncoder().encode(["decisionOperationID": originalHandle.id]))
+        guard session.id == info.id else { throw MemberFailure.scopeMismatch }
+        let prepared = try decode(MemberPreparedDecision.self, reply, keys: ["profile", "operationID", "requestDigest", "reviewedRevision", "expiresAt", "canonical", "review", "operationState", "publicKey"])
+        let frozen = try FrozenMemberWithdrawal(prepared, originalHandle: originalHandle, original: original, originalReview: originalReview, environment: environment, session: info, now: now())
+        guard case .string(let challenge) = prepared.publicKey["challenge"], case .array(let credentials) = prepared.publicKey["allowCredentials"],
+              case .object(let credential) = credentials[0], credential["id"] == .string(originalHandle.credentialID) else { throw MemberFailure.scopeMismatch }
+        let handle = MemberOperationHandle(id: prepared.operationID, environment: environment.name, origin: environment.origin, sessionID: info.id, household: info.household, presenter: original.presenter, offer: original.id, canonical: prepared.canonical, expiresAt: prepared.expiresAt, requestDigest: prepared.requestDigest, reviewedRevision: prepared.reviewedRevision, challenge: challenge, credentialID: originalHandle.credentialID, attempted: false, profile: memberWithdrawalProfile, digitalTermsDigest: try digitalTermsDigest(original), withdrawalDecisionID: originalHandle.id, withdrawalNextIncarnation: frozen.nextIncarnation)
+        do { try store.save(handle); return (try store.load(id: handle.id) ?? handle, prepared, frozen) } catch { throw MemberFailure.storage }
+    }
+    public func withdrawalReview(_ handle: MemberOperationHandle) async throws -> MemberPreparedDecision {
+        try operationScope(handle, profile: memberWithdrawalProfile)
+        let (reply, _) = try await read("/member/operations/" + handle.id)
+        let value = try decode(MemberPreparedDecision.self, reply, keys: ["profile", "operationID", "requestDigest", "reviewedRevision", "expiresAt", "canonical", "review", "operationState", "publicKey"])
+        try value.validate(environment: environment, canonical: handle.canonical, profile: memberWithdrawalProfile)
+        guard value.operationID == handle.id, value.expiresAt == handle.expiresAt, value.requestDigest == handle.requestDigest, value.reviewedRevision == handle.reviewedRevision,
+              value.publicKey["challenge"] == .string(handle.challenge), case .array(let credentials) = value.publicKey["allowCredentials"], case .object(let credential) = credentials[0], credential["id"] == .string(handle.credentialID) else { throw MemberFailure.scopeMismatch }
+        return value
+    }
+    private func withdrawalOutcome(_ reply: MemberHTTPReply, handle: MemberOperationHandle) throws -> MemberWithdrawalOutcome {
+        struct Envelope: Decodable { let operationID: String; let operationState: String; let withdrawal: MemberJSON }
+        let value = try decode(Envelope.self, reply, keys: ["operationID", "operationState", "withdrawal"])
+        guard value.operationID == handle.id else { throw MemberFailure.scopeMismatch }
+        if value.operationState != "committed" {
+            guard ["prepared", "dispatching", "uncertain", "cancelled", "refused"].contains(value.operationState), value.withdrawal == .null else { throw MemberFailure.malformed }
+            return .pending(value.operationState)
+        }
+        guard let originalID = handle.withdrawalDecisionID, let next = handle.withdrawalNextIncarnation, next > 0, let expected = handle.digitalTermsDigest,
+              case .object(let result) = value.withdrawal, Set(result.keys) == ["decisionOperationID", "nextIncarnation", "offer"], result["decisionOperationID"] == .string(originalID), result["nextIncarnation"] == .integer(next), let offer = result["offer"] else { throw MemberFailure.scopeMismatch }
+        let detail = try rawDigitalOffer(offer, handle: handle)
+        guard detail.binding == "digital", detail.state == "presented", detail.decidedAt == nil, try digitalTermsDigest(detail) == expected,
+              detail.candidates.allSatisfy({ $0.valence == "offered" && $0.decidedAt == nil && $0.keptAs == nil && $0.lineage == nil }) else { throw MemberFailure.scopeMismatch }
+        return .recorded(detail)
+    }
+    public func withdrawalOutcome(_ handle: MemberOperationHandle) async -> MemberWithdrawalOutcome {
+        do {
+            try Task.checkCancellation(); try operationScope(handle, profile: memberWithdrawalProfile)
+            let (reply, _) = try await read("/member/operations/" + handle.id + "/outcome")
+            try Task.checkCancellation(); return try withdrawalOutcome(reply, handle: handle)
+        } catch { return .unresolved }
+    }
+
+    public func submitWithdrawal(_ handle: MemberOperationHandle, assertion: MemberPasskeyResponse, store: any MemberOperationStore) async throws -> MemberWithdrawalOutcome {
+        try Task.checkCancellation(); try operationScope(handle, profile: memberWithdrawalProfile)
+        guard live(handle.expiresAt), !handle.attempted, handle.digitalTermsDigest != nil else { throw MemberFailure.expired }
+        guard same(assertion.id, handle.credentialID), case .string(let encoded) = assertion.response["clientDataJSON"] else { throw MemberFailure.invalidInput }
+        let b64 = encoded.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+        guard let bytes = Data(base64Encoded: b64 + String(repeating: "=", count: (4 - b64.count % 4) % 4)),
+              let data = try JSONSerialization.jsonObject(with: bytes) as? [String: Any], data["type"] as? String == "webauthn.get",
+              data["challenge"] as? String == handle.challenge, data["origin"] as? String == environment.origin.absoluteString,
+              data["topOrigin"] == nil, data["crossOrigin"] == nil || data["crossOrigin"] as? Bool == false,
+              case .string(let signature) = assertion.response["signature"], !signature.isEmpty else { throw MemberFailure.scopeMismatch }
+        struct Input: Encodable { let assertion: MemberPasskeyResponse }
+        let body = try JSONEncoder().encode(Input(assertion: assertion))
+        guard body.count <= 16_384 else { throw MemberFailure.invalidInput }
+        try store.claim(handle, confirmation: signature)
+        do {
+            let (reply, _) = try await read("/member/operations/" + handle.id + "/submit", body: body)
+            try Task.checkCancellation()
+            return try withdrawalOutcome(reply, handle: handle.markedAttempted(confirmation: signature))
         } catch { return .unresolved }
     }
 }

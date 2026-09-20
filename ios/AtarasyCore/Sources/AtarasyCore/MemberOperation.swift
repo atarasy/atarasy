@@ -24,15 +24,17 @@ public struct MemberOperationHandle: Codable, Equatable, Sendable {
     /// again returns the same operation id, and the new session id alone must not refuse it.
     public private(set) var profile: String? = nil
     public private(set) var digitalTermsDigest: String? = nil
+    public private(set) var withdrawalDecisionID: String? = nil
+    public private(set) var withdrawalNextIncarnation: Int64? = nil
     public var operationProfile: String { profile ?? "atarasy.member-statement-authorisation.1" }
     func sameOperation(_ other: Self) -> Bool {
-        operationProfile == other.operationProfile && digitalTermsDigest == other.digitalTermsDigest && id == other.id && environment == other.environment && origin == other.origin && household == other.household &&
+        withdrawalDecisionID == other.withdrawalDecisionID && withdrawalNextIncarnation == other.withdrawalNextIncarnation && operationProfile == other.operationProfile && digitalTermsDigest == other.digitalTermsDigest && id == other.id && environment == other.environment && origin == other.origin && household == other.household &&
         presenter == other.presenter && offer == other.offer && canonical == other.canonical && expiresAt == other.expiresAt &&
         requestDigest == other.requestDigest && reviewedRevision == other.reviewedRevision && challenge == other.challenge &&
         credentialID == other.credentialID && attempted == other.attempted && confirmationFingerprint == other.confirmationFingerprint
     }
     func markedAttempted(confirmation: String) -> Self {
-        Self(id: id, environment: environment, origin: origin, sessionID: sessionID, household: household, presenter: presenter, offer: offer, canonical: canonical, expiresAt: expiresAt, requestDigest: requestDigest, reviewedRevision: reviewedRevision, challenge: challenge, credentialID: credentialID, attempted: true, confirmationFingerprint: Canonical.digest(confirmation), profile: profile, digitalTermsDigest: digitalTermsDigest)
+        Self(id: id, environment: environment, origin: origin, sessionID: sessionID, household: household, presenter: presenter, offer: offer, canonical: canonical, expiresAt: expiresAt, requestDigest: requestDigest, reviewedRevision: reviewedRevision, challenge: challenge, credentialID: credentialID, attempted: true, confirmationFingerprint: Canonical.digest(confirmation), profile: profile, digitalTermsDigest: digitalTermsDigest, withdrawalDecisionID: withdrawalDecisionID, withdrawalNextIncarnation: withdrawalNextIncarnation)
     }
 }
 public struct MemberPreparedOperation: Decodable, Sendable {

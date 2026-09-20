@@ -48,8 +48,8 @@ public struct MemberPreparedDecision: Decodable, Sendable {
     public let operationState: String
     public let publicKey: [String: MemberJSON]
 
-    func validate(environment: MemberEnvironment, canonical expected: String) throws {
-        guard profile == memberDecisionProfile, UUID(uuidString: operationID)?.uuidString.lowercased() == operationID,
+    func validate(environment: MemberEnvironment, canonical expected: String, profile expectedProfile: String = memberDecisionProfile) throws {
+        guard profile == expectedProfile, UUID(uuidString: operationID)?.uuidString.lowercased() == operationID,
               [requestDigest, reviewedRevision].allSatisfy({ $0.range(of: "^[a-f0-9]{64}\\z", options: .regularExpression) != nil }),
               ReviewValidation.same(canonical, expected), ReviewValidation.safe(expiresAt),
               ["prepared", "dispatching", "uncertain", "committed", "cancelled", "refused"].contains(operationState),

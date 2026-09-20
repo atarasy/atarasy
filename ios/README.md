@@ -82,3 +82,5 @@ The core can now prepare scoped physical statement bytes and compare a subsequen
 The core now includes [member operation transport](MEMBER_OPERATION_TRANSPORT.md): restricted member routes, contextual challenge validation, durable operation correlation and signature-free outcome reads. Native review/signing and restart-discovery UI integration remain next.
 
 [Native statement flow](NATIVE_STATEMENT_FLOW.md) connects physical review, selected-credential platform requests and saved result checking in the configured member account. The dedicated UI-test fixture exercises the screen without network or an authenticator; real-device ceremony verification remains outstanding.
+
+[Native digital withdrawal](NATIVE_WITHDRAWAL_FLOW.md) connects saved decisions to cooling review, a separate passkey profile, durable submission and historical outcome recovery. Refresh the proposal before choosing again after withdrawal.
