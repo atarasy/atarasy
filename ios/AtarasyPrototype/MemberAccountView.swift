@@ -104,6 +104,7 @@ private struct MemberAccountForm: View {
                     Text("Expires \(Date(timeIntervalSince1970: Double(session.expiresAt) / 1000).formatted())")
                     Button("Sign out") { perform { await account.signOut() } }.accessibilityIdentifier("memberSignOut")
                 }
+                MemberMandateSection(account: account)
                 MemberProposalSections(model: account.proposals, statements: account.statements)
                 if let statements = account.statements { SavedMemberOperationSections(flow: statements) }
             } else {
