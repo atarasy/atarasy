@@ -205,9 +205,17 @@ private struct RefusingOperationStore: MemberOperationStore {
     func testCancellationRouteAndCheckpointCannotBeReset() async throws {
         let h = try handle(), (s, _) = try store(); try s.save(h); try s.claim(h, confirmation: "YQ")
         XCTAssertThrowsError(try s.save(h)); XCTAssertThrowsError(try s.claim(h, confirmation: "YQ"))
-        let (c, t) = try await client([data(["id":h.id,"state":"cancelled"])])
+        let (c, t) = try await client([data(["cancelled":true])])
         try await c.cancelOperation(h)
         let request = await t.requests.last!; XCTAssertEqual(request.url?.path, "/member/operations/" + h.id + "/cancel"); XCTAssertEqual(request.httpBody, Data("{}".utf8))
+    }
+    func testCancellationRejectsFalseMissingAndNonBooleanAcknowledgements() async throws {
+        let h = try handle()
+        for payload: [String: Any] in [["cancelled": false], [:], ["cancelled": 1], ["cancelled": "true"], ["id": h.id, "state": "cancelled"]] {
+            let (c, _) = try await client([data(payload)])
+            do { try await c.cancelOperation(h); XCTFail("Invalid cancellation acknowledgement accepted") }
+            catch { XCTAssertEqual(error as? MemberFailure, .malformed) }
+        }
     }
     func testPreparationSavesHandleAndStorageFailureDoesNotReturnApproval() async throws {
         let url = Bundle.module.url(forResource: "member-transaction-responses", withExtension: "json", subdirectory: "Fixtures")!
@@ -364,6 +372,16 @@ extension MemberOperationTransportTests {
             XCTAssertEqual(service.submissions, 0)
             XCTAssertFalse(flow.saved[0].attempted)
         }
+    }
+    func testConfirmedCancellationReopensPreparationAndKeepsSavedResult() async throws {
+        let (flow, service, passkeys, detail, statement, _) = try flowSetup()
+        await flow.prepare(detail: detail, statement: statement, disputed: [])
+        XCTAssertNotNil(flow.handle)
+        await flow.cancelPrepared()
+        XCTAssertNil(flow.handle); XCTAssertNil(flow.review); XCTAssertFalse(flow.canApprove)
+        XCTAssertEqual(flow.saved.count, 1); XCTAssertFalse(flow.saved[0].attempted)
+        XCTAssertTrue(flow.notice.contains("cancelled"))
+        XCTAssertEqual(service.submissions, 0); XCTAssertEqual(passkeys.calls, 0)
     }
     func testClosingDuringNativeCeremonyDropsLateAssertion() async throws {
         let (flow, service, passkeys, detail, statement, _) = try flowSetup()

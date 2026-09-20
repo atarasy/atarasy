@@ -339,10 +339,11 @@ public actor MemberClient {
     public func cancelOperation(_ handle: MemberOperationHandle) async throws {
         try operationScope(handle)
         let (reply, _) = try await read("/member/operations/" + handle.id + "/cancel", body: Data("{}".utf8))
-        // The journal response includes internal operation metadata. Expose no authority from it.
+        // The public cancellation route returns only an acknowledgement, not the journal row.
         guard reply.status == 200 else { throw MemberFailure.http(reply.status) }
-        guard let object = try JSONSerialization.jsonObject(with: reply.data) as? [String: Any],
-              object["id"] as? String == handle.id, object["state"] as? String == "cancelled" else { throw MemberFailure.malformed }
+        struct CancellationReply: Decodable { let cancelled: Bool }
+        guard let acknowledgement = try? JSONDecoder().decode(CancellationReply.self, from: reply.data),
+              acknowledgement.cancelled else { throw MemberFailure.malformed }
     }
 
 }
