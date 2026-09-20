@@ -56,6 +56,22 @@ private actor DetailTransport: MemberHTTPTransport {
         var wrong = value; var bad = rows; bad[0]["collected_as"] = "lost"; wrong["candidates"] = bad
         XCTAssertThrowsError(try decode(wrong))
     }
+    func testOfferDecisionTimeFromCurrentEngineIsOptionalAndValidated() throws {
+        var value = try detailValue("physical-collected")
+        func decode() throws -> MemberOfferDetail {
+            try MemberOfferDetail.decode(JSONSerialization.data(withJSONObject: value), expectedID: value["id"] as! String, household: "detail-house", presenter: "merchant-1")
+        }
+        XCTAssertNil(try decode().decidedAt)
+        value["decided_at"] = 1_789_877_544_128 as Int64
+        XCTAssertEqual(try decode().decidedAt, 1_789_877_544_128)
+        value["decided_at"] = NSNull(); XCTAssertNil(try decode().decidedAt)
+        for bad: Any in [-1, 1.5, true, "1789877544128", 9_007_199_254_740_992 as Int64] {
+            value["decided_at"] = bad; XCTAssertThrowsError(try decode())
+        }
+        value["decided_at"] = NSNull(); value["unexpected"] = "not supported"
+        XCTAssertThrowsError(try decode())
+    }
+
     func testLostOutcomeNamesTheKindOfLossOnlyWhenTheEngineSaidIt() {
         XCTAssertTrue(MemberOfferDetail.lostOutcome("missing", supplied: true).hasPrefix("Not in the box"))
         XCTAssertTrue(MemberOfferDetail.lostOutcome(nil, supplied: true).hasPrefix("Not collected by the deadline"))
