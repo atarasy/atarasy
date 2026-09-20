@@ -388,8 +388,16 @@ extension MemberClient {
         guard let clientData = try JSONSerialization.jsonObject(with: bytes) as? [String: Any],
               clientData["type"] as? String == "webauthn.get", clientData["origin"] as? String == environment.origin.absoluteString,
               clientData["challenge"] as? String == Canonical.challenge(try held.mandate.canonical(host: held.host)) else { throw MemberFailure.scopeMismatch }
-        struct Input: Encodable { let mandate: String; let assertion: MemberPasskeyResponse }
-        let body = try JSONEncoder().encode(Input(mandate: held.mandate.id, assertion: assertion))
+        // The mandate engine takes the flat assertion contract, not the login
+        // WebAuthn response envelope. Its three byte fields use standard base64.
+        func field(_ key: String) throws -> String {
+            guard case .string(let value) = assertion.response[key] else { throw MemberFailure.invalidInput }
+            return try PasskeyBytes.decode(value, maximum: 8192).base64EncodedString()
+        }
+        struct EngineAssertion: Encodable { let client_data_json: String; let authenticator_data: String; let signature: String }
+        struct Input: Encodable { let mandate: String; let assertion: EngineAssertion }
+        let wire = try EngineAssertion(client_data_json: field("clientDataJSON"), authenticator_data: field("authenticatorData"), signature: field("signature"))
+        let body = try JSONEncoder().encode(Input(mandate: held.mandate.id, assertion: wire))
         guard body.count <= 16_384 else { throw MemberFailure.invalidInput }
         try Task.checkCancellation()
         // Consume before suspension. An uncertain answer must be inspected, never replayed.

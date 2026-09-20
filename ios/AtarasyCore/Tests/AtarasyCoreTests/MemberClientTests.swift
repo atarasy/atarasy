@@ -223,6 +223,13 @@ private actor MemberScript: MemberHTTPTransport {
         let body = try JSONSerialization.jsonObject(with: requests[3].httpBody!) as! [String: Any]
         XCTAssertEqual(body["mandate"] as? String, m.id)
         XCTAssertEqual(Set(body.keys), ["mandate", "assertion"])
+        let wire = try XCTUnwrap(body["assertion"] as? [String: String])
+        XCTAssertEqual(Set(wire.keys), ["client_data_json", "authenticator_data", "signature"])
+        XCTAssertEqual(wire["authenticator_data"], "Yw==")
+        XCTAssertEqual(wire["signature"], "ZA==")
+        let clientBytes = try XCTUnwrap(Data(base64Encoded: try XCTUnwrap(wire["client_data_json"])))
+        let clientData = try XCTUnwrap(JSONSerialization.jsonObject(with: clientBytes) as? [String: String])
+        XCTAssertEqual(clientData["challenge"], try Canonical.challenge(m.canonical(host: "unit.example")))
     }
     func testMandateRejectsSubstitutedTermsChallengeAndHostBeforeSigning() async throws {
         let m = unsignedMandate()

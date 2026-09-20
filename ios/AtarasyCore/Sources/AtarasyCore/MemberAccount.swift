@@ -137,7 +137,8 @@ public extension MemberAccountService {
                 mandates.removeAll { $0.id == review.mandate.id }; mandateNotice = "Mandate signed."
             } catch {
                 mandateNotice = "The result is unconfirmed. Refresh unsigned mandates before taking further action; do not repeat this submission."
-                throw error
+                // This is not enrolment; do not suggest replacing a passkey.
+                notice = "Mandate submission could not be confirmed. Inspect the current mandate state before trying again."
             }
         }
     }
