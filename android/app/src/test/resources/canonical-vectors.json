@@ -1,0 +1,232 @@
+[
+  {
+    "id": "decision-basic",
+    "kind": "decision",
+    "offer": "digital-a",
+    "decisions": [
+      {
+        "candidate": "b",
+        "valence": "returned"
+      },
+      {
+        "candidate": "a",
+        "valence": "kept",
+        "kept_as": "self"
+      }
+    ],
+    "canonical": "digital-a\na:kept:self:\nb:returned::",
+    "sha256": "f8483b13da000b468de999e2adc52a794b36873f851d074da5cf6a76fb957a74",
+    "challenge": "-Eg7E9oAC0aN6ZnircUqeUs2hz-FHQdNpc9qdvuVenQ"
+  },
+  {
+    "id": "decision-unicode-order",
+    "kind": "decision",
+    "offer": "unicode",
+    "decisions": [
+      {
+        "candidate": "",
+        "valence": "returned"
+      },
+      {
+        "candidate": "😀",
+        "valence": "kept",
+        "kept_as": "self"
+      },
+      {
+        "candidate": "é",
+        "valence": "returned"
+      }
+    ],
+    "canonical": "unicode\né:returned::\n😀:kept:self:\n:returned::",
+    "sha256": "cc913d1fafe07175c3d1c8af2db9a4d49550740f1bc8a92b0bc350d396282d06",
+    "challenge": "zJE9H6_gcXXD0civLbmk1JVQdA8byKkrC8NQ05YoLQY"
+  },
+  {
+    "id": "decision-normalisation-distinct",
+    "kind": "decision",
+    "offer": "unicode-distinct",
+    "decisions": [
+      {
+        "candidate": "é",
+        "valence": "returned"
+      },
+      {
+        "candidate": "é",
+        "valence": "kept",
+        "kept_as": "self"
+      }
+    ],
+    "canonical": "unicode-distinct\né:kept:self:\né:returned::",
+    "sha256": "66283c446e53ba813f2989cf0e1443bca92705d8a368b179580b532cc94e2cae",
+    "challenge": "Zig8RG5TuoE_KYnPDhRDvKknBdijaLF5WAtTLMlOLK4"
+  },
+  {
+    "id": "decision-empty",
+    "kind": "decision",
+    "offer": "empty",
+    "decisions": [],
+    "canonical": "empty",
+    "sha256": "2e1cfa82b035c26cbbbdae632cea070514eb8b773f616aaeaf668e2f0be8f10d",
+    "challenge": "Lhz6grA1wmy7va5jLOoHBRTri3c_YWqur2aOLwvo8Q0"
+  },
+  {
+    "id": "statement-carriage",
+    "kind": "statement",
+    "offer": "physical-a",
+    "carriage": 200,
+    "lines": [
+      {
+        "candidate": "b",
+        "valence": "consumed",
+        "amount": 0,
+        "disputed": false
+      },
+      {
+        "candidate": "a",
+        "valence": "consumed",
+        "amount": 600,
+        "disputed": true
+      },
+      {
+        "candidate": "c",
+        "valence": "kept",
+        "amount": 800,
+        "disputed": false
+      }
+    ],
+    "canonical": "valence.statement.1\nphysical-a\n200\na:consumed:600:disputed\nb:consumed:0:\nc:kept:800:",
+    "sha256": "955380b19ec435e6d29fb56245d27722f9b8864eb04ddd0a116287a999a9041a",
+    "challenge": "lVOAsZ7ENebSn7ViRdJ3Ivm4hk6wTd0KEWKHqZmpBBo"
+  },
+  {
+    "id": "statement-zero",
+    "kind": "statement",
+    "offer": "physical-zero",
+    "carriage": 0,
+    "lines": [
+      {
+        "candidate": "gift",
+        "valence": "consumed",
+        "amount": 0,
+        "disputed": false
+      }
+    ],
+    "canonical": "valence.statement.1\nphysical-zero\n0\ngift:consumed:0:",
+    "sha256": "30fa5e7f70330ae5e68acebe2885e8a8414d6ef6e866f741a1a6602bc77ab772",
+    "challenge": "MPpef3AzCuXmis6-KIXoqEFNbvboZvdBoaZgK8d6t3I"
+  },
+  {
+    "id": "statement-missing",
+    "kind": "statement",
+    "offer": "physical-missing",
+    "carriage": 300,
+    "lines": [
+      {
+        "candidate": "d",
+        "valence": "lost",
+        "amount": 0,
+        "disputed": true
+      },
+      {
+        "candidate": "b",
+        "valence": "consumed",
+        "amount": 600,
+        "disputed": false
+      },
+      {
+        "candidate": "c",
+        "valence": "lost",
+        "amount": 0,
+        "disputed": false
+      },
+      {
+        "candidate": "a",
+        "valence": "kept",
+        "amount": 800,
+        "disputed": false
+      }
+    ],
+    "canonical": "valence.statement.1\nphysical-missing\n300\na:kept:800:\nb:consumed:600:\nc:lost:0:\nd:lost:0:disputed",
+    "sha256": "2d4b2c0704158d80ae862b6732bfc0df2582b331e8ab9a4fe9887c156745583d",
+    "challenge": "LUssBwQVjYCuhitnMr_A3yWCszHoq5pP6Yh8FWdFWD0"
+  },
+  {
+    "id": "statement-only-missing",
+    "kind": "statement",
+    "offer": "physical-only-missing",
+    "carriage": 0,
+    "lines": [
+      {
+        "candidate": "gone",
+        "valence": "lost",
+        "amount": 0,
+        "disputed": false
+      }
+    ],
+    "canonical": "valence.statement.1\nphysical-only-missing\n0\ngone:lost:0:",
+    "sha256": "f22e63df975e51d9ba8a4113dd17e1f221b6b12a126b480f0a3d1d8434daed39",
+    "challenge": "8i5j35deUdm6ikET3Rfh8iG2sSoSa0gPCj0dhDTa7Tk"
+  },
+  {
+    "id": "mandate-null",
+    "kind": "mandate",
+    "host": "hub.example",
+    "mandate": {
+      "id": "mandate-fixture-a",
+      "household": "household-fixture-a",
+      "ceiling_out_of_network": 2000,
+      "ceiling_daily": null,
+      "cooling_seconds": null,
+      "co_signers": [
+        "key,b",
+        "key a",
+        "key/é"
+      ],
+      "lapses_at": 1800000000000,
+      "version": 1
+    },
+    "canonical": "valence.mandate.2\nhub.example\nmandate-fixture-a\nhousehold-fixture-a\n2000\n\n\nkey%20a,key%2Cb,key%2F%C3%A9\n1800000000000\n1",
+    "sha256": "9703d6a764f55fdae7134e9607a7b14d03617288e9ba5b639c2fac5a6e32d258",
+    "challenge": "lwPWp2T1X9rnE06WB6exTQNhcojpultjnC-sWm4y0lg"
+  },
+  {
+    "id": "mandate-zero",
+    "kind": "mandate",
+    "host": "hub.example",
+    "mandate": {
+      "id": "mandate-fixture-a",
+      "household": "household-fixture-a",
+      "ceiling_out_of_network": 2000,
+      "ceiling_daily": 0,
+      "cooling_seconds": 0,
+      "co_signers": [
+        "key,b",
+        "key a",
+        "key/é"
+      ],
+      "lapses_at": 1800000000000,
+      "version": 1
+    },
+    "canonical": "valence.mandate.2\nhub.example\nmandate-fixture-a\nhousehold-fixture-a\n2000\n0\n0\nkey%20a,key%2Cb,key%2F%C3%A9\n1800000000000\n1",
+    "sha256": "62293dffa446206ba2b001b39ca524dddcd0d9b234645e8a127ac754202cf6f9",
+    "challenge": "Yik9_6RGIGuisAGznKUk3dzQ2bI0ZF6KEnrHVCAs9vk"
+  },
+  {
+    "id": "mandate-empty-signers",
+    "kind": "mandate",
+    "host": "hub.example",
+    "mandate": {
+      "id": "mandate-fixture-a",
+      "household": "household-fixture-a",
+      "ceiling_out_of_network": 2000,
+      "ceiling_daily": null,
+      "cooling_seconds": null,
+      "co_signers": [],
+      "lapses_at": 1800000000000,
+      "version": 1
+    },
+    "canonical": "valence.mandate.2\nhub.example\nmandate-fixture-a\nhousehold-fixture-a\n2000\n\n\n\n1800000000000\n1",
+    "sha256": "7e950ff09a3bb743368fc19c062008139ecd007afca8ca4b1bfbea5881dd0cb1",
+    "challenge": "fpUP8Jo7t0M2j8GcBiAIE57NAHr8qMpLG_vqWIHdDLE"
+  }
+]

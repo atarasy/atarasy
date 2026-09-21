@@ -17,6 +17,10 @@ The hub provides these surfaces and carries their calls to the engine.
 
 What is declined is sent as a decision, not left as silence. That is the event the specification exists for.
 
+## Native clients
+
+The [iOS client](ios/README.md) contains the complete native member flows currently implemented. The [Android client](android/README.md) now has its independent Kotlin canonical contract, Credential Manager passkey boundary, closed development origin and a Compose phone/tablet shell. Android release association and the member journeys remain gated on a reviewed release signing certificate and Digital Asset Links publication.
+
 ## Running it
 
 ```
@@ -40,6 +44,8 @@ bun install
 bun run typecheck
 bun test            # needs the engine: a checkout of atarasy/valence beside this one, or VALENCE_ENGINE_DIR
 ```
+
+Android checks run separately from `android/` with `./gradlew testDebugUnitTest assembleDebug lintDebug`.
 
 `test/hub.test.ts` starts the engine and the hub, seeds a presenter the way a deployment does, and then does what the screen does after the button: lists what is waiting, reads the approval, registers a P-256 key and confirms a set with an assertion built the way an authenticator builds one. The button itself is the one thing it cannot press.
 
