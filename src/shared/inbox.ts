@@ -18,6 +18,7 @@ export type InboxOffer = {
   state: "drafted" | "presented" | "decided" | "expired" | "withdrawn" | "settled";
   binding: "digital" | "physical";
   presented_at: number | null;
+  decided_at: number | null;
   expires_at: number;
   giver: string | null;
   /** `collected_as` is question 48's; absent from an engine before the field. */

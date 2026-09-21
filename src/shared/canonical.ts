@@ -37,6 +37,11 @@ export async function challengeFor(offerId: string, decisions: Decision[]): Prom
   return new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
 }
 
+/** §16.5. A withdrawal is bound to the exact decision generation it removes. */
+export function canonicalWithdrawal(offerId: string, decidedAt: number): string {
+  return ["valence.withdraw.1", offerId, String(decidedAt)].join("\n");
+}
+
 /**
  * Specification §6.5. The settlement statement a household signs before a
  * physical box with goods used is charged, in the shape that is signed:

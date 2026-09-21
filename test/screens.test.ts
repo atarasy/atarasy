@@ -152,6 +152,7 @@ const offerRow = (over: Record<string, unknown> = {}) => ({
   state: "presented",
   binding: "digital",
   presented_at: 1_000,
+  decided_at: null,
   expires_at: 9_999_999_999_999,
   giver: null,
   candidates: [{ id: "c-1", valence: "offered" }],
@@ -246,6 +247,29 @@ describe("the list, as a member sees it", () => {
     expect(buttons(pastCard)).not.toContain("Take it back");
     // Nothing settles on a timer, and this card promised one.
     expect(text(app)).not.toContain("settles when its window closes");
+  });
+
+  test("taking a digital decision back sends a signature over its recorded generation", async () => {
+    stubAuthenticator();
+    let withdrawn = false;
+    let sent: unknown;
+    const app = await render((url, method, body) => {
+      if (url === "/config") return { status: 200, body: CONFIG };
+      if (url.startsWith("/api/offers?")) {
+        return { status: 200, body: { offers: withdrawn ? [] : [offerRow({ state: "decided", decided_at: 1_800_000_000_001, candidates: [{ id: "c-1", valence: "kept" }] })] } };
+      }
+      if (url === "/api/offers/o-1/decisions" && method === "DELETE") {
+        withdrawn = true;
+        sent = body;
+        return { status: 200, body: {} };
+      }
+      return { status: 404, body: {} };
+    });
+    const button = [...app.querySelectorAll("button")].find((b) => text(b) === "Take it back") as HTMLButtonElement;
+    button.click();
+    for (let i = 0; i < 20 && sent === undefined; i++) await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(sent).toMatchObject({ signature: expect.any(String) });
+    expect(Object.keys(sent as Record<string, unknown>)).toEqual(["signature"]);
   });
 });
 

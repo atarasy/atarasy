@@ -12,7 +12,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createHash, generateKeyPairSync, sign, type KeyPairKeyObjectResult } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { canonicalDecisions, challengeFor, type Decision } from "../src/shared/canonical.js";
+import { canonicalDecisions, canonicalWithdrawal, challengeFor, type Decision } from "../src/shared/canonical.js";
 import { canonicalMandate } from "../src/shared/mandate.js";
 import { spkiToPem, toBase64 } from "../src/shared/encoding.js";
 
@@ -487,7 +487,11 @@ describe("the hub in front of an engine", () => {
     // §16.5. It waits, and while it waits the person can take it back.
     const early = await post(ENGINE, `/offers/${offer.id}/settle`, {});
     expect([early.status, early.body.error]).toEqual([422, "mandate_cooling"]);
-    const taken = await fetch(`${HUB}/api/offers/${offer.id}/decisions`, { method: "DELETE" });
+    const taken = await fetch(`${HUB}/api/offers/${offer.id}/decisions`, {
+      method: "DELETE",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ assertion: assertOver(canonicalWithdrawal(offer.id, (decided.body as { decided_at: number }).decided_at)) }),
+    });
     expect(taken.status).toBe(200);
     const back = (await (await fetch(`${ENGINE}/offers/${offer.id}`)).json()) as { state: string; candidates: { valence: string }[] };
     expect(back.state).toBe("presented");
