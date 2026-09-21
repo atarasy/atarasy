@@ -91,6 +91,15 @@ class MemberSessionClient(
 
     suspend fun lockLocalAccess() = mutex.withLock { generation++; active = null }
 
+    suspend fun activeInfo(): MemberSessionInfo = mutex.withLock {
+        val current = active ?: throw MemberFailure.Expired
+        if (!valid(current.info)) {
+            remove(current.info.household); generation++; active = null
+            throw MemberFailure.Expired
+        }
+        current.info
+    }
+
     suspend fun enrollmentOptions(invitation: String): MemberCeremony {
         val body = try { MemberAuthenticationWire.invitationBody(invitation) } catch (_: Exception) { throw MemberFailure.Malformed }
         val started = mutex.withLock { generation }
@@ -180,6 +189,10 @@ class MemberSessionClient(
     }
 
     suspend fun read(path: String, query: List<Pair<String, String>> = emptyList()): MemberHttpResponse {
+        return readWithSession(path, query).first
+    }
+
+    suspend fun readWithSession(path: String, query: List<Pair<String, String>> = emptyList()): Pair<MemberHttpResponse, MemberSessionInfo> {
         val snapshot = mutex.withLock { active to generation }
         val session = snapshot.first ?: throw MemberFailure.Expired
         if (!valid(session.info)) {
@@ -198,7 +211,7 @@ class MemberSessionClient(
             }
             throw MemberFailure.Http(401)
         }
-        return reply
+        return reply to session.info
     }
 
     private suspend fun send(request: MemberHttpRequest): MemberHttpResponse {
