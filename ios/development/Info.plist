@@ -6,6 +6,8 @@
 	<string>development</string>
 	<key>AtarasyMemberOrigin</key>
 	<string>https://api-dev.vox.delivery</string>
+	<key>AtarasyAPNSEnvironment</key>
+	<string>sandbox</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleExecutable</key>

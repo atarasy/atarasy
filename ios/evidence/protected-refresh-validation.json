@@ -1,0 +1,39 @@
+{
+  "date": "2026-09-21",
+  "baseline_commit": "d1b51b2",
+  "scope": "Closed minimal notification decoding, foreground bounded refresh, and visibly stale per-source cache for IOS-B22",
+  "source_hashes": {
+    "ios/AtarasyCore/Sources/AtarasyCore/MemberRefresh.swift": "481a918cd244783bf3f9ed20205a6a63c4bbcdcf05cb1e29a671c78eecdb7189",
+    "ios/AtarasyCore/Sources/AtarasyCore/MemberAccount.swift": "92fab06d1e764786469a9fe8caacce43ccee9fa0e2ff4e83ca71e7af8e875c90",
+    "ios/AtarasyCore/Sources/AtarasyCore/MemberProposals.swift": "cfce13d5a8a956b9b2f03b64efd0d3ed6f7da66c1bc6dc0276766838dd6a8129",
+    "ios/AtarasyCore/Tests/AtarasyCoreTests/MemberRefreshTests.swift": "27647ef6ef6d19da88b8e90f073e1c3418bebc07b94bdda313cdd94d205870d6",
+    "ios/AtarasyCore/Tests/AtarasyCoreTests/MemberProposalTests.swift": "892c813a7a8fe572c5aee7b44c2d3391c622cd87866c78ee5f07db91fa4dd34d",
+    "ios/AtarasyPrototype/App.swift": "c443b39f08af0a1223e4cd142377e1203f2575b2f22fb8d0b3999b8481f130d1",
+    "ios/AtarasyPrototype/MemberAccountView.swift": "ec3d526551be2eae942caa2bf73f32de342f3b5beca570877751509480b023f4",
+    "ios/AtarasyPrototype/MemberProposalView.swift": "0eaba4cbb032cad0dd1bdf111f9685faf5455b57e7d9c3e91142fe7cb1a739fb",
+    "ios/NATIVE_REFRESH.md": "3da8c72a8dae0fefd75cfb2b962b684732d3773cf4c2cc18a80e80a11f14bc3f"
+  },
+  "results": {
+    "swift_package": {
+      "passed": 183,
+      "skipped": 0,
+      "failed": 0
+    },
+    "ios_simulator_build": "passed"
+  },
+  "logs": {
+    "atarasy-swift.log": {
+      "path": "/Users/yoichirohara/Documents/valence-reviews/2026-09-21-protected-refresh/atarasy-swift.log",
+      "sha256": "7c2c235a357d1156b4d613b45c4c8ca180792856c22a2747992f1abdf6830c36"
+    },
+    "atarasy-build.log": {
+      "path": "/Users/yoichirohara/Documents/valence-reviews/2026-09-21-protected-refresh/atarasy-build.log",
+      "sha256": "d25af00472b0022b8ef64f408b884a406211e0f621970c28eee82c370db36b36"
+    }
+  },
+  "limits": [
+    "Simulator and core tests do not exercise an actual APNs provider or physical device.",
+    "No background offer fetch or plaintext decryption occurs in the notification callback.",
+    "Provider acceptance, OS throttling, and physical-device background delivery remain release gates."
+  ]
+}

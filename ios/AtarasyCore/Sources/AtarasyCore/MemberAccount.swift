@@ -18,6 +18,8 @@ public protocol MemberAccountService: MemberProposalService {
     func cancelMandateChange(_ id: String) async throws -> MemberMandateChange
     func logout() async throws -> MemberLogoutOutcome
     func lockLocalAccess() async
+    func registerRefresh(token: Data, apnsEnvironment: MemberAPNSEnvironment) async throws -> MemberRefreshSubscription
+    func disableRefresh() async throws -> MemberRefreshSubscription
 }
 extension MemberClient: MemberAccountService {}
 public extension MemberAccountService {
@@ -31,10 +33,12 @@ public extension MemberAccountService {
     func submitMandateChange(_ prepared: PreparedMemberMandateChange, assertion: MemberPasskeyResponse) async throws -> MemberMandateChange { throw MemberFailure.unavailable }
     func cancelMandateChange(_ id: String) async throws -> MemberMandateChange { throw MemberFailure.unavailable }
     func lockLocalAccess() async {}
+    func registerRefresh(token: Data, apnsEnvironment: MemberAPNSEnvironment) async throws -> MemberRefreshSubscription { throw MemberFailure.unavailable }
+    func disableRefresh() async throws -> MemberRefreshSubscription { throw MemberFailure.unavailable }
 }
 
 @MainActor public final class MemberAccount: ObservableObject {
-    @Published public private(set) var session: MemberSessionInfo? { didSet { statements?.setSession(session); decisions?.setSession(session); withdrawals?.setSession(session); permissions?.setSession(session); permissionRequests?.setSession(session); recovery?.setSession(session); hostMove?.setSession(session); mandates = []; mandateReview = nil; effectiveMandates = []; mandateChanges = []; preparedMandateChange = nil; dialsNotice = ""; if session == nil { privateNodeState = .locked; privateNodeNotice = ""; if let privateNode { Task { await privateNode.lock() } } } } }
+    @Published public private(set) var session: MemberSessionInfo? { didSet { statements?.setSession(session); decisions?.setSession(session); withdrawals?.setSession(session); permissions?.setSession(session); permissionRequests?.setSession(session); recovery?.setSession(session); hostMove?.setSession(session); mandates = []; mandateReview = nil; effectiveMandates = []; mandateChanges = []; preparedMandateChange = nil; dialsNotice = ""; if session == nil { privateNodeState = .locked; privateNodeNotice = ""; refreshSubscription = nil; refreshNotice = ""; if let privateNode { Task { await privateNode.lock() } } } } }
     @Published public private(set) var busy = false
     @Published public private(set) var notice = ""
     @Published public private(set) var mandates: [MemberMandate] = []
@@ -46,6 +50,8 @@ public extension MemberAccountService {
     @Published public private(set) var dialsNotice = ""
     @Published public private(set) var privateNodeState: MemberPrivateNodeState = .locked
     @Published public private(set) var privateNodeNotice = ""
+    @Published public private(set) var refreshSubscription: MemberRefreshSubscription?
+    @Published public private(set) var refreshNotice = ""
     public let statements: MemberStatementFlow?
     public let permissionRequests: MemberPermissionRequests?
     public let permissions: MemberPermissions?
@@ -139,12 +145,32 @@ public extension MemberAccountService {
     }
     public func signOut() async {
         await run {
+            if session != nil { _ = try? await service.disableRefresh() }
             session = nil; proposals.setSession(nil)
             let started = generation
             let result = try await service.logout()
             guard started == generation else { return }
             notice = switch result { case .revoked: "Signed out."; case .noLocalSession: "No active session on this device." }
         }
+    }
+    public func registerRefresh(token: Data, apnsEnvironment: MemberAPNSEnvironment) async {
+        guard let expected = session?.id else { return }
+        do {
+            let value = try await service.registerRefresh(token: token, apnsEnvironment: apnsEnvironment)
+            guard session?.id == expected else { return }
+            refreshSubscription = value; refreshNotice = "Private update notifications are enabled. Notifications contain no proposal details."
+        } catch {
+            guard session?.id == expected else { return }
+            refreshSubscription = nil; refreshNotice = "Update notifications are unavailable. Foreground refresh remains available."
+        }
+    }
+    @discardableResult public func receiveRefreshHint(_ data: Data) async -> Bool {
+        guard MemberRefreshHint.validate(data), session != nil else { return false }
+        proposals.markStale(); refreshNotice = "An update is available. Checking configured sources."
+        await proposals.refresh()
+        guard session != nil else { refreshNotice = "Access was denied while checking the update. Sign in again."; return true }
+        refreshNotice = proposals.incomplete ? "Some sources could not be checked. Cached rows remain stale." : "Configured sources were refreshed."
+        return true
     }
     public func refreshMandates() async {
         guard session != nil else { return }

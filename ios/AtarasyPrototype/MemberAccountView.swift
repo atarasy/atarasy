@@ -16,11 +16,16 @@ private func configuredMoveTargetEnvironment() -> MemberEnvironment? {
           let url = URL(string: origin) else { return nil }
     return try? MemberEnvironment(name: name, origin: url)
 }
+private func configuredAPNSEnvironment() -> MemberAPNSEnvironment? {
+    guard let value = Bundle.main.object(forInfoDictionaryKey: "AtarasyAPNSEnvironment") as? String else { return nil }
+    return MemberAPNSEnvironment(rawValue: value)
+}
 @MainActor final class MemberWindow: ObservableObject { weak var window: UIWindow? }
 // Owned by the view that presents the sheet. Dismissing the sheet used to discard the
 // account while the server session stayed live, so the member had to sign in again.
 @MainActor final class MemberAccountHolder: ObservableObject {
     @Published var account: MemberAccount?
+    @Published var apnsToken: Data?
     let window = MemberWindow()
 }
 private struct MemberWindowReader: UIViewRepresentable {
@@ -76,6 +81,10 @@ private struct ConfiguredMemberAccount: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @ObservedObject var holder: MemberAccountHolder
+    private var refreshRegistrationID: String {
+        guard let session = holder.account?.session, let token = holder.apnsToken, let environment = configuredAPNSEnvironment() else { return "unavailable" }
+        return session.id + ":" + token.base64EncodedString() + ":" + environment.rawValue
+    }
     var body: some View {
         Group {
             if let account = holder.account { MemberAccountForm(account: account) }
@@ -128,6 +137,14 @@ private struct ConfiguredMemberAccount: View {
                 holder.account = MemberAccount(service: service, passkeys: passkeys, statements: statements, decisions: decisions, withdrawals: withdrawals, permissions: MemberPermissions(service: service), permissionRequests: MemberPermissionRequests(service: service), privateNode: privateNode, recovery: recovery, hostMove: hostMove)
             } catch { dismiss() }
         }
+        .task(id: refreshRegistrationID) {
+            guard scenePhase == .active, let account = holder.account, account.session != nil, let token = holder.apnsToken, let environment = configuredAPNSEnvironment() else { return }
+            await account.registerRefresh(token: token, apnsEnvironment: environment)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .atarasyRefreshHint)) { notification in
+            guard scenePhase == .active, let data = notification.object as? Data, let account = holder.account else { return }
+            Task { await account.receiveRefreshHint(data) }
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { holder.account?.clearExpired(now: Int64(Date().timeIntervalSince1970 * 1000)) }
             else if phase == .background { holder.account?.lock(); holder.account = nil }
@@ -159,6 +176,7 @@ private struct MemberAccountForm: View {
                     if let hostMove = account.hostMove { NavigationLink("Exit / Move Host") { MemberHostMoveView(model: hostMove) }.disabled(account.privateNodeState != .ready) }
                 }
                 if account.protectedAccessReady {
+                    if !account.refreshNotice.isEmpty { Section("Updates") { Text(account.refreshNotice).accessibilityIdentifier("memberRefreshNotice") } }
                     if let requests = account.permissionRequests { Section { NavigationLink("Access requests") { MemberPermissionRequestsView(model: requests) } } }
                     if let permissions = account.permissions { Section { NavigationLink("Permissions") { MemberPermissionsView(model: permissions) } } }
                     MemberDialsSection(account: account)

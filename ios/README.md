@@ -94,3 +94,5 @@ The core now includes [member operation transport](MEMBER_OPERATION_TRANSPORT.md
 [Native permissions](NATIVE_PERMISSIONS.md) adds authenticated grant history and individual revocation under Account, with confirmation cancellation and GET-only recovery after an uncertain response. Action-specific new grants remain separate work.
 
 [Native Dials](NATIVE_DIALS.md) adds effective mandate reads, complete before/after editing, zero-co-signer updates, prior-version co-signature waiting, cancellation and effective-version read-back. Real-device and deployed two-member acceptance remain separate.
+
+[Protected refresh](NATIVE_REFRESH.md) adds a wake-only APNs payload, foreground-only authenticated refresh, per-source freshness and visibly stale cached rows. A deployed APNs provider and physical-device background acceptance remain separate.

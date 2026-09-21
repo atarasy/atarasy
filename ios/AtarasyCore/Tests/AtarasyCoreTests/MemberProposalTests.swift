@@ -111,10 +111,22 @@ private actor ProposalService: MemberProposalService {
         await exact.refresh(); XCTAssertEqual(exact.sources.count, 2); XCTAssertNotEqual(exact.sources[0].id, exact.sources[1].id)
     }
     func testCancelledRefreshIsUnavailableNotEmptySuccess() async {
-        let service = ProposalService(); await service.configure(held: true)
+        let service = ProposalService(); await service.configure(answers: ["a": [row("a", id: "cached")]])
         let model = MemberProposals(service: service, now: { 1000 }); model.setSession(info(["a"]))
-        let reading = Task { await model.refresh() }; await service.waitForCalls(1); reading.cancel()
+        await model.refresh(); await service.configure(held: true)
+        let reading = Task { await model.refresh() }; await service.waitForCalls(2); reading.cancel()
         await service.releaseFirst(.success([])); await reading.value
-        XCTAssertTrue(model.incomplete); XCTAssertEqual(model.sources[0].status, .unavailable)
+        XCTAssertTrue(model.incomplete); XCTAssertEqual(model.sources[0].status, .unavailable); XCTAssertEqual(model.sources[0].offers.map(\.id), ["cached"])
+    }
+    func testGenericHintMarksRowsStaleAndFailedRefreshKeepsOnlyLastVerifiedCache() async {
+        var clock: Int64 = 1000
+        let service = ProposalService(); await service.configure(answers: ["a": [row("a", id: "cached")]])
+        let model = MemberProposals(service: service, now: { clock }); model.setSession(info(["a"])); await model.refresh()
+        XCTAssertFalse(model.stale); XCTAssertEqual(model.sources[0].verifiedAt, 1000)
+        model.markStale(); XCTAssertTrue(model.stale)
+        clock = 2000; await service.configure(failures: ["a": .unavailable]); await model.refresh()
+        XCTAssertTrue(model.stale); XCTAssertTrue(model.incomplete); XCTAssertEqual(model.sources[0].offers.map(\.id), ["cached"]); XCTAssertEqual(model.sources[0].verifiedAt, 1000)
+        await service.configure(answers: ["a": []]); await model.refresh()
+        XCTAssertFalse(model.stale); XCTAssertEqual(model.sources[0].verifiedAt, 2000); XCTAssertTrue(model.sources[0].offers.isEmpty)
     }
 }
