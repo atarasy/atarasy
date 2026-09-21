@@ -3,6 +3,7 @@ package dev.atarasy.prototype
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.lifecycle.lifecycleScope
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -29,11 +30,29 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
+import java.io.File
 
 class MainActivity : ComponentActivity() {
+    private lateinit var memberSessions: MemberSessionClient
+    private lateinit var passkeys: PasskeyCeremonies
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val environment = MemberEnvironment.development
+        val sessionDirectory = File(noBackupFilesDir, "member-sessions")
+        memberSessions = MemberSessionClient(
+            environment,
+            UrlConnectionMemberHttpTransport(environment),
+            EncryptedFileSessionVault(sessionDirectory, AndroidInstallationCipher()),
+        )
+        passkeys = PasskeyCeremonies(CredentialManagerGateway(this))
         setContent { AtarasyApp() }
+    }
+
+    override fun onStop() {
+        lifecycleScope.launch { memberSessions.lockLocalAccess() }
+        super.onStop()
     }
 }
 
