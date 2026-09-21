@@ -20,6 +20,8 @@ The Dials screen reads effective mandates and pending co-signature changes with 
 
 After sign-in, the app opens the authenticated blind private node before enabling protected screens. Record plaintext is encrypted locally with AES-256-GCM and authenticated environment, origin, household, record ID and revision; the host receives only nonce and ciphertext. The random ledger key is itself wrapped under the installation Keystore key in no-backup storage. Empty storage creates and verifies an encrypted bootstrap record. Existing ciphertext without a local ledger key enters recovery-required and stays closed; installing a recovered key is allowed only after every hosted record authenticates and decrypts. Backgrounding clears both the decrypted node object and bearer authority.
 
+The recovery cryptographic foundation uses the same replicated two-of-three share layout as iOS: device `(A,B)`, recoverer `(B,C)`, host `(C,A)`, with `C = key xor A xor B`. Any distinct pair reconstructs only after its overlap matches. Recoverer packets use ephemeral P-256 ECDH, HKDF-SHA256 and AES-256-GCM bound to the exact owner, recoverer, purpose, reference and epoch. The authenticated recovery service and UI remain the next Android milestone.
+
 The development build deliberately has no Android passkey release identity. A usable ceremony requires all of the following to agree:
 
 - a reviewed release signing certificate;
