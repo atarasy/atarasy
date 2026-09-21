@@ -30,8 +30,9 @@ class MemberSavedOperationsTest {
         }
         val decisions = MemberDecisionOperations(environment, sessions, store, now = { 1_000 })
         val statements = MemberStatementOperations(environment, sessions, store, now = { 1_000 })
-        val listed = MemberSavedOperations(environment, sessions, store, decisions, statements).list(session)
-        assertEquals(listOf("22222222-2222-4222-8222-222222222222", "11111111-1111-4111-8111-111111111111"), listed.map { it.id })
+        val withdrawals = MemberWithdrawalOperations(environment, sessions, store, decisions, now = { 1_000 })
+        val listed = MemberSavedOperations(environment, sessions, store, decisions, statements, withdrawals).list(session)
+        assertEquals(listOf("22222222-2222-4222-8222-222222222222", "55555555-5555-4555-8555-555555555555", "11111111-1111-4111-8111-111111111111"), listed.map { it.id })
     }
 
     @Test fun `journal failure never becomes an empty successful list`() = runBlocking {
@@ -41,7 +42,8 @@ class MemberSavedOperationsTest {
             override fun save(handle: MemberOperationHandle) = Unit; override fun load(id: String): MemberOperationHandle? = null
             override fun handles(): List<MemberOperationHandle> = throw MemberFailure.Storage; override fun claim(handle: MemberOperationHandle, signature: String) = Unit
         }
-        val service = MemberSavedOperations(environment, sessions, store, MemberDecisionOperations(environment, sessions, store), MemberStatementOperations(environment, sessions, store))
+        val decisions = MemberDecisionOperations(environment, sessions, store)
+        val service = MemberSavedOperations(environment, sessions, store, decisions, MemberStatementOperations(environment, sessions, store), MemberWithdrawalOperations(environment, sessions, store, decisions))
         assertThrows(MemberFailure.Storage::class.java) { runBlocking { service.list(session) } }
         Unit
     }

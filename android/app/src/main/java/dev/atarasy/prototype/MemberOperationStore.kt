@@ -32,6 +32,8 @@ data class MemberOperationHandle(
     val attempted: Boolean = false,
     val confirmationFingerprint: String? = null,
     val digitalTermsDigest: String? = null,
+    val withdrawalDecisionId: String? = null,
+    val withdrawalNextIncarnation: Long? = null,
 ) {
     fun claimed(signature: String): MemberOperationHandle = copy(attempted = true, confirmationFingerprint = Canonical.digest(signature))
 }
@@ -45,10 +47,11 @@ interface MemberOperationStore {
 
 object MemberOperationCodec {
     private val json = Json { ignoreUnknownKeys = false; isLenient = false }
-    private val keys = setOf(
+    private val legacyKeys = setOf(
         "profile", "id", "operationProfile", "environment", "origin", "sessionId", "household", "presenter", "offer", "canonical",
         "expiresAt", "requestDigest", "reviewedRevision", "challenge", "credentialId", "attempted", "confirmationFingerprint", "digitalTermsDigest",
     )
+    private val keys = legacyKeys + setOf("withdrawalDecisionId", "withdrawalNextIncarnation")
 
     fun encode(value: MemberOperationHandle): ByteArray = buildJsonObject {
         put("profile", JsonPrimitive("atarasy.android-operation.1")); put("id", JsonPrimitive(value.id)); put("operationProfile", JsonPrimitive(value.operationProfile))
@@ -58,10 +61,12 @@ object MemberOperationCodec {
         put("challenge", JsonPrimitive(value.challenge)); put("credentialId", JsonPrimitive(value.credentialId)); put("attempted", JsonPrimitive(value.attempted))
         put("confirmationFingerprint", value.confirmationFingerprint?.let(::JsonPrimitive) ?: JsonNull)
         put("digitalTermsDigest", value.digitalTermsDigest?.let(::JsonPrimitive) ?: JsonNull)
+        put("withdrawalDecisionId", value.withdrawalDecisionId?.let(::JsonPrimitive) ?: JsonNull)
+        put("withdrawalNextIncarnation", value.withdrawalNextIncarnation?.let(::JsonPrimitive) ?: JsonNull)
     }.toString().toByteArray()
 
     fun decode(bytes: ByteArray): MemberOperationHandle = try {
-        val root = json.parseToJsonElement(bytes.toString(Charsets.UTF_8)).let { it as JsonObject }; require(root.keys == keys)
+        val root = json.parseToJsonElement(bytes.toString(Charsets.UTF_8)).let { it as JsonObject }; require(root.keys == keys || root.keys == legacyKeys)
         fun string(key: String) = root.getValue(key).jsonPrimitive.let { require(it.isString); it.content }
         fun optional(key: String) = root.getValue(key).takeUnless { it === JsonNull }?.jsonPrimitive?.let { require(it.isString); it.content }
         require(string("profile") == "atarasy.android-operation.1")
@@ -70,6 +75,8 @@ object MemberOperationCodec {
             string("presenter"), string("offer"), string("canonical"), root.getValue("expiresAt").jsonPrimitive.let { require(!it.isString); it.long },
             string("requestDigest"), string("reviewedRevision"), string("challenge"), string("credentialId"),
             root.getValue("attempted").jsonPrimitive.let { require(!it.isString); it.content.toBooleanStrict() }, optional("confirmationFingerprint"), optional("digitalTermsDigest"),
+            root["withdrawalDecisionId"]?.takeUnless { it === JsonNull }?.jsonPrimitive?.let { require(it.isString); it.content },
+            root["withdrawalNextIncarnation"]?.takeUnless { it === JsonNull }?.jsonPrimitive?.let { require(!it.isString); it.long },
         ).also(::validate)
     } catch (failure: Exception) { if (failure is MemberFailure) throw failure else throw MemberFailure.Storage }
 
@@ -83,6 +90,11 @@ object MemberOperationCodec {
         require(value.attempted == (value.confirmationFingerprint != null))
         require(value.confirmationFingerprint == null || Regex("^[a-f0-9]{64}$").matches(value.confirmationFingerprint))
         require(value.digitalTermsDigest == null || Regex("^[a-f0-9]{64}$").matches(value.digitalTermsDigest))
+        require(value.withdrawalDecisionId == null || UUID.fromString(value.withdrawalDecisionId).toString() == value.withdrawalDecisionId)
+        require(value.withdrawalNextIncarnation == null || value.withdrawalNextIncarnation in 1..Canonical.MAXIMUM_INTEGER)
+        require((value.withdrawalDecisionId == null) == (value.withdrawalNextIncarnation == null))
+        if (value.operationProfile == "atarasy.member-withdrawal-authorisation.1") require(value.withdrawalDecisionId != null && value.digitalTermsDigest != null)
+        else require(value.withdrawalDecisionId == null)
     }
 }
 

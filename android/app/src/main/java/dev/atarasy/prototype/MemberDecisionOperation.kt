@@ -52,14 +52,14 @@ object MemberDecisionWire {
         }) } })
     }.toString().toByteArray()
 
-    fun prepared(bytes: ByteArray, environment: MemberEnvironment, expectedCanonical: String): MemberPreparedDecision = malformed {
+    fun prepared(bytes: ByteArray, environment: MemberEnvironment, expectedCanonical: String, expectedProfile: String = MEMBER_DECISION_PROFILE): MemberPreparedDecision = malformed {
         val text = bytes.toString(StandardCharsets.UTF_8); val root = json.parseToJsonElement(text).jsonObject
         require(root.keys == preparedKeys)
         fun string(key: String) = root.getValue(key).jsonPrimitive.let { require(it.isString); it.content }
         val profile = string("profile"); val operationId = string("operationID"); val requestDigest = string("requestDigest"); val revision = string("reviewedRevision")
         val expiry = root.getValue("expiresAt").jsonPrimitive.let { require(!it.isString); it.long }; val canonical = string("canonical"); val state = string("operationState")
         val publicKey = root.getValue("publicKey").jsonObject; val review = root.getValue("review").jsonObject
-        require(profile == MEMBER_DECISION_PROFILE && UUID.fromString(operationId).toString() == operationId)
+        require(profile == expectedProfile && UUID.fromString(operationId).toString() == operationId)
         require(Regex("^[a-f0-9]{64}$").matches(requestDigest) && Regex("^[a-f0-9]{64}$").matches(revision))
         require(expiry in 0..Canonical.MAXIMUM_INTEGER && canonical == expectedCanonical && state in setOf("prepared", "dispatching", "uncertain", "committed", "cancelled", "refused"))
         require(publicKey.keys == setOf("challenge", "rpId", "userVerification", "allowCredentials"))
@@ -93,7 +93,7 @@ object MemberDecisionWire {
         FrozenMemberDecision(approval, mandate, decisions, goods, carriage, total)
     }
 
-    private fun mandate(element: JsonElement, expectedId: String, household: String): Mandate {
+    internal fun mandate(element: JsonElement, expectedId: String, household: String): Mandate {
         val row = element.jsonObject; require(row.keys == "ceiling_out_of_network ceiling_daily cooling_seconds co_signers lapses_at version id household".split(' ').toSet())
         fun string(key: String) = row.getValue(key).jsonPrimitive.let { require(it.isString); it.content }
         fun number(key: String) = row.getValue(key).jsonPrimitive.let { require(!it.isString); it.long }

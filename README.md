@@ -19,7 +19,7 @@ What is declined is sent as a decision, not left as silence. That is the event t
 
 ## Native clients
 
-The [iOS client](ios/README.md) contains the complete native member flows currently implemented. The [Android client](android/README.md) now has its independent Kotlin canonical contract, Credential Manager passkey boundary, closed development origin and a Compose phone/tablet shell. Android release association and the member journeys remain gated on a reviewed release signing certificate and Digital Asset Links publication.
+The [iOS client](ios/README.md) contains the complete native member flows currently implemented. The [Android client](android/README.md) has its independent Kotlin canonical contract, Credential Manager passkey boundary, authenticated member decisions, statements, cooling-window withdrawals, encrypted reconciliation journal and a Compose phone/tablet shell. Android deployment remains gated on a reviewed release signing certificate, Digital Asset Links publication and release-device acceptance.
 
 ## Running it
 

@@ -55,7 +55,9 @@ class MainActivity : ComponentActivity() {
     private lateinit var reviews: MemberReviews
     private lateinit var decisions: MemberDigitalDecisionFlow
     private lateinit var statements: MemberStatementFlow
+    private lateinit var withdrawals: MemberWithdrawalFlow
     private lateinit var savedOperations: MemberSavedOperations
+    private lateinit var operationActions: MemberOperationActions
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -79,7 +81,12 @@ class MainActivity : ComponentActivity() {
         decisions = MemberDigitalDecisionFlow(environment, memberSessions, decisionOperations, passkeys)
         val statementOperations = MemberStatementOperations(environment, memberSessions, operationStore, acceptedOrigins = AndroidSigningOrigins.current(this))
         statements = MemberStatementFlow(environment, memberSessions, statementOperations, passkeys)
-        savedOperations = MemberSavedOperations(environment, memberSessions, operationStore, decisionOperations, statementOperations)
+        val withdrawalOperations = MemberWithdrawalOperations(
+            environment, memberSessions, operationStore, decisionOperations, acceptedOrigins = AndroidSigningOrigins.current(this),
+        )
+        withdrawals = MemberWithdrawalFlow(memberSessions, withdrawalOperations, passkeys)
+        savedOperations = MemberSavedOperations(environment, memberSessions, operationStore, decisionOperations, statementOperations, withdrawalOperations)
+        operationActions = MemberOperationActions(environment, memberSessions)
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         setContent {
             AtarasyApp(
@@ -94,6 +101,9 @@ class MainActivity : ComponentActivity() {
                 onApproveStatement = statements::approve,
                 onLoadSaved = savedOperations::list,
                 onCheckSaved = savedOperations::check,
+                onPrepareWithdrawal = withdrawals::prepare,
+                onApproveWithdrawal = withdrawals::approve,
+                onCancelOperation = operationActions::cancel,
             )
         }
     }
@@ -117,6 +127,9 @@ fun AtarasyApp(
     onApproveStatement: suspend (MemberStatementReview) -> MemberStatementActionResult = { MemberStatementActionResult.Failed(MemberFailure.Unavailable) },
     onLoadSaved: suspend (MemberSessionInfo) -> List<MemberOperationHandle> = { throw MemberFailure.Unavailable },
     onCheckSaved: suspend (MemberOperationHandle) -> MemberSavedResult = { throw MemberFailure.Unavailable },
+    onPrepareWithdrawal: suspend (MemberSessionInfo, MemberOperationHandle) -> MemberWithdrawalReview = { _, _ -> throw MemberFailure.Unavailable },
+    onApproveWithdrawal: suspend (MemberWithdrawalReview) -> MemberWithdrawalActionResult = { MemberWithdrawalActionResult.Failed(MemberFailure.Unavailable) },
+    onCancelOperation: suspend (MemberOperationHandle) -> Unit = { throw MemberFailure.Unavailable },
 ) {
     var selectedSection by rememberSaveable { mutableStateOf("Offers") }
     var session by remember { mutableStateOf<MemberSessionInfo?>(null) }
@@ -194,7 +207,7 @@ fun AtarasyApp(
                             onAccount = { selectedSection = "Account" },
                         )
                     } else if (selectedSection == "Saved") {
-                        MemberSavedOperationsCard(session, onLoadSaved, onCheckSaved)
+                        MemberSavedOperationsCard(session, onLoadSaved, onCheckSaved, onPrepareWithdrawal, onApproveWithdrawal, onCancelOperation)
                     } else {
                         MemberAccountCard(
                             onSignIn = onSignIn,
@@ -213,11 +226,15 @@ private fun MemberSavedOperationsCard(
     session: MemberSessionInfo?,
     onLoad: suspend (MemberSessionInfo) -> List<MemberOperationHandle>,
     onCheck: suspend (MemberOperationHandle) -> MemberSavedResult,
+    onPrepareWithdrawal: suspend (MemberSessionInfo, MemberOperationHandle) -> MemberWithdrawalReview,
+    onApproveWithdrawal: suspend (MemberWithdrawalReview) -> MemberWithdrawalActionResult,
+    onCancel: suspend (MemberOperationHandle) -> Unit,
 ) {
     var handles by remember(session) { mutableStateOf<List<MemberOperationHandle>?>(null) }
     var failure by remember(session) { mutableStateOf(false) }
     var checking by remember(session) { mutableStateOf<String?>(null) }
     var notices by remember(session) { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var withdrawal by remember(session) { mutableStateOf<MemberWithdrawalReview?>(null) }
     val scope = rememberCoroutineScope()
     LaunchedEffect(session) {
         val current = session ?: return@LaunchedEffect
@@ -234,8 +251,39 @@ private fun MemberSavedOperationsCard(
         else -> Card(modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("Saved activity", style = MaterialTheme.typography.titleLarge)
+                withdrawal?.let { review ->
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("Withdraw recorded decision", fontWeight = FontWeight.SemiBold)
+                            Text("Original total: ${review.frozen.total}. Cooling deadline: ${review.frozen.coolingEndsAt}.")
+                            Text("Signing returns the proposal to a presented state. It does not reverse or confirm a payment.")
+                            Button(enabled = checking == null, onClick = {
+                                checking = review.handle.id; scope.launch {
+                                    val message = try {
+                                        when (val result = onApproveWithdrawal(review)) {
+                                            is MemberWithdrawalActionResult.Outcome -> describeWithdrawal(result.value)
+                                            MemberWithdrawalActionResult.Cancelled -> "Approval cancelled. Nothing was submitted."
+                                            MemberWithdrawalActionResult.NoCredential -> "No passkey is available for this operation."
+                                            is MemberWithdrawalActionResult.Failed -> "Approval could not be confirmed. Check the saved result before acting again."
+                                        }
+                                    } catch (failureValue: Exception) {
+                                        if (failureValue is CancellationException) throw failureValue
+                                        "Approval could not be confirmed. Check the saved result before acting again."
+                                    }
+                                    notices = notices + (review.handle.id to message); withdrawal = null
+                                    handles = try { onLoad(session) } catch (_: Exception) { handles }
+                                    checking = null
+                                }
+                            }) { Text(if (checking == review.handle.id) "Signing…" else "Sign withdrawal") }
+                        }
+                    }
+                }
                 handles!!.forEach { handle ->
-                    val label = if (handle.operationProfile == MEMBER_DECISION_PROFILE) "Digital decision" else "Box statement"
+                    val label = when (handle.operationProfile) {
+                        MEMBER_DECISION_PROFILE -> "Digital decision"
+                        MEMBER_STATEMENT_PROFILE -> "Box statement"
+                        else -> "Decision withdrawal"
+                    }
                     Card(modifier = Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text(label, fontWeight = FontWeight.SemiBold)
@@ -249,6 +297,34 @@ private fun MemberSavedOperationsCard(
                                     checking = null
                                 }
                             }) { Text(if (checking == handle.id) "Checking…" else "Check result") }
+                            if (handle.operationProfile == MEMBER_DECISION_PROFILE && handle.attempted) {
+                                Button(enabled = checking == null, onClick = {
+                                    checking = handle.id; scope.launch {
+                                        try {
+                                            withdrawal = onPrepareWithdrawal(session, handle)
+                                            notices = notices + (handle.id to "Review the recorded decision and cooling deadline before signing.")
+                                            handles = onLoad(session)
+                                        } catch (failureValue: Exception) {
+                                            if (failureValue is CancellationException) throw failureValue
+                                            notices = notices + (handle.id to "The withdrawal could not be prepared. Check the recorded decision and current proposal.")
+                                        }
+                                        checking = null
+                                    }
+                                }) { Text(if (checking == handle.id) "Preparing…" else "Prepare withdrawal") }
+                            }
+                            if (!handle.attempted) {
+                                TextButton(enabled = checking == null, onClick = {
+                                    checking = handle.id; scope.launch {
+                                        notices = notices + (handle.id to try {
+                                            onCancel(handle); "Prepared operation cancelled. No signed submission was sent."
+                                        } catch (failureValue: Exception) {
+                                            if (failureValue is CancellationException) throw failureValue
+                                            "Cancellation could not be confirmed. Check the saved result."
+                                        })
+                                        checking = null
+                                    }
+                                }) { Text("Cancel prepared operation") }
+                            }
                             notices[handle.id]?.let { Text(it) }
                         }
                     }
@@ -270,6 +346,13 @@ private fun describeSaved(result: MemberSavedResult): String = when (result) {
         is MemberStatementOutcome.Pending -> "No committed statement is reported. State: ${value.state}. Nothing was resubmitted."
         MemberStatementOutcome.Unresolved -> "The result could not be read. Check later and do not resubmit."
     }
+    is MemberSavedResult.Withdrawal -> describeWithdrawal(result.value)
+}
+
+private fun describeWithdrawal(value: MemberWithdrawalOutcome): String = when (value) {
+    is MemberWithdrawalOutcome.Recorded -> "The withdrawal was recorded. Refresh the proposal before choosing again. This does not confirm payment or current order status."
+    is MemberWithdrawalOutcome.Pending -> "No committed withdrawal is reported. State: ${value.state}. Nothing was resubmitted."
+    MemberWithdrawalOutcome.Unresolved -> "The result could not be read. Check later and do not resubmit."
 }
 
 private fun Exception.endsPrivateSession() = this is MemberFailure.Expired || this is MemberFailure.Superseded || (this is MemberFailure.Http && status == 401)

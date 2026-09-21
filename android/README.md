@@ -12,6 +12,8 @@ Digital decisions use a two-stage review and signing boundary. Complete local ke
 
 Physical statements use the same durable operation boundary. The client reconstructs the statement from consumed, kept, defaulted and collection-confirmed lost lines, applies only eligible disputes, preserves gift zero amounts, and rechecks the server's frozen statement, mandate, carriage, canonical bytes and challenge before signing. Settlement readback recomputes the signed statement from the receipt and attributes it to this device only when the recorded confirmation digest matches.
 
+The Saved screen opens the encrypted journal without exposing operation identifiers. It can reconcile decisions, statements and cooling-window withdrawals without resubmitting them, and it can cancel an unattempted prepared operation through the scoped acknowledgement route. A withdrawal first rereads the committed decision and its frozen review, then verifies the original immutable offer, choices, mandate, totals, decision revision, cooling deadline and next incarnation. The withdrawal operation is reread before Credential Manager opens and uses the same claim-before-dispatch rule; its historical result must restore the same immutable offer in a wholly presented state.
+
 The development build deliberately has no Android passkey release identity. A usable ceremony requires all of the following to agree:
 
 - a reviewed release signing certificate;

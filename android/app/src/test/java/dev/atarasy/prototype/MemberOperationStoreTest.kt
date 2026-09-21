@@ -31,6 +31,17 @@ class MemberOperationStoreTest {
         assertNull(store.load("22222222-2222-4222-8222-222222222222"))
     }
 
+    @Test fun `legacy journal rows remain readable and withdrawal lineage round trips`() {
+        val legacy = MemberOperationCodec.encode(handle).toString(Charsets.UTF_8)
+            .replace(",\"withdrawalDecisionId\":null,\"withdrawalNextIncarnation\":null", "")
+        assertEquals(handle, MemberOperationCodec.decode(legacy.toByteArray()))
+        val withdrawal = handle.copy(
+            id = "22222222-2222-4222-8222-222222222222", operationProfile = MEMBER_WITHDRAWAL_PROFILE,
+            withdrawalDecisionId = handle.id, withdrawalNextIncarnation = 1,
+        )
+        assertEquals(withdrawal, MemberOperationCodec.decode(MemberOperationCodec.encode(withdrawal)))
+    }
+
     @Test fun `claim atomically persists only a signature digest and cannot repeat`() {
         val signature = Base64.getEncoder().encodeToString("assertion-signature".toByteArray())
         val store = store(); store.save(handle)
