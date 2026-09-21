@@ -10,6 +10,12 @@ public protocol MemberAccountService: MemberProposalService {
     func unsignedMandates() async throws -> [MemberMandate]
     func prepareMandate(_ selected: MemberMandate) async throws -> MemberMandateReview
     func submitMandate(_ review: MemberMandateReview, assertion: MemberPasskeyResponse) async throws
+    func effectiveMandates() async throws -> [MemberMandate]
+    func mandateChanges() async throws -> [MemberMandateChange]
+    func prepareMandateChange(_ mandate: MemberMandate) async throws -> PreparedMemberMandateChange
+    func prepareMandateSignature(_ id: String) async throws -> PreparedMemberMandateChange
+    func submitMandateChange(_ prepared: PreparedMemberMandateChange, assertion: MemberPasskeyResponse) async throws -> MemberMandateChange
+    func cancelMandateChange(_ id: String) async throws -> MemberMandateChange
     func logout() async throws -> MemberLogoutOutcome
 }
 extension MemberClient: MemberAccountService {}
@@ -17,15 +23,25 @@ public extension MemberAccountService {
     func unsignedMandates() async throws -> [MemberMandate] { throw MemberFailure.unavailable }
     func prepareMandate(_ selected: MemberMandate) async throws -> MemberMandateReview { throw MemberFailure.unavailable }
     func submitMandate(_ review: MemberMandateReview, assertion: MemberPasskeyResponse) async throws { throw MemberFailure.unavailable }
+    func effectiveMandates() async throws -> [MemberMandate] { throw MemberFailure.unavailable }
+    func mandateChanges() async throws -> [MemberMandateChange] { throw MemberFailure.unavailable }
+    func prepareMandateChange(_ mandate: MemberMandate) async throws -> PreparedMemberMandateChange { throw MemberFailure.unavailable }
+    func prepareMandateSignature(_ id: String) async throws -> PreparedMemberMandateChange { throw MemberFailure.unavailable }
+    func submitMandateChange(_ prepared: PreparedMemberMandateChange, assertion: MemberPasskeyResponse) async throws -> MemberMandateChange { throw MemberFailure.unavailable }
+    func cancelMandateChange(_ id: String) async throws -> MemberMandateChange { throw MemberFailure.unavailable }
 }
 
 @MainActor public final class MemberAccount: ObservableObject {
-    @Published public private(set) var session: MemberSessionInfo? { didSet { statements?.setSession(session); decisions?.setSession(session); withdrawals?.setSession(session); permissions?.setSession(session); permissionRequests?.setSession(session); mandates = []; mandateReview = nil } }
+    @Published public private(set) var session: MemberSessionInfo? { didSet { statements?.setSession(session); decisions?.setSession(session); withdrawals?.setSession(session); permissions?.setSession(session); permissionRequests?.setSession(session); mandates = []; mandateReview = nil; effectiveMandates = []; mandateChanges = []; preparedMandateChange = nil; dialsNotice = "" } }
     @Published public private(set) var busy = false
     @Published public private(set) var notice = ""
     @Published public private(set) var mandates: [MemberMandate] = []
     @Published public private(set) var mandateReview: MemberMandateReview?
     @Published public private(set) var mandateNotice = ""
+    @Published public private(set) var effectiveMandates: [MemberMandate] = []
+    @Published public private(set) var mandateChanges: [MemberMandateChange] = []
+    @Published public private(set) var preparedMandateChange: PreparedMemberMandateChange?
+    @Published public private(set) var dialsNotice = ""
     public let statements: MemberStatementFlow?
     public let permissionRequests: MemberPermissionRequests?
     public let permissions: MemberPermissions?
@@ -144,6 +160,99 @@ public extension MemberAccountService {
                 // This is not enrolment; do not suggest replacing a passkey.
                 notice = "Mandate submission could not be confirmed. Inspect the current mandate state before trying again."
             }
+        }
+    }
+
+    public func refreshDials() async {
+        guard session != nil else { return }
+        await run {
+            do {
+                let started = generation
+                async let effective = service.effectiveMandates()
+                async let changes = service.mandateChanges()
+                let (current, pending) = try await (effective, changes)
+                guard started == generation, session != nil else { return }
+                effectiveMandates = current; mandateChanges = pending; preparedMandateChange = nil
+                dialsNotice = current.isEmpty ? "No effective mandate is available." : "Effective protections are current."
+            } catch { dialsNotice = dialsMessage(error); throw error }
+        }
+    }
+
+    public func reviewMandateChange(_ mandate: MemberMandate) async {
+        guard session != nil else { return }
+        await run {
+            do {
+                let started = generation; let prepared = try await service.prepareMandateChange(mandate)
+                guard started == generation, session != nil else { return }
+                preparedMandateChange = prepared; upsert(prepared.change)
+                dialsNotice = "Review the effective and proposed protections before signing."
+            } catch { dialsNotice = dialsMessage(error); throw error }
+        }
+    }
+
+    public func reviewPendingMandateChange(_ id: String) async {
+        guard session != nil else { return }
+        await run {
+            do {
+                let started = generation; let prepared = try await service.prepareMandateSignature(id)
+                guard started == generation, session != nil else { return }
+                preparedMandateChange = prepared; upsert(prepared.change)
+                dialsNotice = "Review this fixed proposal before adding your signature."
+            } catch { dialsNotice = dialsMessage(error); throw error }
+        }
+    }
+
+    public func signPreparedMandateChange() async {
+        guard let prepared = preparedMandateChange, session != nil else { return }
+        await run {
+            do {
+                let started = generation
+                let assertion = try await passkeys.authorise(prepared.ceremony, kind: .statement)
+                try Task.checkCancellation()
+                guard started == generation, session != nil else { return }
+                preparedMandateChange = nil
+                let result = try await service.submitMandateChange(prepared, assertion: assertion)
+                guard started == generation, session != nil else { return }
+                upsert(result)
+                if result.state == "effective" {
+                    effectiveMandates.removeAll { $0.id == result.mandate.id }
+                    effectiveMandates.append(result.mandate)
+                    effectiveMandates.sort { $0.id < $1.id }
+                    dialsNotice = "Mandate version \(result.mandate.version) is effective."
+                } else {
+                    let missing = result.requiredSigners.filter { !result.signedBy.contains($0) }
+                    dialsNotice = "Your signature was recorded. Waiting for \(missing.count) required signer\(missing.count == 1 ? "" : "s")."
+                }
+            } catch {
+                if error as? MemberFailure == .uncertainVerification { preparedMandateChange = nil; dialsNotice = "The submission result is unconfirmed. Refresh Dials to read the existing change; do not sign a new version yet." }
+                else { dialsNotice = dialsMessage(error) }
+            }
+        }
+    }
+
+    public func cancelMandateChange(_ id: String) async {
+        guard session != nil else { return }
+        await run {
+            do {
+                let result = try await service.cancelMandateChange(id)
+                upsert(result); if preparedMandateChange?.change.id == id { preparedMandateChange = nil }
+                dialsNotice = "The pending mandate change was cancelled. The effective version was not changed."
+            } catch { dialsNotice = dialsMessage(error); throw error }
+        }
+    }
+
+    private func upsert(_ change: MemberMandateChange) {
+        mandateChanges.removeAll { $0.id == change.id }
+        mandateChanges.append(change)
+        mandateChanges.sort { $0.createdAt > $1.createdAt }
+    }
+    private func dialsMessage(_ error: Error) -> String {
+        switch error {
+        case MemberFailure.http(409): return "The effective mandate changed or another proposal is pending. Refresh Dials before editing again."
+        case MemberFailure.http(422): return "These protections or signatures were refused. Review the limits, lapse, cooling period and required signers."
+        case MemberFailure.http(401), MemberFailure.expired: return "Your session expired. Sign in again before changing protections."
+        case is CancellationError, NativePasskeyFailure.cancelled: return "Signing cancelled. The effective mandate was not changed."
+        default: return "Dials could not be refreshed. The effective mandate has not been changed."
         }
     }
 

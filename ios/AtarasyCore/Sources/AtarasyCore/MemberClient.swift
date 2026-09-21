@@ -10,6 +10,7 @@ public actor MemberClient {
     private var generation: UInt64 = 0
     private var authenticating = false
     private var mandateReview: MemberMandateReview?
+    private var mandateChangeReview: PreparedMemberMandateChange?
     public init(environment: MemberEnvironment, transport: any MemberHTTPTransport, vault: any MemberSessionVault, now: @escaping @Sendable () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }) {
         self.environment = environment; self.transport = transport; self.vault = vault; self.now = now
     }
@@ -409,6 +410,108 @@ extension MemberClient {
             let recorded = try decode(MemberMandate.self, reply)
             guard recorded == held.mandate else { throw MemberFailure.scopeMismatch }
         } catch { throw MemberFailure.uncertainVerification }
+    }
+}
+
+extension MemberClient {
+    private struct MandateList: Decodable { let mandates: [MemberMandate] }
+    private struct MandateChangeList: Decodable { let changes: [MemberMandateChange] }
+    private struct PreparedMandateChangeWire: Decodable {
+        let id: String; let before: MemberMandate; let mandate: MemberMandate
+        let requiredSigners: [String]; let signedBy: [String]; let state: String
+        let createdAt: Int64; let updatedAt: Int64; let publicKey: [String: MemberJSON]
+        var change: MemberMandateChange { .init(id: id, before: before, mandate: mandate, requiredSigners: requiredSigners, signedBy: signedBy, state: state, createdAt: createdAt, updatedAt: updatedAt) }
+    }
+    private func checkedChange(_ change: MemberMandateChange, session: MemberSessionInfo) throws {
+        guard UUID(uuidString: change.id)?.uuidString.lowercased() == change.id,
+              change.before.id == change.mandate.id,
+              change.before.household == change.mandate.household,
+              change.mandate.version == change.before.version + 1,
+              ["pending", "effective", "cancelled", "stale"].contains(change.state),
+              change.createdAt >= 0, change.updatedAt >= change.createdAt,
+              Set(change.requiredSigners).count == change.requiredSigners.count,
+              Set(change.signedBy).count == change.signedBy.count,
+              change.signedBy.allSatisfy(change.requiredSigners.contains),
+              change.requiredSigners.contains(change.mandate.household),
+              change.mandate.household == session.household || change.requiredSigners.contains(session.household) else { throw MemberFailure.scopeMismatch }
+        try mandateIdentifier(change.mandate.id)
+        try Canonical.validateMandate(.init(id: change.before.id, household: change.before.household, ceilingOutOfNetwork: change.before.ceilingOutOfNetwork, ceilingDaily: change.before.ceilingDaily, coolingSeconds: change.before.coolingSeconds, coSigners: change.before.coSigners, lapsesAt: change.before.lapsesAt, version: change.before.version))
+        try Canonical.validateMandate(.init(id: change.mandate.id, household: change.mandate.household, ceilingOutOfNetwork: change.mandate.ceilingOutOfNetwork, ceilingDaily: change.mandate.ceilingDaily, coolingSeconds: change.mandate.coolingSeconds, coSigners: change.mandate.coSigners, lapsesAt: change.mandate.lapsesAt, version: change.mandate.version))
+    }
+    private func checkedEffectiveMandate(_ mandate: MemberMandate, household: String) throws {
+        try mandateIdentifier(mandate.id)
+        guard same(mandate.household, household), mandate.id.hasPrefix(household + "."),
+              Set(mandate.coSigners).count == mandate.coSigners.count,
+              mandate.coSigners.allSatisfy({ !$0.isEmpty && !$0.contains("\n") && !$0.contains("\r") }) else { throw MemberFailure.scopeMismatch }
+        _ = try mandate.canonical(host: environment.origin.host!)
+    }
+    private func preparedChange(_ reply: MemberHTTPReply, session: MemberSessionInfo) throws -> PreparedMemberMandateChange {
+        let wire = try decode(PreparedMandateChangeWire.self, reply, status: reply.status, keys: ["id", "before", "mandate", "requiredSigners", "signedBy", "state", "createdAt", "updatedAt", "publicKey"])
+        let change = wire.change; try checkedChange(change, session: session)
+        guard change.state == "pending", wire.publicKey["challenge"] == .string(try Canonical.challenge(change.mandate.canonical(host: environment.origin.host!))) else { throw MemberFailure.scopeMismatch }
+        let ceremony = MemberCeremony(id: change.id, expiresAt: min(session.expiresAt, now() + 300_000), publicKey: wire.publicKey)
+        let options = try NativePasskeyOptions(ceremony: ceremony, environment: environment, kind: .statement, now: now())
+        guard options.allowedCredentialIDs.count == 1 else { throw MemberFailure.scopeMismatch }
+        return .init(change: change, ceremony: ceremony, sessionID: session.id, credentialID: PasskeyBytes.encode(options.allowedCredentialIDs[0]))
+    }
+    public func effectiveMandates() async throws -> [MemberMandate] {
+        let (reply, info) = try await read("/member/mandates/effective")
+        let values = try decode(MandateList.self, reply, keys: ["mandates"]).mandates
+        guard values.count <= 100, Set(values.map(\.id)).count == values.count else { throw MemberFailure.malformed }
+        for value in values { try checkedEffectiveMandate(value, household: info.household) }
+        return values
+    }
+    public func mandateChanges() async throws -> [MemberMandateChange] {
+        let (reply, info) = try await read("/member/mandates/changes")
+        let values = try decode(MandateChangeList.self, reply, keys: ["changes"]).changes
+        guard values.count <= 100, Set(values.map(\.id)).count == values.count else { throw MemberFailure.malformed }
+        for value in values { try checkedChange(value, session: info) }
+        return values
+    }
+    public func prepareMandateChange(_ mandate: MemberMandate) async throws -> PreparedMemberMandateChange {
+        mandateChangeReview = nil
+        struct Input: Encodable { let mandate: MemberMandate }
+        let (reply, info) = try await read("/member/mandates/changes", body: JSONEncoder().encode(Input(mandate: mandate)))
+        guard reply.status == 201 else { throw MemberFailure.http(reply.status) }
+        let prepared = try preparedChange(reply, session: info)
+        guard prepared.change.mandate == mandate, prepared.change.before.household == info.household else { throw MemberFailure.scopeMismatch }
+        mandateChangeReview = prepared; return prepared
+    }
+    public func prepareMandateSignature(_ id: String) async throws -> PreparedMemberMandateChange {
+        mandateChangeReview = nil
+        guard UUID(uuidString: id)?.uuidString.lowercased() == id else { throw MemberFailure.invalidInput }
+        let (reply, info) = try await read("/member/mandates/changes/" + id + "/prepare")
+        let prepared = try preparedChange(reply, session: info)
+        guard prepared.change.id == id, prepared.change.requiredSigners.contains(info.household) else { throw MemberFailure.scopeMismatch }
+        mandateChangeReview = prepared; return prepared
+    }
+    public func submitMandateChange(_ prepared: PreparedMemberMandateChange, assertion: MemberPasskeyResponse) async throws -> MemberMandateChange {
+        guard let held = mandateChangeReview, held.change == prepared.change, held.ceremony.id == prepared.ceremony.id,
+              let active, same(active.info.id, held.sessionID), live(active.info.expiresAt), live(held.ceremony.expiresAt),
+              same(assertion.id, held.credentialID), case .string(let clientData) = assertion.response["clientDataJSON"] else { throw MemberFailure.scopeMismatch }
+        let bytes = try PasskeyBytes.decode(clientData, maximum: 8192)
+        guard let object = try JSONSerialization.jsonObject(with: bytes) as? [String: Any],
+              object["type"] as? String == "webauthn.get", object["origin"] as? String == environment.origin.absoluteString,
+              object["challenge"] as? String == Canonical.challenge(try held.change.mandate.canonical(host: environment.origin.host!)) else { throw MemberFailure.scopeMismatch }
+        func field(_ key: String) throws -> String {
+            guard case .string(let value) = assertion.response[key] else { throw MemberFailure.invalidInput }
+            return try PasskeyBytes.decode(value, maximum: 8192).base64EncodedString()
+        }
+        struct EngineAssertion: Encodable { let client_data_json: String; let authenticator_data: String; let signature: String }
+        struct Input: Encodable { let assertion: EngineAssertion }
+        let wire = try EngineAssertion(client_data_json: field("clientDataJSON"), authenticator_data: field("authenticatorData"), signature: field("signature"))
+        mandateChangeReview = nil
+        do {
+            let (reply, info) = try await read("/member/mandates/changes/" + held.change.id + "/submit", body: JSONEncoder().encode(Input(assertion: wire)))
+            let result = try decode(MemberMandateChange.self, reply, keys: ["id", "before", "mandate", "requiredSigners", "signedBy", "state", "createdAt", "updatedAt"])
+            try checkedChange(result, session: info); guard result.id == held.change.id else { throw MemberFailure.scopeMismatch }; return result
+        } catch { throw MemberFailure.uncertainVerification }
+    }
+    public func cancelMandateChange(_ id: String) async throws -> MemberMandateChange {
+        guard UUID(uuidString: id)?.uuidString.lowercased() == id else { throw MemberFailure.invalidInput }
+        let (reply, info) = try await read("/member/mandates/changes/" + id + "/cancel", body: Data("{}".utf8))
+        let result = try decode(MemberMandateChange.self, reply, keys: ["id", "before", "mandate", "requiredSigners", "signedBy", "state", "createdAt", "updatedAt"])
+        try checkedChange(result, session: info); guard result.id == id, result.state == "cancelled" else { throw MemberFailure.scopeMismatch }; return result
     }
 }
 

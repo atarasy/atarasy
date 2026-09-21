@@ -32,7 +32,7 @@ struct InboxView: View {
                     }
                 }
                 Section { Button("Member account") { memberAccount = true }.accessibilityIdentifier("memberAccount") }
-                Section("Prototype scope") { Text("No real signing, network requests or payment. Dials and account recovery are specified but not interactive in this build.").font(.footnote).foregroundStyle(.secondary) }
+                Section("Prototype scope") { Text("No payment is performed by the sample inbox. Authenticated Dials require a configured member service; account recovery is not interactive in this build.").font(.footnote).foregroundStyle(.secondary) }
             }.navigationTitle("Overtures")
         } detail: {
             if let offer=fixtures.offers.first(where:{$0.id == selected}) { OfferView(offer:offer).id(offer.id) }

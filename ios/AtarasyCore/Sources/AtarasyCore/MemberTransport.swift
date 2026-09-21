@@ -86,6 +86,7 @@ public enum MemberJSON: Codable, Equatable, Sendable {
 }
 public struct MemberCeremony: Decodable, Sendable {
     public let id: String; public let expiresAt: Int64; public let publicKey: [String: MemberJSON]
+    public init(id: String, expiresAt: Int64, publicKey: [String: MemberJSON]) { self.id = id; self.expiresAt = expiresAt; self.publicKey = publicKey }
 }
 public struct MemberPasskeyResponse: Encodable, Sendable {
     public let id: String; public let rawId: String
@@ -101,6 +102,7 @@ public struct MemberPasskeyResponse: Encodable, Sendable {
 }
 public struct MemberSessionInfo: Codable, Equatable, Sendable {
     public let id: String; public let household: String; public let presenters: [String]; public let expiresAt: Int64
+    public init(id: String, household: String, presenters: [String], expiresAt: Int64) { self.id = id; self.household = household; self.presenters = presenters; self.expiresAt = expiresAt }
 }
 public struct MemberOfferSummary: Decodable, Equatable, Sendable {
     public let id: String; public let household: String; public let presenter: String; public let binding: String; public let state: String

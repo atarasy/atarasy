@@ -34,7 +34,9 @@ struct MemberAccountSheet: View {
     var body: some View {
         NavigationStack {
             #if ATARASY_UI_TEST_FIXTURES
-            if ProcessInfo.processInfo.arguments.contains("--member-request-fixture") {
+            if ProcessInfo.processInfo.arguments.contains("--member-dials-fixture") {
+                MemberDialsFixtureView()
+            } else if ProcessInfo.processInfo.arguments.contains("--member-request-fixture") {
                 MemberRequestFixtureView()
             } else if ProcessInfo.processInfo.arguments.contains("--member-permission-fixture") {
                 MemberPermissionFixtureView()
@@ -131,6 +133,7 @@ private struct MemberAccountForm: View {
                 }
                 if let requests = account.permissionRequests { Section { NavigationLink("Access requests") { MemberPermissionRequestsView(model: requests) } } }
                 if let permissions = account.permissions { Section { NavigationLink("Permissions") { MemberPermissionsView(model: permissions) } } }
+                MemberDialsSection(account: account)
                 MemberMandateSection(account: account)
                 MemberProposalSections(model: account.proposals, statements: account.statements, decisions: account.decisions)
                 if let statements = account.statements { SavedMemberOperationSections(flow: statements) }

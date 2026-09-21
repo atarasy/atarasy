@@ -267,5 +267,30 @@ private actor MemberScript: MemberHTTPTransport {
         do { try await client.submitMandate(review, assertion: mandateAssertion(m)); XCTFail() } catch {}
         let requests = await script.requests; XCTAssertEqual(requests.count, 3)
     }
+    func testDialsReadsEffectiveVersionAndSubmitsFixedZeroCosignerChangeOnce() async throws {
+        let before = unsignedMandate(), after = MemberMandate(id: before.id, household: before.household, ceilingOutOfNetwork: 0, ceilingDaily: 0, coolingSeconds: 60, coSigners: [], lapsesAt: 3500, version: 2)
+        let change = MemberMandateChange(id: "11111111-1111-4111-8111-111111111111", before: before, mandate: after, requiredSigners: [mandateHousehold], signedBy: [], state: "pending", createdAt: 1000, updatedAt: 1000)
+        var prepared = try JSONSerialization.jsonObject(with: data(change)) as! [String: Any]
+        prepared["publicKey"] = ["challenge": try Canonical.challenge(after.canonical(host: "unit.example")), "rpId": "unit.example", "userVerification": "required", "allowCredentials": [["type": "public-key", "id": "YQ"]]]
+        let completed = MemberMandateChange(id: change.id, before: before, mandate: after, requiredSigners: change.requiredSigners, signedBy: change.requiredSigners, state: "effective", createdAt: 1000, updatedAt: 1001)
+        let (client, script) = try mandateClient([
+            .init(status: 200, data: data(["mandates": [before]])),
+            .init(status: 200, data: data(["changes": [MemberMandateChange]() ])),
+            .init(status: 201, data: try JSONSerialization.data(withJSONObject: prepared)),
+            .init(status: 200, data: data(completed))
+        ])
+        _ = try await client.restore(household: mandateHousehold)
+        let effective = try await client.effectiveMandates(), changes = try await client.mandateChanges()
+        XCTAssertEqual(effective, [before]); XCTAssertTrue(changes.isEmpty)
+        let review = try await client.prepareMandateChange(after)
+        XCTAssertEqual(review.change, change)
+        let result = try await client.submitMandateChange(review, assertion: mandateAssertion(after))
+        XCTAssertEqual(result, completed)
+        do { _ = try await client.submitMandateChange(review, assertion: mandateAssertion(after)); XCTFail("replayed") } catch {}
+        let requests = await script.requests
+        XCTAssertEqual(requests.map { $0.url!.path }, ["/auth/session", "/member/mandates/effective", "/member/mandates/changes", "/member/mandates/changes", "/member/mandates/changes/" + change.id + "/submit"])
+        let body = try JSONSerialization.jsonObject(with: requests[4].httpBody!) as! [String: Any]
+        XCTAssertEqual(Set(body.keys), ["assertion"])
+    }
 
 }

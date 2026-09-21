@@ -121,6 +121,34 @@ final class PrototypeUITests: XCTestCase {
         XCTAssertTrue(request.waitForExistence(timeout: 8)); request.tap(); tap("Cancel request", app)
         XCTAssertTrue(app.staticTexts["Cancelled"].waitForExistence(timeout: 5)); XCTAssertFalse(app.buttons["Allow this access"].exists)
     }
+    @MainActor func testDialsShowsPriorCosignersAndReadsBackZeroCosignerChange() {
+        let app = launch("--member-dials-fixture"); tap("memberAccount", app)
+        XCTAssertTrue(app.navigationBars["Dials"].waitForExistence(timeout: 8))
+        let pending = app.descendants(matching: .any).matching(identifier: "pendingMandateChange-11111111-1111-4111-8111-111111111111").firstMatch
+        for _ in 0..<8 { if pending.isHittable { break }; app.swipeUp() }
+        XCTAssertTrue(pending.isHittable); pending.tap()
+        let signerBasis = app.descendants(matching: .any).matching(identifier: "mandateSignerBasis").firstMatch
+        for _ in 0..<8 { if signerBasis.isHittable { break }; app.swipeUp() }
+        XCTAssertTrue(signerBasis.isHittable)
+        XCTAssertEqual(signerBasis.label, "Signatures required by effective version 3")
+        let family = app.descendants(matching: .any).matching(identifier: "mandateSigner-key:family-fixture").firstMatch
+        XCTAssertTrue(family.exists)
+        XCTAssertEqual(family.label, "Waiting · key:family-fixture")
+        let waiting = XCTAttachment(screenshot: app.screenshot()); waiting.name = "Mandate loosening waits for prior co-signer"; waiting.lifetime = .keepAlways; add(waiting)
+        app.navigationBars["Mandate review"].buttons.element(boundBy: 0).tap()
+        let zero = app.descendants(matching: .any).matching(identifier: "editMandate-key:member-fixture.zero").firstMatch
+        for _ in 0..<10 { if zero.isHittable { break }; app.swipeDown() }
+        XCTAssertTrue(zero.isHittable); zero.tap()
+        let ceiling = app.textFields["mandateOutsideCeiling"]; XCTAssertTrue(ceiling.waitForExistence(timeout: 5)); ceiling.tap(); ceiling.typeText("1")
+        tap("reviewMandateChange", app)
+        for _ in 0..<12 { if app.switches["acknowledgeMandateChange"].isHittable { break }; app.swipeUp() }
+        tap("acknowledgeMandateChange", app); tap("signMandateChange", app)
+        let notice = app.descendants(matching: .any).matching(identifier: "dialsNotice").firstMatch
+        for _ in 0..<10 { if notice.isHittable { break }; app.swipeUp() }
+        XCTAssertTrue(notice.isHittable)
+        XCTAssertTrue(notice.label.contains("version 2 is effective"))
+        let effective = XCTAttachment(screenshot: app.screenshot()); effective.name = "Zero co-signer mandate change is effective"; effective.lifetime = .keepAlways; add(effective)
+    }
     @MainActor func testPermissionCancelAndLostResponseReadback() {
         let app = launch("--member-permission-fixture"); tap("memberAccount", app)
         let revoke = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "revokePermission-")).firstMatch

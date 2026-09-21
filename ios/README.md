@@ -35,7 +35,7 @@ UI tests exercise household filtering, arrival ordering, partial-source display,
 
 ## What remains
 
-Dials/co-signer UI, private-node key storage, host migration, operator workbench and the production coordinator are not implemented here. Native account presentation and AuthenticationServices request handling are now implemented, with device acceptance still outstanding. The schemas are an executable native request/statement subset, not all IC-01–08. The proposed integration envelope has no deployed endpoint. The separate contract README and manifest retain those distinctions.
+Private-node key storage, host migration, operator workbench and the production coordinator are not implemented here. Native account presentation, AuthenticationServices request handling and Dials/co-signer UI are implemented, with deployed multi-account and device acceptance still outstanding. The schemas are an executable native subset, not all IC-01–08. The proposed integration envelope has no deployed endpoint. The separate contract README and manifest retain those distinctions.
 
 Measured results and screenshots are retained in [the validation record](evidence/validation.json).
 
@@ -86,3 +86,5 @@ The core now includes [member operation transport](MEMBER_OPERATION_TRANSPORT.md
 [Native digital withdrawal](NATIVE_WITHDRAWAL_FLOW.md) connects saved decisions to cooling review, a separate passkey profile, durable submission and historical outcome recovery. Refresh the proposal before choosing again after withdrawal.
 
 [Native permissions](NATIVE_PERMISSIONS.md) adds authenticated grant history and individual revocation under Account, with confirmation cancellation and GET-only recovery after an uncertain response. Action-specific new grants remain separate work.
+
+[Native Dials](NATIVE_DIALS.md) adds effective mandate reads, complete before/after editing, zero-co-signer updates, prior-version co-signature waiting, cancellation and effective-version read-back. Real-device and deployed two-member acceptance remain separate.
