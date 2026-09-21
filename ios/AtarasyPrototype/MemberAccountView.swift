@@ -76,10 +76,11 @@ private struct ConfiguredMemberAccount: View {
             else { ProgressView("Opening member account") }
         }
         .background(MemberWindowReader(reference: holder.window).frame(width: 0, height: 0))
+        .overlay { if scenePhase != .active { Color(uiColor: .systemBackground).ignoresSafeArea().accessibilityHidden(true) } }
         .navigationTitle("Member account")
         .onAppear { holder.account?.clearExpired(now: Int64(Date().timeIntervalSince1970 * 1000)) }
-        .task {
-            guard holder.account == nil else { return }
+        .task(id: scenePhase) {
+            guard scenePhase == .active, holder.account == nil else { return }
             do {
                 let base = try URLSessionMemberTransport(timeout: 30, maximumResponseBytes: 1_048_576)
                 let transport: any MemberHTTPTransport
@@ -97,8 +98,10 @@ private struct ConfiguredMemberAccount: View {
                 let service = MemberClient(environment: environment, transport: transport, vault: vault)
                 let reference = holder.window
                 let passkeys = NativePasskeyAuthoriser(environment: environment, anchor: { [weak reference] in reference?.window })
-                let directory = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true).appendingPathComponent("MemberOperations", isDirectory: true)
-                let store = try FileMemberOperationStore(directory: directory)
+                let support = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+                let installation = try MemberInstallationIdentity(file: support.appendingPathComponent("installation-id"))
+                let keys = try KeychainMemberOperationKeyVault(namespace: "dev.atarasy.native", installation: installation)
+                let store = try ProtectedFileMemberOperationStore(directory: support.appendingPathComponent("MemberOperations", isDirectory: true), environment: environment, vault: keys)
                 let statements = MemberStatementFlow(environment: environment, service: service, passkeys: passkeys, store: store, diagnostic: { event in
                     #if ATARASY_DEVICE_ACCEPTANCE
                     print("ATARASY_DEVICE_ACCEPTANCE: approval stopped " + event)
@@ -106,10 +109,14 @@ private struct ConfiguredMemberAccount: View {
                 })
                 let decisions = MemberDigitalFlow(environment: environment, service: service, passkeys: passkeys, store: store)
                 let withdrawals = MemberWithdrawalFlow(environment: environment, service: service, passkeys: passkeys, store: store)
-                holder.account = MemberAccount(service: service, passkeys: passkeys, statements: statements, decisions: decisions, withdrawals: withdrawals, permissions: MemberPermissions(service: service), permissionRequests: MemberPermissionRequests(service: service))
+                let privateNode = MemberPrivateNode(environment: environment, service: service, vault: keys)
+                holder.account = MemberAccount(service: service, passkeys: passkeys, statements: statements, decisions: decisions, withdrawals: withdrawals, permissions: MemberPermissions(service: service), permissionRequests: MemberPermissionRequests(service: service), privateNode: privateNode)
             } catch { dismiss() }
         }
-        .onChange(of: scenePhase) { _, phase in if phase == .active { holder.account?.clearExpired(now: Int64(Date().timeIntervalSince1970 * 1000)) } }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { holder.account?.clearExpired(now: Int64(Date().timeIntervalSince1970 * 1000)) }
+            else if phase == .background { holder.account?.lock(); holder.account = nil }
+        }
     }
 }
 private struct MemberAccountForm: View {
@@ -131,14 +138,19 @@ private struct MemberAccountForm: View {
                     Text("Expires \(Date(timeIntervalSince1970: Double(session.expiresAt) / 1000).formatted())")
                     Button("Sign out") { perform { await account.signOut() } }.accessibilityIdentifier("memberSignOut")
                 }
-                if let requests = account.permissionRequests { Section { NavigationLink("Access requests") { MemberPermissionRequestsView(model: requests) } } }
-                if let permissions = account.permissions { Section { NavigationLink("Permissions") { MemberPermissionsView(model: permissions) } } }
-                MemberDialsSection(account: account)
-                MemberMandateSection(account: account)
-                MemberProposalSections(model: account.proposals, statements: account.statements, decisions: account.decisions)
-                if let statements = account.statements { SavedMemberOperationSections(flow: statements) }
-                if let withdrawals = account.withdrawals { SavedMemberWithdrawalSections(flow: withdrawals) }
-                if let decisions = account.decisions { SavedMemberDecisionSections(flow: decisions, withdrawals: account.withdrawals) }
+                Section("Private node") {
+                    Text(account.privateNodeNotice.isEmpty ? "Private records have not been opened." : account.privateNodeNotice).accessibilityIdentifier("privateNodeStatus")
+                }
+                if account.protectedAccessReady {
+                    if let requests = account.permissionRequests { Section { NavigationLink("Access requests") { MemberPermissionRequestsView(model: requests) } } }
+                    if let permissions = account.permissions { Section { NavigationLink("Permissions") { MemberPermissionsView(model: permissions) } } }
+                    MemberDialsSection(account: account)
+                    MemberMandateSection(account: account)
+                    MemberProposalSections(model: account.proposals, statements: account.statements, decisions: account.decisions)
+                    if let statements = account.statements { SavedMemberOperationSections(flow: statements) }
+                    if let withdrawals = account.withdrawals { SavedMemberWithdrawalSections(flow: withdrawals) }
+                    if let decisions = account.decisions { SavedMemberDecisionSections(flow: decisions, withdrawals: account.withdrawals) }
+                }
             } else {
                 Section {
                     Button("Sign in with a passkey") { perform { await account.signIn() } }.accessibilityIdentifier("memberSignIn")

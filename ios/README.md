@@ -2,6 +2,8 @@
 
 This isolated development branch contains the first native iPhone/iPad interaction prototype and a small independently implemented Swift canonical codec. The default sample inbox does not connect to a host or contact a payment provider, and its records are synthetic. The separate member account flow is enabled only by trusted service configuration; no production privacy or deployed integration is claimed.
 
+[Native private storage](NATIVE_PRIVATE_STORAGE.md) documents the encrypted operation journal, blind-host record profile and lock/logout/reinstall/revocation behavior used by configured member accounts.
+
 ## Run
 
 Use the installed Xcode with an available iOS simulator and XcodeGen. From the repository root:

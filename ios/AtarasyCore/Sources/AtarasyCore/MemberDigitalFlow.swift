@@ -20,12 +20,12 @@ extension MemberClient: MemberDecisionService {}
     private let environment: MemberEnvironment
     private let service: any MemberDecisionService
     private let passkeys: any MemberPasskeyAuthorising
-    private let store: FileMemberOperationStore
+    private let store: any MemberOperationStore
     private let now: () -> Int64
     private var session: MemberSessionInfo?
     private var prepared: MemberPreparedDecision?
     private var generation: UInt64 = 0
-    public init(environment: MemberEnvironment, service: any MemberDecisionService, passkeys: any MemberPasskeyAuthorising, store: FileMemberOperationStore, now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }) {
+    public init(environment: MemberEnvironment, service: any MemberDecisionService, passkeys: any MemberPasskeyAuthorising, store: any MemberOperationStore, now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }) {
         self.environment = environment; self.service = service; self.passkeys = passkeys; self.store = store; self.now = now
     }
     public func setSession(_ session: MemberSessionInfo?) {

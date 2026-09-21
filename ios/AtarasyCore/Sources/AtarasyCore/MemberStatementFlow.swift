@@ -54,13 +54,13 @@ public struct FrozenMemberStatement: Sendable {
     private let environment: MemberEnvironment
     private let service: any MemberStatementService
     private let passkeys: any MemberPasskeyAuthorising
-    private let store: FileMemberOperationStore
+    private let store: any MemberOperationStore
     private let diagnostic: (String) -> Void
     private let now: () -> Int64
     private var session: MemberSessionInfo?
     private var prepared: MemberPreparedOperation?
     private var generation: UInt64 = 0
-    public init(environment: MemberEnvironment, service: any MemberStatementService, passkeys: any MemberPasskeyAuthorising, store: FileMemberOperationStore, diagnostic: @escaping (String) -> Void = { _ in }, now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }) {
+    public init(environment: MemberEnvironment, service: any MemberStatementService, passkeys: any MemberPasskeyAuthorising, store: any MemberOperationStore, diagnostic: @escaping (String) -> Void = { _ in }, now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }) {
         self.environment = environment; self.service = service; self.passkeys = passkeys; self.store = store; self.diagnostic = diagnostic; self.now = now
     }
     public func setSession(_ session: MemberSessionInfo?) {

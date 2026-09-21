@@ -17,6 +17,7 @@ public protocol MemberAccountService: MemberProposalService {
     func submitMandateChange(_ prepared: PreparedMemberMandateChange, assertion: MemberPasskeyResponse) async throws -> MemberMandateChange
     func cancelMandateChange(_ id: String) async throws -> MemberMandateChange
     func logout() async throws -> MemberLogoutOutcome
+    func lockLocalAccess() async
 }
 extension MemberClient: MemberAccountService {}
 public extension MemberAccountService {
@@ -29,10 +30,11 @@ public extension MemberAccountService {
     func prepareMandateSignature(_ id: String) async throws -> PreparedMemberMandateChange { throw MemberFailure.unavailable }
     func submitMandateChange(_ prepared: PreparedMemberMandateChange, assertion: MemberPasskeyResponse) async throws -> MemberMandateChange { throw MemberFailure.unavailable }
     func cancelMandateChange(_ id: String) async throws -> MemberMandateChange { throw MemberFailure.unavailable }
+    func lockLocalAccess() async {}
 }
 
 @MainActor public final class MemberAccount: ObservableObject {
-    @Published public private(set) var session: MemberSessionInfo? { didSet { statements?.setSession(session); decisions?.setSession(session); withdrawals?.setSession(session); permissions?.setSession(session); permissionRequests?.setSession(session); mandates = []; mandateReview = nil; effectiveMandates = []; mandateChanges = []; preparedMandateChange = nil; dialsNotice = "" } }
+    @Published public private(set) var session: MemberSessionInfo? { didSet { statements?.setSession(session); decisions?.setSession(session); withdrawals?.setSession(session); permissions?.setSession(session); permissionRequests?.setSession(session); mandates = []; mandateReview = nil; effectiveMandates = []; mandateChanges = []; preparedMandateChange = nil; dialsNotice = ""; if session == nil { privateNodeState = .locked; privateNodeNotice = ""; if let privateNode { Task { await privateNode.lock() } } } } }
     @Published public private(set) var busy = false
     @Published public private(set) var notice = ""
     @Published public private(set) var mandates: [MemberMandate] = []
@@ -42,17 +44,20 @@ public extension MemberAccountService {
     @Published public private(set) var mandateChanges: [MemberMandateChange] = []
     @Published public private(set) var preparedMandateChange: PreparedMemberMandateChange?
     @Published public private(set) var dialsNotice = ""
+    @Published public private(set) var privateNodeState: MemberPrivateNodeState = .locked
+    @Published public private(set) var privateNodeNotice = ""
     public let statements: MemberStatementFlow?
     public let permissionRequests: MemberPermissionRequests?
     public let permissions: MemberPermissions?
     public let withdrawals: MemberWithdrawalFlow?
     public let decisions: MemberDigitalFlow?
     public let proposals: MemberProposals
+    private let privateNode: MemberPrivateNode?
     private let service: any MemberAccountService
     private let passkeys: any MemberPasskeyAuthorising
     private var generation: UInt64 = 0
-    public init(service: any MemberAccountService, passkeys: any MemberPasskeyAuthorising, statements: MemberStatementFlow? = nil, decisions: MemberDigitalFlow? = nil, withdrawals: MemberWithdrawalFlow? = nil, permissions: MemberPermissions? = nil, permissionRequests: MemberPermissionRequests? = nil) {
-        self.service = service; self.passkeys = passkeys; self.statements = statements; self.decisions = decisions; self.withdrawals = withdrawals; self.permissions = permissions; self.permissionRequests = permissionRequests
+    public init(service: any MemberAccountService, passkeys: any MemberPasskeyAuthorising, statements: MemberStatementFlow? = nil, decisions: MemberDigitalFlow? = nil, withdrawals: MemberWithdrawalFlow? = nil, permissions: MemberPermissions? = nil, permissionRequests: MemberPermissionRequests? = nil, privateNode: MemberPrivateNode? = nil) {
+        self.service = service; self.passkeys = passkeys; self.statements = statements; self.decisions = decisions; self.withdrawals = withdrawals; self.permissions = permissions; self.permissionRequests = permissionRequests; self.privateNode = privateNode
         proposals = MemberProposals(service: service)
         proposals.onSessionUnavailable = { [weak self] in
             guard let self else { return }
@@ -61,7 +66,19 @@ public extension MemberAccountService {
         }
     }
     // Closing hides late results. A verification already sent can still complete on the service.
-    public func close() { generation &+= 1; session = nil; proposals.setSession(nil); notice = "" }
+    public func close() { generation &+= 1; session = nil; proposals.setSession(nil); privateNodeState = .locked; privateNodeNotice = ""; notice = "" }
+    /// Clears all decrypted account state immediately. Service work is fenced separately so a
+    /// response that arrives after device lock cannot repopulate this account object.
+    public func lock() { close(); Task { await service.lockLocalAccess() } }
+    public var protectedAccessReady: Bool { privateNode == nil || privateNodeState == .ready }
+    private func openPrivateNode(_ info: MemberSessionInfo) async {
+        guard let privateNode else { privateNodeState = .ready; return }
+        privateNodeState = .locked; privateNodeNotice = "Opening encrypted private records."
+        do {
+            let result = try await privateNode.open(session: info); privateNodeState = result
+            privateNodeNotice = result == .ready ? "Private records are encrypted on this device before host storage." : "This node has encrypted records but this installation has no decryption key. Recovery is required."
+        } catch { privateNodeState = .locked; privateNodeNotice = "Private records are unavailable. Protected actions remain closed." }
+    }
     public func clearExpired(now: Int64) {
         if let session, session.expiresAt <= now { self.session = nil; proposals.setSession(nil); notice = "Your session expired. Sign in again." }
     }
@@ -105,7 +122,7 @@ public extension MemberAccountService {
             try Task.checkCancellation(); guard started == generation else { return }
             let info = try await service.login(ceremony: ceremony, response: response)
             guard started == generation else { return }
-            session = info; proposals.setSession(info); notice = "Signed in."
+            session = info; proposals.setSession(info); await openPrivateNode(info); notice = "Signed in."
         }
     }
     public func restore(household: String) async {
@@ -114,7 +131,7 @@ public extension MemberAccountService {
             let started = generation
             let info = try await service.restore(household: household)
             guard started == generation else { return }
-            session = info; proposals.setSession(info); notice = info == nil ? "No saved session was found for this household." : "Saved session verified."
+            session = info; proposals.setSession(info); if let info { await openPrivateNode(info) }; notice = info == nil ? "No saved session was found for this household." : "Saved session verified."
         }
     }
     public func signOut() async {

@@ -14,13 +14,16 @@ public actor MemberClient {
     public init(environment: MemberEnvironment, transport: any MemberHTTPTransport, vault: any MemberSessionVault, now: @escaping @Sendable () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }) {
         self.environment = environment; self.transport = transport; self.vault = vault; self.now = now
     }
+    public func lockLocalAccess() async {
+        generation &+= 1; active = nil; mandateReview = nil; mandateChangeReview = nil
+    }
     private func same(_ a: String, _ b: String) -> Bool { Data(a.utf8) == Data(b.utf8) }
     private func live(_ expiry: Int64) -> Bool { expiry > now() && expiry <= 9_007_199_254_740_991 }
     private func valid(_ info: MemberSessionInfo) -> Bool {
         !info.id.isEmpty && !info.household.isEmpty && live(info.expiresAt) && info.presenters.allSatisfy { !$0.isEmpty }
     }
     private func tokenValid(_ token: String) -> Bool { token.range(of: "^amr1_[A-Za-z0-9_-]{43}\\z", options: .regularExpression) != nil }
-    private func send(_ path: String, query: [URLQueryItem] = [], body: Data? = nil, token: String? = nil) async throws -> MemberHTTPReply {
+    func send(_ path: String, query: [URLQueryItem] = [], body: Data? = nil, token: String? = nil) async throws -> MemberHTTPReply {
         var c = URLComponents(url: environment.origin, resolvingAgainstBaseURL: false)!
         c.path = path; c.queryItems = query.isEmpty ? nil : query
         // URLSearchParams on the service decodes a literal + as a space.
@@ -37,7 +40,7 @@ public actor MemberClient {
         guard reply.cacheControl?.lowercased().split(separator: ",").map({ $0.trimmingCharacters(in: .whitespaces) }).contains("no-store") == true else { throw MemberFailure.malformed }
         return reply
     }
-    private func decode<T: Decodable>(_ type: T.Type, _ reply: MemberHTTPReply, status: Int = 200, keys: Set<String>? = nil) throws -> T {
+    func decode<T: Decodable>(_ type: T.Type, _ reply: MemberHTTPReply, status: Int = 200, keys: Set<String>? = nil) throws -> T {
         guard reply.status == status else { throw MemberFailure.http(reply.status) }
         guard reply.contentType?.split(separator: ";").first?.trimmingCharacters(in: .whitespaces).lowercased() == "application/json" else { throw MemberFailure.malformed }
         if let keys {
@@ -129,7 +132,7 @@ public actor MemberClient {
             return .revoked
         } catch { throw MemberFailure.remoteLogoutUnconfirmed }
     }
-    private func read(_ path: String, query: [URLQueryItem] = [], body: Data? = nil) async throws -> (MemberHTTPReply, MemberSessionInfo) {
+    func read(_ path: String, query: [URLQueryItem] = [], body: Data? = nil) async throws -> (MemberHTTPReply, MemberSessionInfo) {
         guard let session = active else { throw MemberFailure.expired }
         guard live(session.info.expiresAt) else {
             generation &+= 1; active = nil; try vault.remove(environment: environment, household: session.info.household); throw MemberFailure.expired

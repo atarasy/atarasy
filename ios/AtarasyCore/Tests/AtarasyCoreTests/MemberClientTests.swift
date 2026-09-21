@@ -107,6 +107,14 @@ private actor MemberScript: MemberHTTPTransport {
         _ = try await client.logout(); await script.release()
         do { _ = try await read.value; XCTFail() } catch { XCTAssertEqual(error as? MemberFailure, .superseded) }
     }
+    func testDeviceLockFencesLateReadsWithoutRevokingTheSavedSession() async throws {
+        let v = try vault(), script = MemberScript([.init(status: 200, data: try data(info)), .init(status: 200, data: offer())], holdAt: 1)
+        let client = MemberClient(environment: env, transport: script, vault: v, now: { 1000 }); _ = try await client.restore(household: "own")
+        let read = Task { try await client.offer(id: "offer") }; await script.waitForHold(); await client.lockLocalAccess(); await script.release()
+        do { _ = try await read.value; XCTFail() } catch { XCTAssertEqual(error as? MemberFailure, .superseded) }
+        do { _ = try await client.offer(id: "offer"); XCTFail() } catch { XCTAssertEqual(error as? MemberFailure, .expired) }
+        XCTAssertNotNil(try v.load(environment: env, household: "own"))
+    }
     func testInFlightLoginCannotRestoreAfterLogoutAndSecondLoginIsRefused() async throws {
         let grant = Data("{\"id\":\"session\",\"token\":\"\(token)\",\"expiresAt\":5000}".utf8)
         let script = MemberScript([.init(status: 200, data: grant)], holdAt: 0); let v = TestMemberVault()
@@ -133,6 +141,29 @@ private actor MemberScript: MemberHTTPTransport {
         let calls = await script.requests.count; XCTAssertEqual(calls, 1)
         let readScript = MemberScript([.init(status: 200, data: try data(info)), .init(status: 200, data: Data("[]".utf8))]); let reader = MemberClient(environment: env, transport: readScript, vault: try vault(), now: { 1000 }); _ = try await reader.restore(household: "own")
         do { _ = try await reader.offers(presenter: "presenter"); XCTFail() } catch { XCTAssertEqual(error as? MemberFailure, .malformed) }
+    }
+    func testPrivateNodeClientValidatesOpaqueRecordsAndSendsNoPlaintext() async throws {
+        let id = "33333333-3333-4333-8333-333333333333", key = Data(repeating: 4, count: 32), clear = Data("member private record".utf8)
+        let crypto = try MemberPrivateNodeCrypto(key: key), envelope = try crypto.seal(clear, environment: env, household: info.household, id: id, revision: 1)
+        let record = MemberPrivateNodeRecord(id: id, revision: 1, updatedAt: 1001, envelope: envelope)
+        let index = MemberPrivateNodeIndex(profile: "atarasy.private-node-index.1", checkedAt: 1000, records: [])
+        let script = MemberScript([.init(status: 200, data: try data(info)), .init(status: 200, data: try data(index)), .init(status: 200, data: try data(record)), .init(status: 200, data: try data(record))])
+        let client = MemberClient(environment: env, transport: script, vault: try vault(), now: { 1000 }); _ = try await client.restore(household: "own")
+        let listed = try await client.privateNodeRecords(); XCTAssertEqual(listed.records, [])
+        let written = try await client.writePrivateNodeRecord(id: id, expectedRevision: 0, envelope: envelope); XCTAssertEqual(written, record)
+        let read = try await client.privateNodeRecord(id: id); XCTAssertEqual(read, record)
+        let requests = await script.requests, body = try XCTUnwrap(requests[2].httpBody), text = String(decoding: body, as: UTF8.self)
+        XCTAssertFalse(text.contains("member private record")); XCTAssertFalse(text.contains(info.household)); XCTAssertEqual(requests[2].url?.path, "/member/private-node/records/" + id)
+    }
+    func testPrivateNodeClientRejectsUnsortedDuplicateAndPlaintextShapedHostResponses() async throws {
+        let id = "44444444-4444-4444-8444-444444444444", envelope = MemberPrivateNodeEnvelope(nonce: Data(repeating: 1, count: 12).base64EncodedString(), ciphertext: Data(repeating: 2, count: 32).base64EncodedString())
+        let row: [String: Any] = ["id": id, "revision": 1, "updatedAt": 1000, "envelope": ["profile": envelope.profile, "nonce": envelope.nonce, "ciphertext": envelope.ciphertext]]
+        for records in [[row, row], [["id": id, "revision": 1, "updatedAt": 1000, "envelope": ["profile": envelope.profile, "nonce": envelope.nonce, "ciphertext": envelope.ciphertext, "plaintext": "secret"]]]] {
+            let response = try JSONSerialization.data(withJSONObject: ["profile": "atarasy.private-node-index.1", "checkedAt": 1000, "records": records])
+            let script = MemberScript([.init(status: 200, data: try data(info)), .init(status: 200, data: response)]), client = MemberClient(environment: env, transport: script, vault: try vault(), now: { 1000 })
+            _ = try await client.restore(household: "own")
+            do { _ = try await client.privateNodeRecords(); XCTFail() } catch { XCTAssertEqual(error as? MemberFailure, .malformed) }
+        }
     }
     func testOptionsValidateRPAndDoNotSendStoredCredentials() async throws {
         let payload = Data("{\"id\":\"\(flow.id)\",\"expiresAt\":2000,\"publicKey\":{\"challenge\":\"\(String(repeating: "A", count: 43))\",\"rpId\":\"foreign.example\",\"allowCredentials\":[],\"userVerification\":\"required\"}}".utf8)
