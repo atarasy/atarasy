@@ -34,7 +34,7 @@ public extension MemberAccountService {
 }
 
 @MainActor public final class MemberAccount: ObservableObject {
-    @Published public private(set) var session: MemberSessionInfo? { didSet { statements?.setSession(session); decisions?.setSession(session); withdrawals?.setSession(session); permissions?.setSession(session); permissionRequests?.setSession(session); recovery?.setSession(session); mandates = []; mandateReview = nil; effectiveMandates = []; mandateChanges = []; preparedMandateChange = nil; dialsNotice = ""; if session == nil { privateNodeState = .locked; privateNodeNotice = ""; if let privateNode { Task { await privateNode.lock() } } } } }
+    @Published public private(set) var session: MemberSessionInfo? { didSet { statements?.setSession(session); decisions?.setSession(session); withdrawals?.setSession(session); permissions?.setSession(session); permissionRequests?.setSession(session); recovery?.setSession(session); hostMove?.setSession(session); mandates = []; mandateReview = nil; effectiveMandates = []; mandateChanges = []; preparedMandateChange = nil; dialsNotice = ""; if session == nil { privateNodeState = .locked; privateNodeNotice = ""; if let privateNode { Task { await privateNode.lock() } } } } }
     @Published public private(set) var busy = false
     @Published public private(set) var notice = ""
     @Published public private(set) var mandates: [MemberMandate] = []
@@ -53,18 +53,20 @@ public extension MemberAccountService {
     public let decisions: MemberDigitalFlow?
     public let proposals: MemberProposals
     public let recovery: MemberRecoveryFlow?
+    public let hostMove: MemberHostMoveFlow?
     private let privateNode: MemberPrivateNode?
     private let service: any MemberAccountService
     private let passkeys: any MemberPasskeyAuthorising
     private var generation: UInt64 = 0
-    public init(service: any MemberAccountService, passkeys: any MemberPasskeyAuthorising, statements: MemberStatementFlow? = nil, decisions: MemberDigitalFlow? = nil, withdrawals: MemberWithdrawalFlow? = nil, permissions: MemberPermissions? = nil, permissionRequests: MemberPermissionRequests? = nil, privateNode: MemberPrivateNode? = nil, recovery: MemberRecoveryFlow? = nil) {
-        self.service = service; self.passkeys = passkeys; self.statements = statements; self.decisions = decisions; self.withdrawals = withdrawals; self.permissions = permissions; self.permissionRequests = permissionRequests; self.privateNode = privateNode; self.recovery = recovery
+    public init(service: any MemberAccountService, passkeys: any MemberPasskeyAuthorising, statements: MemberStatementFlow? = nil, decisions: MemberDigitalFlow? = nil, withdrawals: MemberWithdrawalFlow? = nil, permissions: MemberPermissions? = nil, permissionRequests: MemberPermissionRequests? = nil, privateNode: MemberPrivateNode? = nil, recovery: MemberRecoveryFlow? = nil, hostMove: MemberHostMoveFlow? = nil) {
+        self.service = service; self.passkeys = passkeys; self.statements = statements; self.decisions = decisions; self.withdrawals = withdrawals; self.permissions = permissions; self.permissionRequests = permissionRequests; self.privateNode = privateNode; self.recovery = recovery; self.hostMove = hostMove
         proposals = MemberProposals(service: service)
         proposals.onSessionUnavailable = { [weak self] in
             guard let self else { return }
             self.generation &+= 1; self.session = nil
             self.notice = "Your session is no longer available. Sign in again."
         }
+        hostMove?.onRetired = { [weak self] in self?.generation &+= 1; self?.session = nil; self?.notice = "Host move completed. Sign in at the target host." }
     }
     // Closing hides late results. A verification already sent can still complete on the service.
     public func close() { generation &+= 1; session = nil; proposals.setSession(nil); privateNodeState = .locked; privateNodeNotice = ""; notice = "" }

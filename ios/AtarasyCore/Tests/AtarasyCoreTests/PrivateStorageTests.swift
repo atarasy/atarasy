@@ -19,6 +19,7 @@ private actor MemoryPrivateNodeService: MemberPrivateNodeService {
         let value = MemberPrivateNodeRecord(id: id, revision: expectedRevision + 1, updatedAt: 1_800_000_000_001, envelope: envelope); records[id] = value; return value
     }
     func encodedRecord(_ id: String) throws -> String { String(decoding: try JSONEncoder().encode(records[id]), as: UTF8.self) }
+    func importRecords(_ values: [MemberPrivateNodeRecord]) { records = Dictionary(uniqueKeysWithValues: values.map { ($0.id, $0) }) }
 }
 private final class MemoryRecoveryMaterials: MemberRecoveryMaterialVault, @unchecked Sendable {
     private let lock = NSLock(); private var agreement: [String: MemberRecoveryKeyPair] = [:], requester: [String: MemberRecoveryKeyPair] = [:], shares: [String: MemberRecoveryShare] = [:]
@@ -114,6 +115,20 @@ final class PrivateStorageTests: XCTestCase {
         try await reinstalled.installRecoveredKey(recoveryKey, session: session)
         let recoveredState = await reinstalled.state, recoveredClear = try await reinstalled.read(id: id)
         XCTAssertEqual(recoveredState, .ready); XCTAssertEqual(recoveredClear, secret)
+    }
+    func testHostMoveReencryptsEveryRecordForTargetAADAndVerifiesBeforeSourceRetirement() async throws {
+        let sourceEnvironment = try MemberEnvironment(name: "source", origin: URL(string: "https://source.example")!), targetEnvironment = try MemberEnvironment(name: "target", origin: URL(string: "https://target.example")!), session = MemberSessionInfo(id: "move-session", household: "key:move-household", presenters: [], expiresAt: 1_900_000_000_000)
+        let sourceHost = MemoryPrivateNodeService(), sourceKeys = MemoryOperationKeys(), source = MemberPrivateNode(environment: sourceEnvironment, service: sourceHost, vault: sourceKeys)
+        let sourceState = try await source.open(session: session); XCTAssertEqual(sourceState, .ready)
+        let id = "12121212-1212-4212-8212-121212121212", clear = Data("private move record".utf8), original = try await source.write(id: id, expectedRevision: 0, clear: clear)
+        let move = try await source.prepareMove(to: targetEnvironment, session: session)
+        XCTAssertEqual(move.source.map(\.id), move.target.map(\.id)); XCTAssertEqual(move.source.map(\.revision), move.target.map(\.revision)); XCTAssertNotEqual(move.target.first(where: { $0.id == id })?.envelope, original.envelope)
+        XCTAssertThrowsError(try MemberPrivateNodeCrypto(key: move.key).open(original, environment: targetEnvironment, household: session.household))
+        let targetHost = MemoryPrivateNodeService(); await targetHost.importRecords(move.target)
+        let targetKeys = MemoryOperationKeys(), target = MemberPrivateNode(environment: targetEnvironment, service: targetHost, vault: targetKeys)
+        let targetState = try await target.open(session: session); XCTAssertEqual(targetState, .recoveryRequired); try await target.installRecoveredKey(move.key, session: session)
+        let targetClear = try await target.read(id: id), sourceClear = try await source.read(id: id); XCTAssertEqual(targetClear, clear); XCTAssertEqual(sourceClear, clear)
+        XCTAssertEqual(move.clearDigests[id], SHA256.hash(data: clear).map { String(format: "%02x", $0) }.joined())
     }
     func testActualValenceAESRecordDecryptsWithTheNativeProfile() throws {
         let url = try XCTUnwrap(Bundle.module.url(forResource: "member-private-node-runtime", withExtension: "json", subdirectory: "Fixtures")), data = try Data(contentsOf: url)

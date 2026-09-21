@@ -6,6 +6,8 @@ This isolated development branch contains the first native iPhone/iPad interacti
 
 [Native recovery](NATIVE_RECOVERY.md) documents the recovery-only key, two-of-three share placement, named-recoverer approval, independent-notice gate and replacement-device key installation.
 
+[Native host move](NATIVE_HOST_MOVE.md) documents configured target selection, device-side re-encryption, target surface verification, target-origin receipt attestation and source retirement.
+
 ## Run
 
 Use the installed Xcode with an available iOS simulator and XcodeGen. From the repository root:
@@ -39,7 +41,7 @@ UI tests exercise household filtering, arrival ordering, partial-source display,
 
 ## What remains
 
-Private-node key storage, host migration, operator workbench and the production coordinator are not implemented here. Native account presentation, AuthenticationServices request handling and Dials/co-signer UI are implemented, with deployed multi-account and device acceptance still outstanding. The schemas are an executable native subset, not all IC-01–08. The proposed integration envelope has no deployed endpoint. The separate contract README and manifest retain those distinctions.
+The local private-node, recovery and host-move boundaries are implemented. Operator routing, a stable deployed target directory, cross-origin passkey acceptance and the production coordinator remain open. Native account presentation, AuthenticationServices request handling and Dials/co-signer UI are implemented, with deployed multi-account and device acceptance still outstanding. The schemas are an executable native subset, not all IC-01–08. The separate contract README and manifest retain those distinctions.
 
 Measured results and screenshots are retained in [the validation record](evidence/validation.json).
 

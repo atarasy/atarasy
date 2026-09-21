@@ -19,7 +19,7 @@ public enum PasskeyBytes {
 
 // Only the pinned service's platform-passkey subset is accepted. No browser defaults become policy.
 public struct NativePasskeyOptions: Sendable {
-    public enum Kind: Sendable { case registration, assertion, statement, decision, withdrawal, recovery }
+    public enum Kind: Sendable { case registration, assertion, statement, decision, withdrawal, recovery, hostMove }
     public let kind: Kind
     public let relyingParty: String
     public let challenge: Data
@@ -45,7 +45,7 @@ public struct NativePasskeyOptions: Sendable {
         case .assertion:
             guard p["rpId"] == .string(host), p["userVerification"] == .string("required"), p["allowCredentials"] == .array([]) else { throw NativePasskeyFailure.invalidOptions }
             allowedCredentialIDs = []; userID = nil; userName = nil
-        case .statement, .decision, .withdrawal, .recovery:
+        case .statement, .decision, .withdrawal, .recovery, .hostMove:
             guard p["rpId"] == .string(host), p["userVerification"] == .string("required"),
                   case .array(let allowed) = p["allowCredentials"], allowed.count == 1,
                   case .object(let credential) = allowed[0], Set(credential.keys) == ["type", "id"],
@@ -62,7 +62,7 @@ public struct NativePasskeyOptions: Sendable {
             request.userVerificationPreference = .required
             request.attestationPreference = .none
             return request
-        case .assertion, .statement, .decision, .withdrawal, .recovery:
+        case .assertion, .statement, .decision, .withdrawal, .recovery, .hostMove:
             let request = provider.createCredentialAssertionRequest(challenge: challenge)
             request.userVerificationPreference = .required
             request.allowedCredentials = allowedCredentialIDs.map { ASAuthorizationPlatformPublicKeyCredentialDescriptor(credentialID: $0) }

@@ -21,6 +21,11 @@ public actor MemberClient {
         guard let active, active.info.id == id, live(active.info.expiresAt) else { throw MemberFailure.expired }
         return active.info
     }
+    func removeRetiredLocalSession(_ expected: MemberSessionInfo) throws {
+        guard let active, active.info == expected else { throw MemberFailure.superseded }
+        try vault.remove(environment: environment, household: expected.household)
+        generation &+= 1; self.active = nil; mandateReview = nil; mandateChangeReview = nil
+    }
     private func same(_ a: String, _ b: String) -> Bool { Data(a.utf8) == Data(b.utf8) }
     private func live(_ expiry: Int64) -> Bool { expiry > now() && expiry <= 9_007_199_254_740_991 }
     private func valid(_ info: MemberSessionInfo) -> Bool {

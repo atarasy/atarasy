@@ -10,6 +10,12 @@ private func configuredMemberEnvironment() -> MemberEnvironment? {
           let url = URL(string: origin) else { return nil }
     return try? MemberEnvironment(name: name, origin: url)
 }
+private func configuredMoveTargetEnvironment() -> MemberEnvironment? {
+    guard let name = Bundle.main.object(forInfoDictionaryKey: "AtarasyMoveTargetEnvironment") as? String,
+          let origin = Bundle.main.object(forInfoDictionaryKey: "AtarasyMoveTargetOrigin") as? String,
+          let url = URL(string: origin) else { return nil }
+    return try? MemberEnvironment(name: name, origin: url)
+}
 @MainActor final class MemberWindow: ObservableObject { weak var window: UIWindow? }
 // Owned by the view that presents the sheet. Dismissing the sheet used to discard the
 // account while the server session stayed live, so the member had to sign in again.
@@ -82,7 +88,7 @@ private struct ConfiguredMemberAccount: View {
         .task(id: scenePhase) {
             guard scenePhase == .active, holder.account == nil else { return }
             do {
-                let base = try URLSessionMemberTransport(timeout: 30, maximumResponseBytes: 1_048_576)
+                let base = try URLSessionMemberTransport(timeout: 30, maximumResponseBytes: 8_000_000)
                 let transport: any MemberHTTPTransport
                 #if ATARASY_DEVICE_ACCEPTANCE
                 if ProcessInfo.processInfo.arguments.contains("--acceptance-drop-statement-response") {
@@ -113,7 +119,13 @@ private struct ConfiguredMemberAccount: View {
                 let recoveryVault = try KeychainMemberRecoveryMaterialVault(namespace: "dev.atarasy.native", installation: installation)
                 let noticeChannel = Bundle.main.object(forInfoDictionaryKey: "AtarasyRecoveryNoticeChannel") as? String
                 let recovery = MemberRecoveryFlow(environment: environment, service: service, privateNode: privateNode, passkeys: passkeys, vault: recoveryVault, noticeChannel: noticeChannel)
-                holder.account = MemberAccount(service: service, passkeys: passkeys, statements: statements, decisions: decisions, withdrawals: withdrawals, permissions: MemberPermissions(service: service), permissionRequests: MemberPermissionRequests(service: service), privateNode: privateNode, recovery: recovery)
+                var hostMove: MemberHostMoveFlow?
+                if let targetEnvironment = configuredMoveTargetEnvironment(), targetEnvironment != environment {
+                    let targetTransport = try URLSessionMemberTransport(timeout: 30, maximumResponseBytes: 8_000_000), targetService = MemberClient(environment: targetEnvironment, transport: targetTransport, vault: vault)
+                    let targetPasskeys = NativePasskeyAuthoriser(environment: targetEnvironment, anchor: { [weak reference] in reference?.window }), targetNode = MemberPrivateNode(environment: targetEnvironment, service: targetService, vault: keys)
+                    hostMove = MemberHostMoveFlow(sourceEnvironment: environment, targetEnvironment: targetEnvironment, source: service, target: targetService, sourceNode: privateNode, targetNode: targetNode, sourcePasskeys: passkeys, targetPasskeys: targetPasskeys)
+                }
+                holder.account = MemberAccount(service: service, passkeys: passkeys, statements: statements, decisions: decisions, withdrawals: withdrawals, permissions: MemberPermissions(service: service), permissionRequests: MemberPermissionRequests(service: service), privateNode: privateNode, recovery: recovery, hostMove: hostMove)
             } catch { dismiss() }
         }
         .onChange(of: scenePhase) { _, phase in
@@ -144,6 +156,7 @@ private struct MemberAccountForm: View {
                 Section("Private node") {
                     Text(account.privateNodeNotice.isEmpty ? "Private records have not been opened." : account.privateNodeNotice).accessibilityIdentifier("privateNodeStatus")
                     if let recovery = account.recovery { NavigationLink("Recovery") { MemberRecoveryView(model: recovery, recoveryRequired: account.privateNodeState == .recoveryRequired) } }
+                    if let hostMove = account.hostMove { NavigationLink("Exit / Move Host") { MemberHostMoveView(model: hostMove) }.disabled(account.privateNodeState != .ready) }
                 }
                 if account.protectedAccessReady {
                     if let requests = account.permissionRequests { Section { NavigationLink("Access requests") { MemberPermissionRequestsView(model: requests) } } }
@@ -180,6 +193,33 @@ private struct MemberAccountForm: View {
         .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() }.disabled(account.busy || action != nil) } }
         .onReceive(clock) { date in account.clearExpired(now: Int64(date.timeIntervalSince1970 * 1000)) }
         .onDisappear { invitation = ""; household = ""; action?.cancel() }
+    }
+}
+
+private struct MemberHostMoveView: View {
+    @ObservedObject var model: MemberHostMoveFlow
+    var body: some View {
+        Form {
+            Section("Target") {
+                Text("The configured target host must be trusted by this build. You will sign in there before anything is copied.")
+                Text(model.phase.rawValue).font(.headline).accessibilityIdentifier("hostMovePhase")
+            }
+            Section("Coverage") {
+                Text(model.coverage.isEmpty ? "Coverage has not been verified on the target host." : model.coverage)
+                if let receipt = model.targetReceipt { Text("Receipt: \(receipt.archiveDigest)").font(.footnote).textSelection(.enabled) }
+            }
+            Section("Rollback") {
+                Text(model.phase == .readyToRetire ? "The target is verified. Source access remains active until the final signed retirement." : "A failed or interrupted import does not retire source access.")
+            }
+            Section {
+                Button("Import and verify target") { Task { await model.prepare() } }.disabled([.signingIntoTarget, .exporting, .importing, .verifying, .retiring, .completed, .readyToRetire].contains(model.phase)).accessibilityIdentifier("hostMovePrepare")
+                if model.phase == .readyToRetire { Button("Retire source host access", role: .destructive) { Task { await model.retireSource() } }.accessibilityIdentifier("hostMoveRetire") }
+                if [.signingIntoTarget, .exporting, .importing, .verifying, .retiring].contains(model.phase) { ProgressView() }
+                if !model.notice.isEmpty { Text(model.notice).accessibilityIdentifier("hostMoveNotice") }
+            }
+        }
+        .navigationTitle("Move Host")
+        .interactiveDismissDisabled([.importing, .verifying, .retiring].contains(model.phase))
     }
 }
 

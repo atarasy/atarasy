@@ -32,7 +32,7 @@ private func validatePrivateEnvelopeObject(_ value: Any) -> Bool {
           (try? PrivateNodeCodec.data(nonce).count) == 12, let bytes = try? PrivateNodeCodec.data(ciphertext), bytes.count > 16, bytes.count <= 12_304 else { return false }
     return true
 }
-private func validatePrivateRecordObject(_ value: Any) -> Bool {
+func validatePrivateRecordObject(_ value: Any) -> Bool {
     guard let object = value as? [String: Any], Set(object.keys) == ["id", "revision", "updatedAt", "envelope"], let id = object["id"] as? String,
           UUID(uuidString: id)?.uuidString.lowercased() == id, let revision = object["revision"] as? NSNumber, let updated = object["updatedAt"] as? NSNumber,
           CFGetTypeID(revision) != CFBooleanGetTypeID(), CFGetTypeID(updated) != CFBooleanGetTypeID(), revision.int64Value > 0, updated.int64Value >= 0,
@@ -108,6 +108,12 @@ public struct MemberPrivateNodeCrypto: Sendable {
 }
 
 public enum MemberPrivateNodeState: Equatable, Sendable { case locked, ready, recoveryRequired }
+public struct MemberPrivateNodeMove: Sendable {
+    public let key: Data
+    public let source: [MemberPrivateNodeRecord]
+    public let target: [MemberPrivateNodeRecord]
+    public let clearDigests: [String: String]
+}
 
 /// Owns decrypted node access for one foreground account. A missing local key is created only for
 /// an empty node. If ciphertext already exists, a reinstall or new device must enter recovery.
@@ -160,6 +166,19 @@ public actor MemberPrivateNode {
         guard state == .ready, self.session?.id == session.id, self.session?.household == session.household,
               let key = try vault.key(scope: PrivateNodeCodec.scope(environment: environment, household: session.household), create: false) else { throw MemberFailure.storage }
         return key
+    }
+    public func prepareMove(to target: MemberEnvironment, session: MemberSessionInfo) async throws -> MemberPrivateNodeMove {
+        guard state == .ready, self.session?.id == session.id, self.session?.household == session.household, let crypto,
+              let key = try vault.key(scope: PrivateNodeCodec.scope(environment: environment, household: session.household), create: false) else { throw MemberFailure.storage }
+        let index = try await service.privateNodeRecords(); try verify(index.records, codec: crypto, household: session.household)
+        let targetCrypto = try MemberPrivateNodeCrypto(key: key); var moved: [MemberPrivateNodeRecord] = [], digests: [String: String] = [:]
+        for record in index.records {
+            let clear = try crypto.open(record, environment: environment, household: session.household)
+            let envelope = try targetCrypto.seal(clear, environment: target, household: session.household, id: record.id, revision: record.revision)
+            moved.append(.init(id: record.id, revision: record.revision, updatedAt: record.updatedAt, envelope: envelope))
+            digests[record.id] = SHA256.hash(data: clear).map { String(format: "%02x", $0) }.joined()
+        }
+        return .init(key: key, source: index.records, target: moved, clearDigests: digests)
     }
     public func installRecoveredKey(_ key: Data, session: MemberSessionInfo) async throws {
         guard state == .recoveryRequired, key.count == 32 else { throw MemberFailure.storage }
