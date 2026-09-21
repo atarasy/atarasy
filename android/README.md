@@ -16,6 +16,8 @@ The Saved screen opens the encrypted journal without exposing operation identifi
 
 The Access screen validates the complete permission history and pending permission-request terms before rendering them. Permission grants bind the requester, single supported field, purpose, review deadline and access deadline to the issuer's canonical digest. Grant, decline and revocation responses must preserve the reviewed grant or request exactly; an unconfirmed write forces a fresh read before another action.
 
+The Dials protocol client reads effective mandates and pending co-signature changes with complete before/after versions and independently validates version progression, signer sets, state and canonical challenge. A prepared signature is bound to the current session and credential and is consumed before submission; an uncertain result must be recovered by reading the existing change rather than replaying the assertion. The Compose Dials editor remains the next Android milestone.
+
 The development build deliberately has no Android passkey release identity. A usable ceremony requires all of the following to agree:
 
 - a reviewed release signing certificate;
