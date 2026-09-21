@@ -43,7 +43,9 @@ class CredentialManagerGateway(private val activity: Activity) : PasskeyGateway 
 }
 
 /** Server ceremony JSON crosses this boundary byte for byte and is never reconstructed by the app. */
-class PasskeyCeremonies(private val gateway: PasskeyGateway) {
+interface PasskeyAuthorizer { suspend fun authenticate(serverRequestJson: String): PasskeyResult }
+
+class PasskeyCeremonies(private val gateway: PasskeyGateway) : PasskeyAuthorizer {
     suspend fun register(serverRequestJson: String): PasskeyResult = try {
         val request = ServerCeremonyJson.from(serverRequestJson)
         val response = gateway.create(CreatePublicKeyCredentialRequest(request.exact))
@@ -56,7 +58,7 @@ class PasskeyCeremonies(private val gateway: PasskeyGateway) {
         PasskeyResult.Failed("Passkey registration unavailable")
     }
 
-    suspend fun authenticate(serverRequestJson: String): PasskeyResult = try {
+    override suspend fun authenticate(serverRequestJson: String): PasskeyResult = try {
         val request = ServerCeremonyJson.from(serverRequestJson)
         val response = gateway.get(GetCredentialRequest(listOf(GetPublicKeyCredentialOption(request.exact))))
         val publicKey = response.credential as? PublicKeyCredential

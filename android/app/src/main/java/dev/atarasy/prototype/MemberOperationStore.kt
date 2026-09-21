@@ -111,8 +111,11 @@ class EncryptedFileMemberOperationStore(
 
     override fun claim(handle: MemberOperationHandle, signature: String) = synchronized(lock) {
         if (signature.isEmpty() || signature.toByteArray().size > 16_384) throw MemberFailure.Malformed
-        val decoded = try { Base64.getDecoder().decode(signature) } catch (_: Exception) { throw MemberFailure.Malformed }
-        if (decoded.isEmpty() || Base64.getEncoder().encodeToString(decoded) != signature) throw MemberFailure.Malformed
+        val canonical = sequenceOf(
+            runCatching { Base64.getUrlDecoder().decode(signature).let { it.isNotEmpty() && Base64.getUrlEncoder().withoutPadding().encodeToString(it) == signature } }.getOrDefault(false),
+            runCatching { Base64.getDecoder().decode(signature).let { it.isNotEmpty() && Base64.getEncoder().encodeToString(it) == signature } }.getOrDefault(false),
+        ).any { it }
+        if (!canonical) throw MemberFailure.Malformed
         val current = read(handle.id)
         if (current != handle || current.attempted) throw MemberFailure.Busy
         write(current.claimed(signature))

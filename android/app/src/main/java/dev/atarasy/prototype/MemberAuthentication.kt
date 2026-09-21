@@ -105,7 +105,7 @@ object MemberAuthenticationWire {
     private fun canonicalUuid(value: String) = try { UUID.fromString(value).toString() == value } catch (_: Exception) { false }
 
     /** Returns the original object substring so Credential Manager receives server whitespace and ordering unchanged. */
-    private fun rawObjectMember(text: String, wanted: String): String? {
+    internal fun rawObjectMember(text: String, wanted: String): String? {
         var index = skipSpace(text, 0); if (index >= text.length || text[index++] != '{') return null
         while (true) {
             index = skipSpace(text, index); if (index >= text.length || text[index] == '}') return null

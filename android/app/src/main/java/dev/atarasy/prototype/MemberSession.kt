@@ -192,7 +192,7 @@ class MemberSessionClient(
         return readWithSession(path, query).first
     }
 
-    suspend fun readWithSession(path: String, query: List<Pair<String, String>> = emptyList()): Pair<MemberHttpResponse, MemberSessionInfo> {
+    suspend fun readWithSession(path: String, query: List<Pair<String, String>> = emptyList(), body: ByteArray? = null): Pair<MemberHttpResponse, MemberSessionInfo> {
         val snapshot = mutex.withLock { active to generation }
         val session = snapshot.first ?: throw MemberFailure.Expired
         if (!valid(session.info)) {
@@ -202,7 +202,7 @@ class MemberSessionClient(
             }
             throw MemberFailure.Expired
         }
-        val reply = send(MemberHttpRequest(path, query = query, token = session.token))
+        val reply = send(MemberHttpRequest(path, query = query, body = body, token = session.token))
         mutex.withLock { if (generation != snapshot.second || active != session) throw MemberFailure.Superseded }
         if (reply.status == 401) {
             mutex.withLock {
