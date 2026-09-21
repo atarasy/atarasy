@@ -6,6 +6,8 @@ The HTTP boundary uses only the configured HTTPS origin, refuses redirects, does
 
 After sign-in, the Offers screen reads each presenter owned by the authenticated session with at most four requests in flight. List and detail responses use exact schemas and reject unknown or missing fields, unsafe numbers, invalid protocol states, duplicate candidates, and any household, presenter, or offer scope mismatch. Leaving the app clears the rendered private state as well as the in-memory bearer authority.
 
+Opening an offer also reads its server review. Digital approvals are checked against the displayed candidates, alternatives, exclusions, mandate terms, and disclosures. Physical statements recompute line amounts and the canonical challenge from the selected goods; settled boxes validate their receipt totals and signing scope. A review failure never supplies a decision or payment authority.
+
 The development build deliberately has no Android passkey release identity. A usable ceremony requires all of the following to agree:
 
 - a reviewed release signing certificate;

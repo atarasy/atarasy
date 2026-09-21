@@ -1,0 +1,117 @@
+{
+  "prepared": {
+    "profile": "atarasy.member-statement-authorisation.1",
+    "operationID": "688d06f8-3a27-4899-983d-67314336a8ec",
+    "requestDigest": "9cec24d9e97c3e72853f5b71a64c6e18945d6694132f2c2aae394837ba4c0e15",
+    "reviewedRevision": "aee103725a7b173e7dac823ea0865e71e2e50f6ffd24f437c2b9ab5f03693cc1",
+    "expiresAt": 1800000005002,
+    "canonical": "valence.statement.1\n2e494a81-f67f-4c81-a9e1-c483785787c6\n550\n3dfb31ec-a91f-4559-ab56-250383803849:consumed:1200:",
+    "review": {
+      "statement": {
+        "offer": "2e494a81-f67f-4c81-a9e1-c483785787c6",
+        "household": "house",
+        "expires_at": 1800003600000,
+        "lines": [
+          {
+            "candidate": "3dfb31ec-a91f-4559-ab56-250383803849",
+            "product": "tea-0",
+            "merchant": "maker-a",
+            "maker": "made-by-tea",
+            "ships": "carrier-a",
+            "given_by": null,
+            "valence": "consumed",
+            "quantity": 1,
+            "unit_price": 1200,
+            "amount": 1200,
+            "disclosure": {
+              "merchant": "maker-a",
+              "product": null
+            }
+          }
+        ],
+        "disclosures": [
+          {
+            "merchant": "maker-a",
+            "product": null,
+            "version": "d-1",
+            "items": [
+              {
+                "label": "payment",
+                "value": "charged when the household confirms"
+              },
+              {
+                "label": "delivery",
+                "value": "already placed"
+              },
+              {
+                "label": "returns",
+                "value": "as the merchant published"
+              }
+            ],
+            "signature": "5rtUxso8L4Ltdkq6n+N71NWrgmj5yATljEmFIyfJY+W0AYR/NFsjMMadLxqeKKvsswT3ilVjhmtaWeXd9AZWAQ=="
+          }
+        ],
+        "carriage": 550
+      },
+      "disputed": [],
+      "mandate": {
+        "id": "mandate-1",
+        "household": "house",
+        "ceiling_out_of_network": 10000,
+        "ceiling_daily": null,
+        "cooling_seconds": null,
+        "co_signers": [],
+        "lapses_at": 1800010000000,
+        "version": 1
+      }
+    },
+    "operationState": "prepared",
+    "publicKey": {
+      "challenge": "_t01RlUXclHrfxqsAD_wH0bJjXRVhjgax1jKq0SnsFI",
+      "rpId": "unit.example",
+      "userVerification": "required",
+      "allowCredentials": [
+        {
+          "type": "public-key",
+          "id": "VjCqur5T3xA85X7n_9Fe79zTIGxs0Vo5TGg4830OqS8"
+        }
+      ]
+    },
+    "authorisation": "prepared"
+  },
+  "pending": {
+    "operationID": "688d06f8-3a27-4899-983d-67314336a8ec",
+    "operationState": "prepared",
+    "receipt": null
+  },
+  "committed": {
+    "operationID": "688d06f8-3a27-4899-983d-67314336a8ec",
+    "operationState": "committed",
+    "receipt": {
+      "offer": "2e494a81-f67f-4c81-a9e1-c483785787c6",
+      "settled_at": 1800000000002,
+      "kept_amount": 0,
+      "consumed_amount": 1200,
+      "disputed_amount": 0,
+      "lost_amount": 0,
+      "charged": 1200,
+      "lines": [
+        {
+          "candidate": "3dfb31ec-a91f-4559-ab56-250383803849",
+          "product": "tea-0",
+          "merchant": "maker-a",
+          "maker": "made-by-tea",
+          "ships": "carrier-a",
+          "valence": "consumed",
+          "amount": 1200,
+          "disputed": false
+        }
+      ],
+      "confirmation": "MEUCIQD_UqYXfATIwHZYHSikw965YWZL2NG2whyFbBV9mtUHfwIgfN_FGDLtgZLkCaQd9WsAMOLaeG2iCMyisLlQfeQWNlc",
+      "payer": "house",
+      "signed_by": "merchant-1",
+      "signed_as": "agent",
+      "receipt": "4476b2a3755fbd4f1e449c0e12658e8f318f5db2b8b647e36f65372a7ad4c3d9"
+    }
+  }
+}

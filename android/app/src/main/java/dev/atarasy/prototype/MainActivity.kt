@@ -52,6 +52,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var passkeys: PasskeyCeremonies
     private lateinit var authentication: MemberAuthenticationFlow
     private lateinit var offers: MemberOffers
+    private lateinit var reviews: MemberReviews
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -65,6 +66,7 @@ class MainActivity : ComponentActivity() {
         passkeys = PasskeyCeremonies(CredentialManagerGateway(this))
         authentication = MemberAuthenticationFlow(memberSessions, passkeys)
         offers = MemberOffers(memberSessions)
+        reviews = MemberReviews(memberSessions)
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         setContent {
             AtarasyApp(
@@ -72,6 +74,7 @@ class MainActivity : ComponentActivity() {
                 onRegister = authentication::register,
                 onLoadOffers = offers::listAll,
                 onLoadDetail = offers::detail,
+                onLoadReview = reviews::load,
             )
         }
     }
@@ -88,6 +91,7 @@ fun AtarasyApp(
     onRegister: suspend (String) -> MemberAuthenticationResult = { MemberAuthenticationResult.Failed(MemberFailure.Unavailable) },
     onLoadOffers: suspend (MemberSessionInfo) -> List<MemberOfferSummary> = { throw MemberFailure.Unavailable },
     onLoadDetail: suspend (MemberOfferSummary) -> MemberOfferDetail = { throw MemberFailure.Unavailable },
+    onLoadReview: suspend (MemberOfferDetail) -> MemberReview = { throw MemberFailure.Unavailable },
 ) {
     var selectedSection by rememberSaveable { mutableStateOf("Offers") }
     var session by remember { mutableStateOf<MemberSessionInfo?>(null) }
@@ -96,11 +100,13 @@ fun AtarasyApp(
     var selectedOffer by remember { mutableStateOf<MemberOfferSummary?>(null) }
     var detail by remember { mutableStateOf<MemberOfferDetail?>(null) }
     var detailFailure by remember { mutableStateOf(false) }
+    var review by remember { mutableStateOf<MemberReview?>(null) }
+    var reviewFailure by remember { mutableStateOf(false) }
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_STOP) {
-                session = null; offers = null; selectedOffer = null; detail = null
+                session = null; offers = null; selectedOffer = null; detail = null; review = null
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -111,16 +117,20 @@ fun AtarasyApp(
         offers = null; offerFailure = false; selectedOffer = null; detail = null
         try { offers = onLoadOffers(current) } catch (failure: Exception) {
             if (failure is CancellationException) throw failure
-            offerFailure = true
+            if (failure.endsPrivateSession()) session = null else offerFailure = true
         }
     }
     LaunchedEffect(selectedOffer, session) {
-        val selected = selectedOffer ?: run { detail = null; return@LaunchedEffect }
+        val selected = selectedOffer ?: run { detail = null; review = null; return@LaunchedEffect }
         if (session == null) return@LaunchedEffect
-        detail = null; detailFailure = false
-        try { detail = onLoadDetail(selected) } catch (failure: Exception) {
+        detail = null; detailFailure = false; review = null; reviewFailure = false
+        try {
+            val loaded = onLoadDetail(selected); detail = loaded
+            review = onLoadReview(loaded)
+        } catch (failure: Exception) {
             if (failure is CancellationException) throw failure
-            detailFailure = true
+            if (failure.endsPrivateSession()) session = null
+            else if (detail == null) detailFailure = true else reviewFailure = true
         }
     }
     MaterialTheme {
@@ -146,6 +156,8 @@ fun AtarasyApp(
                             selectedOffer = selectedOffer,
                             detail = detail,
                             detailFailed = detailFailure,
+                            review = review,
+                            reviewFailed = reviewFailure,
                             onSelect = { selectedOffer = it },
                             onAccount = { selectedSection = "Account" },
                         )
@@ -161,6 +173,8 @@ fun AtarasyApp(
         }
     }
 }
+
+private fun Exception.endsPrivateSession() = this is MemberFailure.Expired || this is MemberFailure.Superseded || (this is MemberFailure.Http && status == 401)
 
 @Composable
 private fun MemberAccountCard(
@@ -215,6 +229,8 @@ private fun MemberOffersCard(
     selectedOffer: MemberOfferSummary?,
     detail: MemberOfferDetail?,
     detailFailed: Boolean,
+    review: MemberReview?,
+    reviewFailed: Boolean,
     onSelect: (MemberOfferSummary?) -> Unit,
     onAccount: () -> Unit,
 ) {
@@ -224,7 +240,7 @@ private fun MemberOffersCard(
         }
         failed -> MemberCard("Offers are unavailable", "Your private offer list could not be loaded. Sign in again to retry.")
         offers == null -> MemberCard("Loading offers…", "Checking every presenter connected to your household.")
-        selectedOffer != null -> MemberOfferDetailCard(detail, detailFailed) { onSelect(null) }
+        selectedOffer != null -> MemberOfferDetailCard(detail, detailFailed, review, reviewFailed) { onSelect(null) }
         offers.isEmpty() -> MemberCard("No offers waiting", "New offers and boxes that need your decision will appear here.")
         else -> Card(modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -243,7 +259,7 @@ private fun MemberOffersCard(
 }
 
 @Composable
-private fun MemberOfferDetailCard(detail: MemberOfferDetail?, failed: Boolean, onBack: () -> Unit) {
+private fun MemberOfferDetailCard(detail: MemberOfferDetail?, failed: Boolean, review: MemberReview?, reviewFailed: Boolean, onBack: () -> Unit) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             TextButton(onClick = onBack) { Text("Back to offers") }
@@ -264,6 +280,29 @@ private fun MemberOfferDetailCard(detail: MemberOfferDetail?, failed: Boolean, o
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(item.label, fontWeight = FontWeight.SemiBold)
                             Text(item.value)
+                        }
+                    }
+                    when {
+                        reviewFailed -> Text("The decision review is unavailable.")
+                        review == null -> Text("Loading decision review…")
+                        review is MemberReview.Approval -> {
+                            Text("Before you decide", style = MaterialTheme.typography.titleMedium)
+                            review.value.candidates.forEach { candidate ->
+                                Text(candidate.argumentAgainst)
+                                candidate.alternatives.forEach { Text("• $it") }
+                            }
+                            review.value.excluded.forEach { Text("Excluded: ${it.product} (${it.reason.replace('_', ' ')})") }
+                            Text(review.value.carriage?.let { "Delivery: $it" } ?: "Delivery amount is not known yet.")
+                        }
+                        review is MemberReview.Statement -> {
+                            Text("Statement", style = MaterialTheme.typography.titleMedium)
+                            review.value.lines.forEach { Text("${it.product}: ${it.amount}${if (it.givenBy != null) " (gift)" else ""}") }
+                            Text(review.value.carriage?.let { "Delivery: $it" } ?: "Delivery amount is not known yet.")
+                        }
+                        review is MemberReview.Settlement -> {
+                            Text("Settled", style = MaterialTheme.typography.titleMedium)
+                            Text("Goods charged: ${review.value.charged}")
+                            if (review.value.disputedAmount > 0) Text("Disputed: ${review.value.disputedAmount}")
                         }
                     }
                 }
