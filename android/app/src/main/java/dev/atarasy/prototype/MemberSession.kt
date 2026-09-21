@@ -21,8 +21,10 @@ sealed class MemberFailure(message: String) : Exception(message) {
     data object ScopeMismatch : MemberFailure("Member response scope mismatch")
     data object Expired : MemberFailure("Member session expired")
     data object Superseded : MemberFailure("Member request superseded")
+    data object Busy : MemberFailure("Member authentication already in progress")
     data object Storage : MemberFailure("Member storage unavailable")
     data object Unavailable : MemberFailure("Member service unavailable")
+    data object UncertainVerification : MemberFailure("Member verification outcome is uncertain")
     data object RemoteLogoutUnconfirmed : MemberFailure("Remote logout unconfirmed")
     data class Http(val status: Int) : MemberFailure("Member service returned $status")
 }
@@ -85,8 +87,62 @@ class MemberSessionClient(
     private val mutex = Mutex()
     private var generation = 0L
     private var active: StoredMemberSession? = null
+    private var authenticating = false
 
     suspend fun lockLocalAccess() = mutex.withLock { generation++; active = null }
+
+    suspend fun enrollmentOptions(invitation: String): MemberCeremony {
+        val body = try { MemberAuthenticationWire.invitationBody(invitation) } catch (_: Exception) { throw MemberFailure.Malformed }
+        val started = mutex.withLock { generation }
+        val reply = send(MemberHttpRequest("/auth/enrollment/options", body = body))
+        mutex.withLock { if (generation != started) throw MemberFailure.Superseded }
+        return decodeCeremonyReply(reply, registration = true)
+    }
+
+    suspend fun loginOptions(): MemberCeremony {
+        val started = mutex.withLock { generation }
+        val reply = send(MemberHttpRequest("/auth/login/options", body = "{}".toByteArray()))
+        mutex.withLock { if (generation != started) throw MemberFailure.Superseded }
+        return decodeCeremonyReply(reply, registration = false)
+    }
+
+    suspend fun finishEnrollment(ceremony: MemberCeremony, responseJson: String) {
+        MemberAuthenticationWire.validate(ceremony, environment, registration = true, now = now())
+        val body = MemberAuthenticationWire.verificationBody(ceremony, responseJson)
+        val reply = try { send(MemberHttpRequest("/auth/enrollment/verify", body = body)) } catch (failure: MemberFailure.Http) { throw failure } catch (_: Exception) { throw MemberFailure.UncertainVerification }
+        if (reply.status != 201) throw MemberFailure.Http(reply.status)
+        if (!jsonResponse(reply) || !MemberAuthenticationWire.registered(reply.body)) throw MemberFailure.UncertainVerification
+    }
+
+    suspend fun finishLogin(ceremony: MemberCeremony, responseJson: String): MemberSessionInfo {
+        MemberAuthenticationWire.validate(ceremony, environment, registration = false, now = now())
+        val body = MemberAuthenticationWire.verificationBody(ceremony, responseJson)
+        val started = mutex.withLock {
+            if (authenticating) throw MemberFailure.Busy
+            authenticating = true; generation++; active = null; generation
+        }
+        try {
+            val verified = send(MemberHttpRequest("/auth/login/verify", body = body))
+            if (verified.status != 200) throw MemberFailure.Http(verified.status)
+            if (!jsonResponse(verified)) throw MemberFailure.UncertainVerification
+            val grant = MemberAuthenticationWire.grant(verified.body)
+            if (!validToken(grant.token) || grant.expiresAt <= now() || grant.expiresAt > Canonical.MAXIMUM_INTEGER || grant.id.isEmpty()) throw MemberFailure.Malformed
+            val sessionReply = send(MemberHttpRequest("/auth/session", token = grant.token))
+            val info = decodeSessionReply(sessionReply)
+            if (!valid(info) || info.id != grant.id || info.expiresAt != grant.expiresAt) throw MemberFailure.ScopeMismatch
+            val stored = StoredMemberSession(grant.token, info)
+            mutex.withLock {
+                if (generation != started) throw MemberFailure.Superseded
+                try { vault.save(environment, stored) } catch (_: Exception) { throw MemberFailure.Storage }
+                active = stored
+            }
+            return info
+        } catch (failure: MemberFailure.Superseded) { throw failure }
+        catch (failure: MemberFailure.Storage) { throw failure }
+        catch (failure: MemberFailure.Http) { throw failure }
+        catch (_: Exception) { throw MemberFailure.UncertainVerification }
+        finally { mutex.withLock { authenticating = false } }
+    }
 
     suspend fun restore(household: String): MemberSessionInfo? {
         require(household.isNotEmpty() && household.length <= 512 && household.none { it.code < 0x20 || it.code == 0x7f })
@@ -156,6 +212,12 @@ class MemberSessionClient(
         if (reply.contentType?.substringBefore(';')?.trim()?.lowercase() != "application/json") throw MemberFailure.Malformed
         return MemberSessionCodec.decodeSession(reply.body)
     }
+    private fun decodeCeremonyReply(reply: MemberHttpResponse, registration: Boolean): MemberCeremony {
+        if (reply.status != 200) throw MemberFailure.Http(reply.status)
+        if (!jsonResponse(reply)) throw MemberFailure.Malformed
+        return MemberAuthenticationWire.ceremony(reply.body, environment, registration, now())
+    }
+    private fun jsonResponse(reply: MemberHttpResponse) = reply.contentType?.substringBefore(';')?.trim()?.lowercase() == "application/json"
     private fun validToken(value: String) = Regex("^amr1_[A-Za-z0-9_-]{43}$").matches(value)
     private fun valid(value: MemberSessionInfo): Boolean = value.id.isNotEmpty() && value.id.length <= 512 && value.household.isNotEmpty() && value.household.length <= 512 &&
         value.expiresAt > now() && value.expiresAt <= Canonical.MAXIMUM_INTEGER && value.presenters.size <= 512 && value.presenters.distinct().size == value.presenters.size && value.presenters.all { it.isNotEmpty() && it.length <= 512 }
