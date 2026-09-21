@@ -110,7 +110,10 @@ private struct ConfiguredMemberAccount: View {
                 let decisions = MemberDigitalFlow(environment: environment, service: service, passkeys: passkeys, store: store)
                 let withdrawals = MemberWithdrawalFlow(environment: environment, service: service, passkeys: passkeys, store: store)
                 let privateNode = MemberPrivateNode(environment: environment, service: service, vault: keys)
-                holder.account = MemberAccount(service: service, passkeys: passkeys, statements: statements, decisions: decisions, withdrawals: withdrawals, permissions: MemberPermissions(service: service), permissionRequests: MemberPermissionRequests(service: service), privateNode: privateNode)
+                let recoveryVault = try KeychainMemberRecoveryMaterialVault(namespace: "dev.atarasy.native", installation: installation)
+                let noticeChannel = Bundle.main.object(forInfoDictionaryKey: "AtarasyRecoveryNoticeChannel") as? String
+                let recovery = MemberRecoveryFlow(environment: environment, service: service, privateNode: privateNode, passkeys: passkeys, vault: recoveryVault, noticeChannel: noticeChannel)
+                holder.account = MemberAccount(service: service, passkeys: passkeys, statements: statements, decisions: decisions, withdrawals: withdrawals, permissions: MemberPermissions(service: service), permissionRequests: MemberPermissionRequests(service: service), privateNode: privateNode, recovery: recovery)
             } catch { dismiss() }
         }
         .onChange(of: scenePhase) { _, phase in
@@ -140,6 +143,7 @@ private struct MemberAccountForm: View {
                 }
                 Section("Private node") {
                     Text(account.privateNodeNotice.isEmpty ? "Private records have not been opened." : account.privateNodeNotice).accessibilityIdentifier("privateNodeStatus")
+                    if let recovery = account.recovery { NavigationLink("Recovery") { MemberRecoveryView(model: recovery, recoveryRequired: account.privateNodeState == .recoveryRequired) } }
                 }
                 if account.protectedAccessReady {
                     if let requests = account.permissionRequests { Section { NavigationLink("Access requests") { MemberPermissionRequestsView(model: requests) } } }
@@ -176,5 +180,69 @@ private struct MemberAccountForm: View {
         .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() }.disabled(account.busy || action != nil) } }
         .onReceive(clock) { date in account.clearExpired(now: Int64(date.timeIntervalSince1970 * 1000)) }
         .onDisappear { invitation = ""; household = ""; action?.cancel() }
+    }
+}
+
+private struct MemberRecoveryView: View {
+    @ObservedObject var model: MemberRecoveryFlow
+    let recoveryRequired: Bool
+    @State private var recoverer = ""
+    var body: some View {
+        Form {
+            Section("Recovery role") {
+                if model.keyStatus?.publicKey == nil { Text("This device has no recovery-only encryption key.") }
+                else { Label("This device can receive a named recovery share", systemImage: "checkmark.shield") }
+                Button("Enable this device as a recoverer") { Task { await model.registerRecoveryKey() } }
+                    .disabled(model.busy || model.keyStatus?.publicKey != nil)
+                    .accessibilityIdentifier("recoveryRegisterDevice")
+            }
+            Section("Your recovery policy") {
+                if let configuration = model.configuration, configuration.configured {
+                    Text("Two participants are required: your device, the named recoverer, or the host.")
+                    Text("Recoverer: \(configuration.recoverer ?? "Unavailable")").font(.footnote).textSelection(.enabled)
+                    Text("Policy version \(configuration.epoch ?? 0)").font(.footnote)
+                } else { Text("Recovery has not been configured.") }
+                TextField("Recoverer household reference", text: $recoverer).textInputAutocapitalization(.never).autocorrectionDisabled()
+                Button("Review and configure recovery") { let value = recoverer; Task { await model.configure(recoverer: value) } }
+                    .disabled(model.busy || recoverer.isEmpty || !model.canConfigure)
+                    .accessibilityIdentifier("recoveryConfigure")
+                if !model.canConfigure { Text("This build has no independently delivered recovery notice channel, so recovery configuration remains closed.").font(.footnote) }
+            }
+            if recoveryRequired {
+                Section("Restore this device") {
+                    Text("A recovered passkey does not restore the encrypted records by itself.")
+                    Button("Begin lost-device recovery") { Task { await model.beginLostDeviceRecovery() } }.disabled(model.busy).accessibilityIdentifier("recoveryBegin")
+                }
+            }
+            Section("Ceremonies") {
+                if model.requests.isEmpty { Text("No recovery ceremony is visible to this account.") }
+                ForEach(model.requests) { request in
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(request.state.capitalized).font(.headline)
+                        Text(request.owner == model.currentHousehold ? "Your recovery" : "Recovery requested by a person who named you").font(.subheadline)
+                        Text("Policy version \(request.epoch)").font(.footnote)
+                        if request.recoverer == model.currentHousehold, request.state == "pending" {
+                            Button("Review and approve recovery") { Task { await model.approve(request) } }.buttonStyle(.borderless).accessibilityIdentifier("recoveryApprove")
+                        }
+                        if request.owner == model.currentHousehold, request.state == "completed" {
+                            Button("Install recovered key") { Task { await model.finish(request) } }.buttonStyle(.borderless).accessibilityIdentifier("recoveryFinish")
+                        }
+                        if request.owner == model.currentHousehold, request.state == "approved" { Text("The recoverer approved. The key remains unavailable until the independent notice is delivered.").font(.footnote) }
+                    }
+                }
+            }
+            Section("Recovery record") {
+                if let events = model.log?.events, !events.isEmpty {
+                    ForEach(events) { event in Text(event.state == "completed" ? "Notice delivered before recovery completed" : "Recovery recorded; notice delivery pending") }
+                } else { Text("No completed or pending recovery event.") }
+            }
+            Section {
+                Button("Refresh recovery status") { Task { await model.refresh() } }.disabled(model.busy)
+                if model.busy { ProgressView() }
+                if !model.notice.isEmpty { Text(model.notice).accessibilityIdentifier("recoveryNotice") }
+            }
+        }
+        .navigationTitle("Recovery")
+        .onAppear { Task { await model.refresh() } }
     }
 }

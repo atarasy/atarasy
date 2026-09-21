@@ -17,4 +17,4 @@ Keys are non-synchronizing `kSecAttrAccessibleWhenUnlockedThisDeviceOnly` generi
 | Reinstall or new device | Existing host ciphertext without this installation's key enters recovery-required. A recovered passkey alone does not mint a ledger key. |
 | Missing/tampered key or ciphertext | Authentication fails and no operation handle or private record is returned. |
 
-This increment implements the IOS-B19 storage boundary and local lifecycle behavior. It does not claim real-device lock/reinstall acceptance. The constitutional 2-of-3 share placement, recovery logging/notice and recovered-key installation remain IOS-B20; cross-origin export and authority retirement remain IOS-B21.
+This increment implements the IOS-B19 storage boundary and local lifecycle behavior. It does not claim real-device lock/reinstall acceptance. The separate [native recovery flow](NATIVE_RECOVERY.md) implements the local IOS-B20 client boundary; independent provider acceptance remains open. Cross-origin export and authority retirement remain IOS-B21.

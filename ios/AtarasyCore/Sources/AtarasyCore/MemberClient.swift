@@ -2,10 +2,10 @@ import Foundation
 
 public enum MemberLogoutOutcome: Sendable { case noLocalSession, revoked }
 public actor MemberClient {
-    private let environment: MemberEnvironment
+    let environment: MemberEnvironment
     private let transport: any MemberHTTPTransport
     private let vault: any MemberSessionVault
-    private let now: @Sendable () -> Int64
+    let now: @Sendable () -> Int64
     private var active: StoredMemberSession?
     private var generation: UInt64 = 0
     private var authenticating = false
@@ -16,6 +16,10 @@ public actor MemberClient {
     }
     public func lockLocalAccess() async {
         generation &+= 1; active = nil; mandateReview = nil; mandateChangeReview = nil
+    }
+    func requireActiveSession(_ id: String) throws -> MemberSessionInfo {
+        guard let active, active.info.id == id, live(active.info.expiresAt) else { throw MemberFailure.expired }
+        return active.info
     }
     private func same(_ a: String, _ b: String) -> Bool { Data(a.utf8) == Data(b.utf8) }
     private func live(_ expiry: Int64) -> Bool { expiry > now() && expiry <= 9_007_199_254_740_991 }

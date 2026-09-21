@@ -4,6 +4,8 @@ This isolated development branch contains the first native iPhone/iPad interacti
 
 [Native private storage](NATIVE_PRIVATE_STORAGE.md) documents the encrypted operation journal, blind-host record profile and lock/logout/reinstall/revocation behavior used by configured member accounts.
 
+[Native recovery](NATIVE_RECOVERY.md) documents the recovery-only key, two-of-three share placement, named-recoverer approval, independent-notice gate and replacement-device key installation.
+
 ## Run
 
 Use the installed Xcode with an available iOS simulator and XcodeGen. From the repository root:

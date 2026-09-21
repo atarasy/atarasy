@@ -73,6 +73,7 @@ public extension MemberOperationStore { func handles() throws -> [MemberOperatio
 
 public protocol MemberOperationKeyVault: Sendable {
     func key(scope: String, create: Bool) throws -> Data?
+    func install(key: Data, scope: String) throws
 }
 
 /// A per-installation identifier kept outside Keychain. Reinstalling creates a new value, so
@@ -114,9 +115,21 @@ public final class KeychainMemberOperationKeyVault: MemberOperationKeyVault, Sen
         var key = Data(count: 32)
         let randomStatus = key.withUnsafeMutableBytes { bytes in SecRandomCopyBytes(kSecRandomDefault, 32, bytes.baseAddress!) }
         guard randomStatus == errSecSuccess else { throw MemberFailure.storage }
-        var add = try query(scope); add[kSecValueData as String] = key; add[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
-        guard SecItemAdd(add as CFDictionary, nil) == errSecSuccess else { throw MemberFailure.storage }
+        try install(key: key, scope: scope)
         return key
+    }
+    public func install(key: Data, scope: String) throws {
+        guard key.count == 32 else { throw MemberFailure.invalidInput }
+        var read = try query(scope); read[kSecReturnData as String] = true; read[kSecMatchLimit as String] = kSecMatchLimitOne
+        var existing: CFTypeRef?; let found = SecItemCopyMatching(read as CFDictionary, &existing)
+        if found == errSecSuccess { guard existing as? Data == key else { throw MemberFailure.storage }; return }
+        guard found == errSecItemNotFound else { throw MemberFailure.storage }
+        var add = try query(scope); add[kSecValueData as String] = key; add[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        let added = SecItemAdd(add as CFDictionary, nil)
+        if added == errSecDuplicateItem {
+            existing = nil; guard SecItemCopyMatching(read as CFDictionary, &existing) == errSecSuccess, existing as? Data == key else { throw MemberFailure.storage }; return
+        }
+        guard added == errSecSuccess else { throw MemberFailure.storage }
     }
 }
 

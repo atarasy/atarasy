@@ -50,6 +50,17 @@ private actor MemberScript: MemberHTTPTransport {
         let v = TestMemberVault(failRemoval: failRemoval); try v.save(StoredMemberSession(token: token, info: info ?? self.info), environment: env); return v
     }
     private func offer(_ household: String = "own") -> Data { Data("{\"id\":\"offer\",\"household\":\"\(household)\",\"presenter\":\"presenter\",\"binding\":\"digital\",\"state\":\"drafted\"}".utf8) }
+    private func recoveryFixture() throws -> [String: Any] {
+        let url = try XCTUnwrap(Bundle.module.url(forResource: "member-recovery-runtime", withExtension: "json", subdirectory: "Fixtures"))
+        return try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+    }
+    private func fixtureData(_ root: [String: Any], _ key: String) throws -> Data { try JSONSerialization.data(withJSONObject: try XCTUnwrap(root[key])) }
+    private func fixtureSession(_ root: [String: Any], _ key: String) throws -> MemberSessionInfo { try JSONDecoder().decode(MemberSessionInfo.self, from: fixtureData(root, key)) }
+    private func fixtureAssertion(_ prepared: [String: Any]) throws -> MemberPasskeyResponse {
+        let publicKey = try XCTUnwrap(prepared["publicKey"] as? [String: Any]), challenge = try XCTUnwrap(publicKey["challenge"] as? String), allowed = try XCTUnwrap(publicKey["allowCredentials"] as? [[String: Any]]), credential = try XCTUnwrap(allowed.first?["id"] as? String)
+        let client = try JSONSerialization.data(withJSONObject: ["type": "webauthn.get", "origin": env.origin.absoluteString, "challenge": challenge])
+        return .assertion(id: credential, clientDataJSON: PasskeyBytes.encode(client), authenticatorData: "YQ", signature: "Yg", userHandle: "Yw")
+    }
 
     func testVerifiedLoginInspectsBeforeSavingAndBindsBearerToNamedOrigin() async throws {
         let grant = Data("{\"id\":\"session\",\"token\":\"\(token)\",\"expiresAt\":5000}".utf8)
@@ -164,6 +175,32 @@ private actor MemberScript: MemberHTTPTransport {
             _ = try await client.restore(household: "own")
             do { _ = try await client.privateNodeRecords(); XCTFail() } catch { XCTAssertEqual(error as? MemberFailure, .malformed) }
         }
+    }
+    func testActualValenceRecoveryOwnerResponsesStayScopedAndRevealSharesOnlyAfterNotice() async throws {
+        let root = try recoveryFixture(), owner = try fixtureSession(root, "ownerSession"), requesterKey = ((root["created"] as! [String: Any])["requesterPublicKey"] as! String)
+        let script = MemberScript([.init(status: 200, data: try fixtureData(root, "ownerSession")), .init(status: 200, data: try fixtureData(root, "configured")), .init(status: 201, data: try fixtureData(root, "created")), .init(status: 200, data: try fixtureData(root, "completed")), .init(status: 200, data: try fixtureData(root, "finalLog"))])
+        let client = MemberClient(environment: env, transport: script, vault: try vault(owner), now: { 1_800_000_000_001 }); _ = try await client.restore(household: owner.household)
+        let configuration = try await client.recoveryConfiguration(); XCTAssertTrue(configuration.configured); XCTAssertEqual(configuration.owner, owner.household)
+        let created = try await client.createRecoveryRequest(requesterPublicKey: requesterKey); XCTAssertEqual(created.state, "pending"); XCTAssertNil(created.hostShare); XCTAssertNil(created.release)
+        let completed = try await client.recoveryRequest(id: created.id); XCTAssertEqual(completed.state, "completed"); XCTAssertNotNil(completed.hostShare); XCTAssertNotNil(completed.release); XCTAssertNil(completed.recovererPacket)
+        let log = try await client.recoveryLog(); XCTAssertEqual(log.events.first?.state, "completed")
+        let requests = await script.requests, createBody = try XCTUnwrap(JSONSerialization.jsonObject(with: try XCTUnwrap(requests[2].httpBody)) as? [String: Any])
+        XCTAssertEqual(Set(createBody.keys), ["requesterPublicKey"]); XCTAssertFalse(String(decoding: requests[2].httpBody!, as: UTF8.self).contains(try XCTUnwrap(completed.hostShare)))
+    }
+    func testActualValenceRecoveryApprovalBindsDisplayedReleaseAndNeverReturnsTheHostShare() async throws {
+        let root = try recoveryFixture(), recoverer = try fixtureSession(root, "recovererSession"), preparedObject = root["preparedApproval"] as! [String: Any], release = preparedObject["release"] as! String
+        let script = MemberScript([.init(status: 200, data: try fixtureData(root, "recovererSession")), .init(status: 200, data: try fixtureData(root, "preparedApproval")), .init(status: 200, data: try fixtureData(root, "approved"))])
+        let client = MemberClient(environment: env, transport: script, vault: try vault(recoverer), now: { 1_800_000_000_001 }); _ = try await client.restore(household: recoverer.household)
+        let requestID = ((preparedObject["request"] as! [String: Any])["id"] as! String), prepared = try await client.prepareRecoveryApproval(id: requestID, release: release)
+        let approved = try await client.approveRecovery(prepared, assertion: try fixtureAssertion(preparedObject)); XCTAssertEqual(approved.state, "approved"); XCTAssertNil(approved.hostShare); XCTAssertNil(approved.keyDigest); XCTAssertNotNil(approved.recovererPacket)
+        let requests = await script.requests, approvalBody = try XCTUnwrap(JSONSerialization.jsonObject(with: try XCTUnwrap(requests[2].httpBody)) as? [String: Any])
+        XCTAssertEqual(Set(approvalBody.keys), ["preparation", "release", "assertion"]); XCTAssertEqual(approvalBody["release"] as? String, release); XCTAssertFalse(String(decoding: requests[2].httpBody!, as: UTF8.self).contains((root["configuration"] as! [String: Any])["hostShare"] as! String))
+    }
+    func testRecoveryClientRejectsAHostShareProjectedToTheRecoverer() async throws {
+        let root = try recoveryFixture(), recoverer = try fixtureSession(root, "recovererSession"), completed = root["completed"] as! [String: Any]
+        let script = MemberScript([.init(status: 200, data: try fixtureData(root, "recovererSession")), .init(status: 200, data: try JSONSerialization.data(withJSONObject: completed))]), client = MemberClient(environment: env, transport: script, vault: try vault(recoverer), now: { 1_800_000_000_001 })
+        _ = try await client.restore(household: recoverer.household)
+        do { _ = try await client.recoveryRequest(id: completed["id"] as! String); XCTFail() } catch { XCTAssertEqual(error as? MemberFailure, .scopeMismatch) }
     }
     func testOptionsValidateRPAndDoNotSendStoredCredentials() async throws {
         let payload = Data("{\"id\":\"\(flow.id)\",\"expiresAt\":2000,\"publicKey\":{\"challenge\":\"\(String(repeating: "A", count: 43))\",\"rpId\":\"foreign.example\",\"allowCredentials\":[],\"userVerification\":\"required\"}}".utf8)

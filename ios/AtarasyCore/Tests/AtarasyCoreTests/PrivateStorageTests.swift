@@ -1,3 +1,4 @@
+import CryptoKit
 import XCTest
 @testable import AtarasyCore
 
@@ -5,6 +6,7 @@ private final class MemoryOperationKeys: MemberOperationKeyVault, @unchecked Sen
     private let lock = NSLock()
     private var values: [String: Data] = [:]
     func key(scope: String, create: Bool) throws -> Data? { lock.withLock { if let value = values[scope] { return value }; guard create else { return nil }; let value = Data(repeating: UInt8(values.count + 1), count: 32); values[scope] = value; return value } }
+    func install(key: Data, scope: String) throws { try lock.withLock { if let old = values[scope], old != key { throw MemberFailure.storage }; values[scope] = key } }
     func removeAll() { lock.withLock { values = [:] } }
     var count: Int { lock.withLock { values.count } }
 }
@@ -17,6 +19,34 @@ private actor MemoryPrivateNodeService: MemberPrivateNodeService {
         let value = MemberPrivateNodeRecord(id: id, revision: expectedRevision + 1, updatedAt: 1_800_000_000_001, envelope: envelope); records[id] = value; return value
     }
     func encodedRecord(_ id: String) throws -> String { String(decoding: try JSONEncoder().encode(records[id]), as: UTF8.self) }
+}
+private final class MemoryRecoveryMaterials: MemberRecoveryMaterialVault, @unchecked Sendable {
+    private let lock = NSLock(); private var agreement: [String: MemberRecoveryKeyPair] = [:], requester: [String: MemberRecoveryKeyPair] = [:], shares: [String: MemberRecoveryShare] = [:]
+    func agreementKey(scope: String, create: Bool) throws -> MemberRecoveryKeyPair? { lock.withLock { if let value = agreement[scope] { return value }; guard create else { return nil }; let value = MemberRecoveryKeyPair(); agreement[scope] = value; return value } }
+    func requesterKey(scope: String, create: Bool) throws -> MemberRecoveryKeyPair? { lock.withLock { if let value = requester[scope] { return value }; guard create else { return nil }; let value = MemberRecoveryKeyPair(); requester[scope] = value; return value } }
+    func saveDeviceShare(_ share: MemberRecoveryShare, scope: String, epoch: Int64) throws { lock.withLock { shares[scope + "." + String(epoch)] = share } }
+    func deviceShare(scope: String, epoch: Int64) throws -> MemberRecoveryShare? { lock.withLock { shares[scope + "." + String(epoch)] } }
+    func removeRequesterKey(scope: String) throws { _ = lock.withLock { requester.removeValue(forKey: scope) } }
+}
+private actor CompletedRecoveryService: MemberRecoveryService {
+    let request: MemberRecoveryRequest; let storedLog: MemberRecoveryLog
+    init(request: MemberRecoveryRequest) { self.request = request; storedLog = .init(profile: "atarasy.member-recovery-log.1", owner: request.owner, events: [.init(id: "99999999-9999-4999-8999-999999999999", owner: request.owner, recovery: request.id, recoverer: request.recoverer, state: "completed", occurredAt: 1_800_000_000_000, deliveredAt: 1_800_000_000_001, receipt: "delivered")]) }
+    func recoveryRequest(id: String) async throws -> MemberRecoveryRequest { guard id == request.id else { throw MemberFailure.unavailable }; return request }
+    func recoveryRequests() async throws -> [MemberRecoveryRequest] { [request] }
+    func recoveryLog() async throws -> MemberRecoveryLog { storedLog }
+    func recoveryKeyStatus() async throws -> MemberRecoveryKeyStatus { throw MemberFailure.unavailable }
+    func prepareRecoveryKey(_ key: String) async throws -> PreparedMemberRecoveryKey { throw MemberFailure.unavailable }
+    func registerRecoveryKey(_ prepared: PreparedMemberRecoveryKey, assertion: MemberPasskeyResponse) async throws -> MemberRecoveryKeyStatus { throw MemberFailure.unavailable }
+    func recoveryParticipant(_ household: String) async throws -> MemberRecoveryParticipantKey { throw MemberFailure.unavailable }
+    func recoveryConfiguration() async throws -> MemberRecoveryConfiguration { throw MemberFailure.unavailable }
+    func prepareRecoveryConfiguration(_ draft: MemberRecoveryConfigurationDraft, recovererKeyDigest: String) async throws -> PreparedMemberRecoveryConfiguration { throw MemberFailure.unavailable }
+    func submitRecoveryConfiguration(_ prepared: PreparedMemberRecoveryConfiguration, assertion: MemberPasskeyResponse) async throws -> MemberRecoveryConfiguration { throw MemberFailure.unavailable }
+    func createRecoveryRequest(requesterPublicKey: String) async throws -> MemberRecoveryRequest { throw MemberFailure.unavailable }
+    func prepareRecoveryApproval(id: String, release: String) async throws -> PreparedMemberRecoveryApproval { throw MemberFailure.unavailable }
+    func approveRecovery(_ prepared: PreparedMemberRecoveryApproval, assertion: MemberPasskeyResponse) async throws -> MemberRecoveryRequest { throw MemberFailure.unavailable }
+}
+@MainActor private final class NoRecoveryPasskeys: MemberPasskeyAuthorising {
+    func authorise(_ ceremony: MemberCeremony, kind: NativePasskeyOptions.Kind) async throws -> MemberPasskeyResponse { throw MemberFailure.unavailable }
 }
 
 final class PrivateStorageTests: XCTestCase {
@@ -73,11 +103,17 @@ final class PrivateStorageTests: XCTestCase {
         let id = "22222222-2222-4222-8222-222222222222", secret = Data("private purchase and note".utf8)
         let written = try await node.write(id: id, expectedRevision: 0, clear: secret); XCTAssertEqual(written.revision, 1)
         let clear = try await node.read(id: id); XCTAssertEqual(clear, secret)
+        let recoveryKey = try await node.recoveryKey(session: session)
         let hosted = try await service.encodedRecord(id); XCTAssertFalse(hosted.contains("private purchase")); XCTAssertFalse(hosted.contains(session.household))
         await node.lock(); let locked = await node.state; XCTAssertEqual(locked, .locked); await XCTAssertThrowsErrorAsync { _ = try await node.read(id: id) }
-        let reinstalled = MemberPrivateNode(environment: env, service: service, vault: MemoryOperationKeys())
+        let replacement = MemoryOperationKeys(), reinstalled = MemberPrivateNode(environment: env, service: service, vault: replacement)
         let reopened = try await reinstalled.open(session: session); XCTAssertEqual(reopened, .recoveryRequired)
         await XCTAssertThrowsErrorAsync { _ = try await reinstalled.read(id: id) }
+        await XCTAssertThrowsErrorAsync { try await reinstalled.installRecoveredKey(Data(repeating: 9, count: 32), session: session) }
+        XCTAssertEqual(replacement.count, 0)
+        try await reinstalled.installRecoveredKey(recoveryKey, session: session)
+        let recoveredState = await reinstalled.state, recoveredClear = try await reinstalled.read(id: id)
+        XCTAssertEqual(recoveredState, .ready); XCTAssertEqual(recoveredClear, secret)
     }
     func testActualValenceAESRecordDecryptsWithTheNativeProfile() throws {
         let url = try XCTUnwrap(Bundle.module.url(forResource: "member-private-node-runtime", withExtension: "json", subdirectory: "Fixtures")), data = try Data(contentsOf: url)
@@ -89,6 +125,41 @@ final class PrivateStorageTests: XCTestCase {
         XCTAssertEqual(clear, try base64url(root["clear"] as! String))
         var changed = recordData; changed[changed.index(before: changed.endIndex)] ^= 1
         XCTAssertThrowsError(try JSONDecoder().decode(MemberPrivateNodeRecord.self, from: changed))
+    }
+    func testRecoverySharesRequireTwoDistinctParticipantsAndEveryPairRestoresTheLedgerKey() throws {
+        let key = Data((0..<32).map(UInt8.init)), shares = try MemberRecoveryShares.split(key: key)
+        XCTAssertEqual(shares.map(\.participant), [.device, .recoverer, .host])
+        XCTAssertEqual(try MemberRecoveryShares.recover(shares[0], shares[1]), key)
+        XCTAssertEqual(try MemberRecoveryShares.recover(shares[0], shares[2]), key)
+        XCTAssertEqual(try MemberRecoveryShares.recover(shares[1], shares[2]), key)
+        XCTAssertThrowsError(try MemberRecoveryShares.recover(shares[0], shares[0]))
+        var changed = shares[0].bytes; changed[changed.index(before: changed.endIndex)] ^= 1
+        XCTAssertThrowsError(try MemberRecoveryShares.recover(.init(participant: .device, bytes: changed), shares[1]))
+        XCTAssertEqual(try MemberRecoveryCodec.data(MemberRecoveryShares.digest(key)).count, 32)
+    }
+    func testRecoveryPacketIsEndToEndEncryptedAndBoundToTheExactCeremony() throws {
+        let recipient = MemberRecoveryKeyPair(), other = MemberRecoveryKeyPair(), clear = Data(repeating: 7, count: 64)
+        let context = MemberRecoveryPacketContext(purpose: "recoverer-share", owner: "key:owner", recoverer: "key:recoverer", reference: "configuration-1", epoch: 1)
+        let packet = try MemberRecoveryPackets.seal(clear, recipientPublicKey: recipient.publicKey, context: context)
+        let hosted = try MemberRecoveryCodec.data(packet)
+        XCTAssertGreaterThanOrEqual(hosted.count, 96); XCTAssertLessThanOrEqual(hosted.count, 2048)
+        XCTAssertFalse(String(decoding: hosted, as: UTF8.self).contains(MemberRecoveryCodec.b64(clear)))
+        XCTAssertEqual(try MemberRecoveryPackets.open(packet, recipient: recipient, context: context), clear)
+        XCTAssertThrowsError(try MemberRecoveryPackets.open(packet, recipient: other, context: context))
+        let changed = MemberRecoveryPacketContext(purpose: context.purpose, owner: context.owner, recoverer: context.recoverer, reference: "other", epoch: context.epoch)
+        XCTAssertThrowsError(try MemberRecoveryPackets.open(packet, recipient: recipient, context: changed))
+    }
+    @MainActor func testCompletedRecoveryFlowReconstructsVerifiesAndInstallsTheKeyOnAReplacementDevice() async throws {
+        let environment = try MemberEnvironment(name: "test", origin: URL(string: "https://unit.example")!), session = MemberSessionInfo(id: "session", household: "key:recovery-owner", presenters: [], expiresAt: 1_900_000_000_000), host = MemoryPrivateNodeService(), originalKeys = MemoryOperationKeys(), original = MemberPrivateNode(environment: environment, service: host, vault: originalKeys)
+        let originalState = try await original.open(session: session); XCTAssertEqual(originalState, .ready); let key = try await original.recoveryKey(session: session)
+        let replacementKeys = MemoryOperationKeys(), replacement = MemberPrivateNode(environment: environment, service: host, vault: replacementKeys), replacementState = try await replacement.open(session: session); XCTAssertEqual(replacementState, .recoveryRequired)
+        let shares = try MemberRecoveryShares.split(key: key), recoverer = try XCTUnwrap(shares.first { $0.participant == .recoverer }), hostShare = try XCTUnwrap(shares.first { $0.participant == .host }), materials = MemoryRecoveryMaterials()
+        let scope = SHA256.hash(data: MemberRecoveryCodec.canonical(["atarasy.private-node-scope.1", environment.name, environment.origin.absoluteString, session.household])).map { String(format: "%02x", $0) }.joined(), requester = try XCTUnwrap(materials.requesterKey(scope: scope, create: true)), id = "88888888-8888-4888-8888-888888888888", recovererID = "key:recovery-helper"
+        let context = MemberRecoveryPacketContext(purpose: "requester-release", owner: session.household, recoverer: recovererID, reference: id, epoch: 1), release = try MemberRecoveryPackets.seal(recoverer.bytes, recipientPublicKey: requester.publicKey, context: context)
+        let request = MemberRecoveryRequest(profile: "atarasy.member-recovery-request.1", id: id, owner: session.household, recoverer: recovererID, epoch: 1, requesterPublicKey: requester.publicKey, state: "completed", createdAt: 1_800_000_000_000, updatedAt: 1_800_000_000_001, recovererPacket: nil, release: release, hostShare: MemberRecoveryCodec.b64(hostShare.bytes), keyDigest: try MemberRecoveryShares.digest(key))
+        let service = CompletedRecoveryService(request: request), flow = MemberRecoveryFlow(environment: environment, service: service, privateNode: replacement, passkeys: NoRecoveryPasskeys(), vault: materials, noticeChannel: nil)
+        flow.setSession(session); await flow.finish(request)
+        let state = await replacement.state; XCTAssertEqual(state, .ready); XCTAssertEqual(replacementKeys.count, 1); XCTAssertNil(try materials.requesterKey(scope: scope, create: false)); XCTAssertTrue(flow.notice.contains("completed"))
     }
 }
 

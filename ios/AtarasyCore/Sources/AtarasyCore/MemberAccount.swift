@@ -34,7 +34,7 @@ public extension MemberAccountService {
 }
 
 @MainActor public final class MemberAccount: ObservableObject {
-    @Published public private(set) var session: MemberSessionInfo? { didSet { statements?.setSession(session); decisions?.setSession(session); withdrawals?.setSession(session); permissions?.setSession(session); permissionRequests?.setSession(session); mandates = []; mandateReview = nil; effectiveMandates = []; mandateChanges = []; preparedMandateChange = nil; dialsNotice = ""; if session == nil { privateNodeState = .locked; privateNodeNotice = ""; if let privateNode { Task { await privateNode.lock() } } } } }
+    @Published public private(set) var session: MemberSessionInfo? { didSet { statements?.setSession(session); decisions?.setSession(session); withdrawals?.setSession(session); permissions?.setSession(session); permissionRequests?.setSession(session); recovery?.setSession(session); mandates = []; mandateReview = nil; effectiveMandates = []; mandateChanges = []; preparedMandateChange = nil; dialsNotice = ""; if session == nil { privateNodeState = .locked; privateNodeNotice = ""; if let privateNode { Task { await privateNode.lock() } } } } }
     @Published public private(set) var busy = false
     @Published public private(set) var notice = ""
     @Published public private(set) var mandates: [MemberMandate] = []
@@ -52,12 +52,13 @@ public extension MemberAccountService {
     public let withdrawals: MemberWithdrawalFlow?
     public let decisions: MemberDigitalFlow?
     public let proposals: MemberProposals
+    public let recovery: MemberRecoveryFlow?
     private let privateNode: MemberPrivateNode?
     private let service: any MemberAccountService
     private let passkeys: any MemberPasskeyAuthorising
     private var generation: UInt64 = 0
-    public init(service: any MemberAccountService, passkeys: any MemberPasskeyAuthorising, statements: MemberStatementFlow? = nil, decisions: MemberDigitalFlow? = nil, withdrawals: MemberWithdrawalFlow? = nil, permissions: MemberPermissions? = nil, permissionRequests: MemberPermissionRequests? = nil, privateNode: MemberPrivateNode? = nil) {
-        self.service = service; self.passkeys = passkeys; self.statements = statements; self.decisions = decisions; self.withdrawals = withdrawals; self.permissions = permissions; self.permissionRequests = permissionRequests; self.privateNode = privateNode
+    public init(service: any MemberAccountService, passkeys: any MemberPasskeyAuthorising, statements: MemberStatementFlow? = nil, decisions: MemberDigitalFlow? = nil, withdrawals: MemberWithdrawalFlow? = nil, permissions: MemberPermissions? = nil, permissionRequests: MemberPermissionRequests? = nil, privateNode: MemberPrivateNode? = nil, recovery: MemberRecoveryFlow? = nil) {
+        self.service = service; self.passkeys = passkeys; self.statements = statements; self.decisions = decisions; self.withdrawals = withdrawals; self.permissions = permissions; self.permissionRequests = permissionRequests; self.privateNode = privateNode; self.recovery = recovery
         proposals = MemberProposals(service: service)
         proposals.onSessionUnavailable = { [weak self] in
             guard let self else { return }
@@ -75,7 +76,7 @@ public extension MemberAccountService {
         guard let privateNode else { privateNodeState = .ready; return }
         privateNodeState = .locked; privateNodeNotice = "Opening encrypted private records."
         do {
-            let result = try await privateNode.open(session: info); privateNodeState = result
+            let result = try await privateNode.open(session: info); privateNodeState = result; await recovery?.refresh()
             privateNodeNotice = result == .ready ? "Private records are encrypted on this device before host storage." : "This node has encrypted records but this installation has no decryption key. Recovery is required."
         } catch { privateNodeState = .locked; privateNodeNotice = "Private records are unavailable. Protected actions remain closed." }
     }

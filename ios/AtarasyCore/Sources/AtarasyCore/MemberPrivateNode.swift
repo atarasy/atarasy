@@ -121,6 +121,12 @@ public actor MemberPrivateNode {
     private var crypto: MemberPrivateNodeCrypto?
     public private(set) var state: MemberPrivateNodeState = .locked
     public init(environment: MemberEnvironment, service: any MemberPrivateNodeService, vault: any MemberOperationKeyVault) { self.environment = environment; self.service = service; self.vault = vault }
+    private func verify(_ records: [MemberPrivateNodeRecord], codec: MemberPrivateNodeCrypto, household: String) throws {
+        for record in records {
+            let clear = try codec.open(record, environment: environment, household: household)
+            if record.id == Self.bootstrapID, clear != Self.bootstrap { throw MemberFailure.scopeMismatch }
+        }
+    }
     public func open(session: MemberSessionInfo) async throws -> MemberPrivateNodeState {
         lock(); let index = try await service.privateNodeRecords(), reference = PrivateNodeCodec.scope(environment: environment, household: session.household)
         var key = try vault.key(scope: reference, create: false)
@@ -135,7 +141,7 @@ public actor MemberPrivateNode {
             let record = try await service.writePrivateNodeRecord(id: Self.bootstrapID, expectedRevision: 0, envelope: envelope)
             guard try codec.open(record, environment: environment, household: session.household) == Self.bootstrap else { throw MemberFailure.scopeMismatch }
         } else {
-            for record in index.records { _ = try codec.open(record, environment: environment, household: session.household) }
+            try verify(index.records, codec: codec, household: session.household)
         }
         self.session = session; crypto = codec; state = .ready; return state
     }
@@ -149,6 +155,18 @@ public actor MemberPrivateNode {
     public func read(id: String) async throws -> Data {
         guard state == .ready, let session, let crypto else { throw MemberFailure.storage }
         return try crypto.open(await service.privateNodeRecord(id: id), environment: environment, household: session.household)
+    }
+    public func recoveryKey(session: MemberSessionInfo) throws -> Data {
+        guard state == .ready, self.session?.id == session.id, self.session?.household == session.household,
+              let key = try vault.key(scope: PrivateNodeCodec.scope(environment: environment, household: session.household), create: false) else { throw MemberFailure.storage }
+        return key
+    }
+    public func installRecoveredKey(_ key: Data, session: MemberSessionInfo) async throws {
+        guard state == .recoveryRequired, key.count == 32 else { throw MemberFailure.storage }
+        let index = try await service.privateNodeRecords(); guard !index.records.isEmpty else { throw MemberFailure.storage }
+        let codec = try MemberPrivateNodeCrypto(key: key); try verify(index.records, codec: codec, household: session.household)
+        try vault.install(key: key, scope: PrivateNodeCodec.scope(environment: environment, household: session.household))
+        self.session = session; crypto = codec; state = .ready
     }
     public func lock() { session = nil; crypto = nil; state = .locked }
 }
