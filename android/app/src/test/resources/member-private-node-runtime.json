@@ -1,0 +1,21 @@
+{
+  "profile": "atarasy.private-node-fixture.1",
+  "scope": "Synthetic cross-language AES-256-GCM record; no bearer credential or live data.",
+  "environment": {
+    "name": "test",
+    "origin": "https://unit.example"
+  },
+  "household": "key:4ujxPiVA_54qZ7wGvL0NQAPzIYKNpof1UU-vPfW2INI",
+  "key": "JSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSU",
+  "clear": "U3ludGhldGljIHByaXZhdGUgcHVyY2hhc2UgYW5kIG5vdGU7IG5ldmVyIGhvc3QgcGxhaW50ZXh0Lg",
+  "record": {
+    "id": "a9deb943-f623-448f-be4a-e22b78cdd31a",
+    "revision": 2,
+    "updatedAt": 1800000000001,
+    "envelope": {
+      "profile": "atarasy.private-node-record.1",
+      "nonce": "CAgICAgICAgICAgI",
+      "ciphertext": "OOeIvUKglBJZ3K0Jq07YoWzgY0ySH4g_p-7Lp9QRnmut0ohJ899CA6zNlNc6bOQ7CXftT9XHl9DaiV_4WrHYwpvN7cHvwf7B4q8"
+    }
+  }
+}

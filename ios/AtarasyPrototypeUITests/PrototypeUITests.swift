@@ -89,6 +89,107 @@ final class PrototypeUITests: XCTestCase {
         tap("refreshMemberDetail", app)
         XCTAssertFalse(app.staticTexts["reviewCarriageUnknown"].exists)
     }
+    @MainActor func testDigitalChoicesRemainUnsentAndRefreshDiscardsThem() {
+        let app = launch("--member-list-fixture")
+        tap("memberAccount", app); tap("memberProposal-fixture-member-offer", app); tap("loadMemberReview", app)
+        let choice = app.buttons["digitalChoice-1795cde3-6d08-48a1-8082-2b39e1b41e11"]
+        for _ in 0..<14 { if choice.isHittable { break }; app.swipeUp() }
+        XCTAssertTrue(choice.isHittable)
+        choice.tap(); app.buttons["Decline"].tap()
+        XCTAssertTrue(choice.label.contains("Decline"))
+        XCTAssertFalse(app.staticTexts["digitalDraftTotal"].exists)
+        XCTAssertFalse(app.buttons["signButton"].exists)
+        tap("refreshMemberDetail", app)
+        XCTAssertFalse(choice.exists)
+        for _ in 0..<14 { if app.buttons["loadMemberReview"].isHittable { break }; app.swipeDown() }
+        tap("loadMemberReview", app)
+        for _ in 0..<14 { if choice.isHittable { break }; app.swipeUp() }
+        XCTAssertTrue(choice.label.contains("Choose"))
+    }
+    @MainActor func testPermissionRequestGrantReadbackAndCancellation() {
+        let app = launch("--member-request-fixture"); tap("memberAccount", app)
+        let request = app.buttons.containing(.staticText, identifier: "Check whether you already have synthetic tea").firstMatch
+        XCTAssertTrue(request.waitForExistence(timeout: 8)); request.tap()
+        XCTAssertTrue(app.staticTexts["Requested by: Example giver"].waitForExistence(timeout: 5))
+        tap("Allow this access", app)
+        XCTAssertTrue(app.staticTexts["requestNotice"].label.contains("could not be confirmed"))
+        XCTAssertFalse(app.buttons["Allow this access"].isEnabled)
+        tap("Check this request again", app)
+        XCTAssertTrue(app.staticTexts["Granted"].waitForExistence(timeout: 5))
+        let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "Frozen permission request recovered after response loss"; shot.lifetime = .keepAlways; add(shot)
+        app.terminate(); app.launch(); tap("memberAccount", app)
+        XCTAssertTrue(request.waitForExistence(timeout: 8)); request.tap(); tap("Cancel request", app)
+        XCTAssertTrue(app.staticTexts["Cancelled"].waitForExistence(timeout: 5)); XCTAssertFalse(app.buttons["Allow this access"].exists)
+    }
+    @MainActor func testDialsShowsPriorCosignersAndReadsBackZeroCosignerChange() {
+        let app = launch("--member-dials-fixture"); tap("memberAccount", app)
+        XCTAssertTrue(app.navigationBars["Dials"].waitForExistence(timeout: 8))
+        let pending = app.descendants(matching: .any).matching(identifier: "pendingMandateChange-11111111-1111-4111-8111-111111111111").firstMatch
+        for _ in 0..<8 { if pending.isHittable { break }; app.swipeUp() }
+        XCTAssertTrue(pending.isHittable); pending.tap()
+        let signerBasis = app.descendants(matching: .any).matching(identifier: "mandateSignerBasis").firstMatch
+        for _ in 0..<8 { if signerBasis.isHittable { break }; app.swipeUp() }
+        XCTAssertTrue(signerBasis.isHittable)
+        XCTAssertEqual(signerBasis.label, "Signatures required by effective version 3")
+        let family = app.descendants(matching: .any).matching(identifier: "mandateSigner-key:family-fixture").firstMatch
+        XCTAssertTrue(family.exists)
+        XCTAssertEqual(family.label, "Waiting · key:family-fixture")
+        let waiting = XCTAttachment(screenshot: app.screenshot()); waiting.name = "Mandate loosening waits for prior co-signer"; waiting.lifetime = .keepAlways; add(waiting)
+        app.navigationBars["Mandate review"].buttons.element(boundBy: 0).tap()
+        let zero = app.descendants(matching: .any).matching(identifier: "editMandate-key:member-fixture.zero").firstMatch
+        for _ in 0..<10 { if zero.isHittable { break }; app.swipeDown() }
+        XCTAssertTrue(zero.isHittable); zero.tap()
+        let ceiling = app.textFields["mandateOutsideCeiling"]; XCTAssertTrue(ceiling.waitForExistence(timeout: 5)); ceiling.tap(); ceiling.typeText("1")
+        tap("reviewMandateChange", app)
+        for _ in 0..<12 { if app.switches["acknowledgeMandateChange"].isHittable { break }; app.swipeUp() }
+        tap("acknowledgeMandateChange", app); tap("signMandateChange", app)
+        let notice = app.descendants(matching: .any).matching(identifier: "dialsNotice").firstMatch
+        for _ in 0..<10 { if notice.isHittable { break }; app.swipeUp() }
+        XCTAssertTrue(notice.isHittable)
+        XCTAssertTrue(notice.label.contains("version 2 is effective"))
+        let effective = XCTAttachment(screenshot: app.screenshot()); effective.name = "Zero co-signer mandate change is effective"; effective.lifetime = .keepAlways; add(effective)
+    }
+    @MainActor func testPermissionCancelAndLostResponseReadback() {
+        let app = launch("--member-permission-fixture"); tap("memberAccount", app)
+        let revoke = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "revokePermission-")).firstMatch
+        XCTAssertTrue(revoke.waitForExistence(timeout: 8)); let selectedID = revoke.identifier.replacingOccurrences(of: "revokePermission-", with: ""); revoke.tap()
+        app.buttons["Cancel"].tap(); XCTAssertFalse(app.staticTexts["Revoked"].exists)
+        revoke.tap(); app.buttons["Revoke permission"].tap()
+        for _ in 0..<6 { if app.staticTexts["permissionNotice"].isHittable { break }; app.swipeUp() }
+        XCTAssertTrue(app.staticTexts["permissionNotice"].label.contains("could not be confirmed"))
+        for _ in 0..<6 { if app.buttons["refreshPermissions"].isHittable { break }; app.swipeDown() }
+        tap("refreshPermissions", app); XCTAssertTrue(app.staticTexts["Revoked"].waitForExistence(timeout: 5)); XCTAssertTrue(app.staticTexts["Active"].exists)
+        XCTAssertEqual(app.staticTexts["permissionStatus-" + selectedID].label, "Revoked")
+        let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "Permission revoked and unrelated grant retained"; shot.lifetime = .keepAlways; add(shot)
+    }
+    @MainActor func testWithdrawalReviewLostResponseAndResultReadback() {
+        let app = launch("--member-withdrawal-fixture")
+        tap("memberAccount", app); tap("prepareWithdrawal", app)
+        for _ in 0..<20 { if app.buttons["approveWithdrawal"].isHittable { break }; app.swipeUp() }
+        XCTAssertFalse(app.buttons["approveWithdrawal"].isEnabled)
+        tap("acknowledgeWithdrawal", app); tap("approveWithdrawal", app)
+        XCTAssertTrue(app.staticTexts["withdrawalNotice"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["withdrawalNotice"].label.contains("result could not be read"))
+        XCTAssertFalse(app.buttons["approveWithdrawal"].exists)
+        tap("checkWithdrawal", app)
+        XCTAssertTrue(app.staticTexts["withdrawalNotice"].label.contains("Withdrawal recorded"))
+        let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "Synthetic withdrawal recovered after response loss"; shot.lifetime = .keepAlways; add(shot)
+    }
+    @MainActor func testDigitalReviewLostResponseAndResultReadback() {
+        let app = launch("--member-digital-fixture")
+        tap("memberAccount", app); tap("prepareDigitalDecision", app)
+        XCTAssertTrue(app.staticTexts["frozenDigitalTotal"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["frozenDigitalTotal"].label, "Goods and carriage: 1,750")
+        for _ in 0..<20 { if app.buttons["approveDigitalDecision"].isHittable { break }; app.swipeUp() }
+        XCTAssertFalse(app.buttons["approveDigitalDecision"].isEnabled)
+        tap("acknowledgeDigitalDecision", app); tap("approveDigitalDecision", app)
+        XCTAssertTrue(app.staticTexts["digitalFlowNotice"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["digitalFlowNotice"].label.contains("result could not be read"))
+        XCTAssertFalse(app.buttons["approveDigitalDecision"].exists)
+        tap("checkDigitalDecision", app)
+        XCTAssertTrue(app.staticTexts["digitalFlowNotice"].label.contains("Decision recorded"))
+        let image = XCTAttachment(screenshot: app.screenshot()); image.name = "Synthetic digital decision recovered after response loss"; image.lifetime = .keepAlways; add(image)
+    }
     @MainActor func testNativeStatementReviewAndUnresolvedResult() {
         let app = launch("--member-statement-fixture")
         tap("memberAccount", app); tap("prepareMemberStatement", app)

@@ -2,6 +2,12 @@
 
 This isolated development branch contains the first native iPhone/iPad interaction prototype and a small independently implemented Swift canonical codec. The default sample inbox does not connect to a host or contact a payment provider, and its records are synthetic. The separate member account flow is enabled only by trusted service configuration; no production privacy or deployed integration is claimed.
 
+[Native private storage](NATIVE_PRIVATE_STORAGE.md) documents the encrypted operation journal, blind-host record profile and lock/logout/reinstall/revocation behavior used by configured member accounts.
+
+[Native recovery](NATIVE_RECOVERY.md) documents the recovery-only key, two-of-three share placement, named-recoverer approval, independent-notice gate and replacement-device key installation.
+
+[Native host move](NATIVE_HOST_MOVE.md) documents configured target selection, device-side re-encryption, target surface verification, target-origin receipt attestation and source retirement.
+
 ## Run
 
 Use the installed Xcode with an available iOS simulator and XcodeGen. From the repository root:
@@ -35,7 +41,7 @@ UI tests exercise household filtering, arrival ordering, partial-source display,
 
 ## What remains
 
-Dials/co-signer UI, private-node key storage, host migration, operator workbench and the production coordinator are not implemented here. Native account presentation and AuthenticationServices request handling are now implemented, with device acceptance still outstanding. The schemas are an executable native request/statement subset, not all IC-01–08. The proposed integration envelope has no deployed endpoint. The separate contract README and manifest retain those distinctions.
+The local private-node, recovery and host-move boundaries are implemented. Operator routing, a stable deployed target directory, cross-origin passkey acceptance and the production coordinator remain open. Native account presentation, AuthenticationServices request handling and Dials/co-signer UI are implemented, with deployed multi-account and device acceptance still outstanding. The schemas are an executable native subset, not all IC-01–08. The separate contract README and manifest retain those distinctions.
 
 Measured results and screenshots are retained in [the validation record](evidence/validation.json).
 
@@ -82,3 +88,11 @@ The core can now prepare scoped physical statement bytes and compare a subsequen
 The core now includes [member operation transport](MEMBER_OPERATION_TRANSPORT.md): restricted member routes, contextual challenge validation, durable operation correlation and signature-free outcome reads. Native review/signing and restart-discovery UI integration remain next.
 
 [Native statement flow](NATIVE_STATEMENT_FLOW.md) connects physical review, selected-credential platform requests and saved result checking in the configured member account. The dedicated UI-test fixture exercises the screen without network or an authenticator; real-device ceremony verification remains outstanding.
+
+[Native digital withdrawal](NATIVE_WITHDRAWAL_FLOW.md) connects saved decisions to cooling review, a separate passkey profile, durable submission and historical outcome recovery. Refresh the proposal before choosing again after withdrawal.
+
+[Native permissions](NATIVE_PERMISSIONS.md) adds authenticated grant history and individual revocation under Account, with confirmation cancellation and GET-only recovery after an uncertain response. Action-specific new grants remain separate work.
+
+[Native Dials](NATIVE_DIALS.md) adds effective mandate reads, complete before/after editing, zero-co-signer updates, prior-version co-signature waiting, cancellation and effective-version read-back. Real-device and deployed two-member acceptance remain separate.
+
+[Protected refresh](NATIVE_REFRESH.md) adds a wake-only APNs payload, foreground-only authenticated refresh, per-source freshness and visibly stale cached rows. A deployed APNs provider and physical-device background acceptance remain separate.

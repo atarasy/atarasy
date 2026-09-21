@@ -11,7 +11,7 @@
  * confirmation is the passkey's assertion over the set (§10.5), made by the
  * browser's own authenticator. This page never sees a private key.
  */
-import { canonicalDecisions, canonicalStatement, type Decision, type StatementLine } from "../shared/canonical.js";
+import { canonicalDecisions, canonicalStatement, canonicalWithdrawal, type Decision, type StatementLine } from "../shared/canonical.js";
 import { canonicalMandate, type Mandate } from "../shared/mandate.js";
 import { fromBase64, memberKeyFromHandle, newMemberKey, toBase64, toBase64Url } from "../shared/encoding.js";
 // The rule that sorts a member's own list, in a module the suite can reach:
@@ -469,9 +469,15 @@ async function offers(member: Member) {
     const undo = el("button", {}, "Take it back") as HTMLButtonElement;
     undo.onclick = async () => {
       undo.disabled = true;
-      const taken = await api<{ error?: string; message?: string }>("DELETE", `/offers/${encodeURIComponent(o.id)}/decisions`);
-      if (taken.status === 200) { await offers(member); return; }
-      said.textContent = refusal(taken.body, taken.status);
+      try {
+        if (o.decided_at === null) throw new Error("This decision has no recorded decision time, so it cannot be taken back safely.");
+        const signature = await signOver(member, new TextEncoder().encode(canonicalWithdrawal(o.id, o.decided_at)));
+        const taken = await api<{ error?: string; message?: string }>("DELETE", `/offers/${encodeURIComponent(o.id)}/decisions`, { signature });
+        if (taken.status === 200) { await offers(member); return; }
+        said.textContent = refusal(taken.body, taken.status);
+      } catch (e) {
+        said.textContent = (e as Error).message;
+      }
       undo.disabled = false;
     };
     return el("div", { class: "card" },

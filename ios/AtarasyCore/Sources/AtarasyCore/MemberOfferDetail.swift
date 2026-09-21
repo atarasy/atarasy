@@ -1,8 +1,8 @@
 import Foundation
 
-public struct MemberOfferDetail: Decodable, Equatable, Sendable {
-    public struct PriceBand: Decodable, Equatable, Sendable { public let min: Int64; public let max: Int64 }
-    public struct Candidate: Decodable, Equatable, Sendable {
+public struct MemberOfferDetail: Codable, Equatable, Sendable {
+    public struct PriceBand: Codable, Equatable, Sendable { public let min: Int64; public let max: Int64 }
+    public struct Candidate: Codable, Equatable, Sendable {
         public let id: String; public let product: String; public let quantity: Int64; public let unitPrice: Int64
         public let merchant: String; public let maker: String; public let ships: String
         public let category: String?; public let predictedConversion: Double?; public let isExploration: Bool
@@ -10,8 +10,8 @@ public struct MemberOfferDetail: Decodable, Equatable, Sendable {
         /// §3, question 48. What the collection named this line, or nil where none did or the engine predates the field.
         public let collectedAs: String?
     }
-    public struct Disclosure: Decodable, Equatable, Sendable {
-        public struct Item: Decodable, Equatable, Sendable { public let label: String; public let value: String }
+    public struct Disclosure: Codable, Equatable, Sendable {
+        public struct Item: Codable, Equatable, Sendable { public let label: String; public let value: String }
         public let merchant: String; public let product: String?; public let version: String
         public let items: [Item]; public let signature: String
     }

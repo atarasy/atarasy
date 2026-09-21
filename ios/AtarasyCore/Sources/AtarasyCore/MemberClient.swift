@@ -2,16 +2,29 @@ import Foundation
 
 public enum MemberLogoutOutcome: Sendable { case noLocalSession, revoked }
 public actor MemberClient {
-    private let environment: MemberEnvironment
+    let environment: MemberEnvironment
     private let transport: any MemberHTTPTransport
     private let vault: any MemberSessionVault
-    private let now: @Sendable () -> Int64
+    let now: @Sendable () -> Int64
     private var active: StoredMemberSession?
     private var generation: UInt64 = 0
     private var authenticating = false
     private var mandateReview: MemberMandateReview?
+    private var mandateChangeReview: PreparedMemberMandateChange?
     public init(environment: MemberEnvironment, transport: any MemberHTTPTransport, vault: any MemberSessionVault, now: @escaping @Sendable () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }) {
         self.environment = environment; self.transport = transport; self.vault = vault; self.now = now
+    }
+    public func lockLocalAccess() async {
+        generation &+= 1; active = nil; mandateReview = nil; mandateChangeReview = nil
+    }
+    func requireActiveSession(_ id: String) throws -> MemberSessionInfo {
+        guard let active, active.info.id == id, live(active.info.expiresAt) else { throw MemberFailure.expired }
+        return active.info
+    }
+    func removeRetiredLocalSession(_ expected: MemberSessionInfo) throws {
+        guard let active, active.info == expected else { throw MemberFailure.superseded }
+        try vault.remove(environment: environment, household: expected.household)
+        generation &+= 1; self.active = nil; mandateReview = nil; mandateChangeReview = nil
     }
     private func same(_ a: String, _ b: String) -> Bool { Data(a.utf8) == Data(b.utf8) }
     private func live(_ expiry: Int64) -> Bool { expiry > now() && expiry <= 9_007_199_254_740_991 }
@@ -19,7 +32,7 @@ public actor MemberClient {
         !info.id.isEmpty && !info.household.isEmpty && live(info.expiresAt) && info.presenters.allSatisfy { !$0.isEmpty }
     }
     private func tokenValid(_ token: String) -> Bool { token.range(of: "^amr1_[A-Za-z0-9_-]{43}\\z", options: .regularExpression) != nil }
-    private func send(_ path: String, query: [URLQueryItem] = [], body: Data? = nil, token: String? = nil) async throws -> MemberHTTPReply {
+    func send(_ path: String, query: [URLQueryItem] = [], body: Data? = nil, token: String? = nil) async throws -> MemberHTTPReply {
         var c = URLComponents(url: environment.origin, resolvingAgainstBaseURL: false)!
         c.path = path; c.queryItems = query.isEmpty ? nil : query
         // URLSearchParams on the service decodes a literal + as a space.
@@ -36,7 +49,7 @@ public actor MemberClient {
         guard reply.cacheControl?.lowercased().split(separator: ",").map({ $0.trimmingCharacters(in: .whitespaces) }).contains("no-store") == true else { throw MemberFailure.malformed }
         return reply
     }
-    private func decode<T: Decodable>(_ type: T.Type, _ reply: MemberHTTPReply, status: Int = 200, keys: Set<String>? = nil) throws -> T {
+    func decode<T: Decodable>(_ type: T.Type, _ reply: MemberHTTPReply, status: Int = 200, keys: Set<String>? = nil) throws -> T {
         guard reply.status == status else { throw MemberFailure.http(reply.status) }
         guard reply.contentType?.split(separator: ";").first?.trimmingCharacters(in: .whitespaces).lowercased() == "application/json" else { throw MemberFailure.malformed }
         if let keys {
@@ -128,7 +141,7 @@ public actor MemberClient {
             return .revoked
         } catch { throw MemberFailure.remoteLogoutUnconfirmed }
     }
-    private func read(_ path: String, query: [URLQueryItem] = [], body: Data? = nil) async throws -> (MemberHTTPReply, MemberSessionInfo) {
+    func read(_ path: String, query: [URLQueryItem] = [], body: Data? = nil) async throws -> (MemberHTTPReply, MemberSessionInfo) {
         guard let session = active else { throw MemberFailure.expired }
         guard live(session.info.expiresAt) else {
             generation &+= 1; active = nil; try vault.remove(environment: environment, household: session.info.household); throw MemberFailure.expired
@@ -209,8 +222,8 @@ public actor MemberClient {
         try mandateIdentifier(id); let (reply, info) = try await read("/_node/mandates/" + id)
         return try ReferenceResponseReader.mandate(status: reply.status, contentType: reply.contentType, data: reply.data, expectedID: id, expectedHousehold: info.household)
     }
-    private func operationScope(_ handle: MemberOperationHandle) throws {
-        guard UUID(uuidString: handle.id)?.uuidString.lowercased() == handle.id,
+    private func operationScope(_ handle: MemberOperationHandle, profile: String = "atarasy.member-statement-authorisation.1") throws {
+        guard handle.operationProfile == profile, UUID(uuidString: handle.id)?.uuidString.lowercased() == handle.id,
               let session = active?.info, live(session.expiresAt),
               same(handle.environment, environment.name), handle.origin == environment.origin,
               // Not the session id: binding to it stranded a result after signing in again. The journal
@@ -337,7 +350,8 @@ public actor MemberClient {
         } catch { return .unresolved }
     }
     public func cancelOperation(_ handle: MemberOperationHandle) async throws {
-        try operationScope(handle)
+        guard ["atarasy.member-statement-authorisation.1", memberDecisionProfile, memberWithdrawalProfile].contains(handle.operationProfile) else { throw MemberFailure.scopeMismatch }
+        try operationScope(handle, profile: handle.operationProfile)
         let (reply, _) = try await read("/member/operations/" + handle.id + "/cancel", body: Data("{}".utf8))
         // The public cancellation route returns only an acknowledgement, not the journal row.
         guard reply.status == 200 else { throw MemberFailure.http(reply.status) }
@@ -408,5 +422,307 @@ extension MemberClient {
             let recorded = try decode(MemberMandate.self, reply)
             guard recorded == held.mandate else { throw MemberFailure.scopeMismatch }
         } catch { throw MemberFailure.uncertainVerification }
+    }
+}
+
+extension MemberClient {
+    private struct MandateList: Decodable { let mandates: [MemberMandate] }
+    private struct MandateChangeList: Decodable { let changes: [MemberMandateChange] }
+    private struct PreparedMandateChangeWire: Decodable {
+        let id: String; let before: MemberMandate; let mandate: MemberMandate
+        let requiredSigners: [String]; let signedBy: [String]; let state: String
+        let createdAt: Int64; let updatedAt: Int64; let publicKey: [String: MemberJSON]
+        var change: MemberMandateChange { .init(id: id, before: before, mandate: mandate, requiredSigners: requiredSigners, signedBy: signedBy, state: state, createdAt: createdAt, updatedAt: updatedAt) }
+    }
+    private func checkedChange(_ change: MemberMandateChange, session: MemberSessionInfo) throws {
+        guard UUID(uuidString: change.id)?.uuidString.lowercased() == change.id,
+              change.before.id == change.mandate.id,
+              change.before.household == change.mandate.household,
+              change.mandate.version == change.before.version + 1,
+              ["pending", "effective", "cancelled", "stale"].contains(change.state),
+              change.createdAt >= 0, change.updatedAt >= change.createdAt,
+              Set(change.requiredSigners).count == change.requiredSigners.count,
+              Set(change.signedBy).count == change.signedBy.count,
+              change.signedBy.allSatisfy(change.requiredSigners.contains),
+              change.requiredSigners.contains(change.mandate.household),
+              change.mandate.household == session.household || change.requiredSigners.contains(session.household) else { throw MemberFailure.scopeMismatch }
+        try mandateIdentifier(change.mandate.id)
+        try Canonical.validateMandate(.init(id: change.before.id, household: change.before.household, ceilingOutOfNetwork: change.before.ceilingOutOfNetwork, ceilingDaily: change.before.ceilingDaily, coolingSeconds: change.before.coolingSeconds, coSigners: change.before.coSigners, lapsesAt: change.before.lapsesAt, version: change.before.version))
+        try Canonical.validateMandate(.init(id: change.mandate.id, household: change.mandate.household, ceilingOutOfNetwork: change.mandate.ceilingOutOfNetwork, ceilingDaily: change.mandate.ceilingDaily, coolingSeconds: change.mandate.coolingSeconds, coSigners: change.mandate.coSigners, lapsesAt: change.mandate.lapsesAt, version: change.mandate.version))
+    }
+    private func checkedEffectiveMandate(_ mandate: MemberMandate, household: String) throws {
+        try mandateIdentifier(mandate.id)
+        guard same(mandate.household, household), mandate.id.hasPrefix(household + "."),
+              Set(mandate.coSigners).count == mandate.coSigners.count,
+              mandate.coSigners.allSatisfy({ !$0.isEmpty && !$0.contains("\n") && !$0.contains("\r") }) else { throw MemberFailure.scopeMismatch }
+        _ = try mandate.canonical(host: environment.origin.host!)
+    }
+    private func preparedChange(_ reply: MemberHTTPReply, session: MemberSessionInfo) throws -> PreparedMemberMandateChange {
+        let wire = try decode(PreparedMandateChangeWire.self, reply, status: reply.status, keys: ["id", "before", "mandate", "requiredSigners", "signedBy", "state", "createdAt", "updatedAt", "publicKey"])
+        let change = wire.change; try checkedChange(change, session: session)
+        guard change.state == "pending", wire.publicKey["challenge"] == .string(try Canonical.challenge(change.mandate.canonical(host: environment.origin.host!))) else { throw MemberFailure.scopeMismatch }
+        let ceremony = MemberCeremony(id: change.id, expiresAt: min(session.expiresAt, now() + 300_000), publicKey: wire.publicKey)
+        let options = try NativePasskeyOptions(ceremony: ceremony, environment: environment, kind: .statement, now: now())
+        guard options.allowedCredentialIDs.count == 1 else { throw MemberFailure.scopeMismatch }
+        return .init(change: change, ceremony: ceremony, sessionID: session.id, credentialID: PasskeyBytes.encode(options.allowedCredentialIDs[0]))
+    }
+    public func effectiveMandates() async throws -> [MemberMandate] {
+        let (reply, info) = try await read("/member/mandates/effective")
+        let values = try decode(MandateList.self, reply, keys: ["mandates"]).mandates
+        guard values.count <= 100, Set(values.map(\.id)).count == values.count else { throw MemberFailure.malformed }
+        for value in values { try checkedEffectiveMandate(value, household: info.household) }
+        return values
+    }
+    public func mandateChanges() async throws -> [MemberMandateChange] {
+        let (reply, info) = try await read("/member/mandates/changes")
+        let values = try decode(MandateChangeList.self, reply, keys: ["changes"]).changes
+        guard values.count <= 100, Set(values.map(\.id)).count == values.count else { throw MemberFailure.malformed }
+        for value in values { try checkedChange(value, session: info) }
+        return values
+    }
+    public func prepareMandateChange(_ mandate: MemberMandate) async throws -> PreparedMemberMandateChange {
+        mandateChangeReview = nil
+        struct Input: Encodable { let mandate: MemberMandate }
+        let (reply, info) = try await read("/member/mandates/changes", body: JSONEncoder().encode(Input(mandate: mandate)))
+        guard reply.status == 201 else { throw MemberFailure.http(reply.status) }
+        let prepared = try preparedChange(reply, session: info)
+        guard prepared.change.mandate == mandate, prepared.change.before.household == info.household else { throw MemberFailure.scopeMismatch }
+        mandateChangeReview = prepared; return prepared
+    }
+    public func prepareMandateSignature(_ id: String) async throws -> PreparedMemberMandateChange {
+        mandateChangeReview = nil
+        guard UUID(uuidString: id)?.uuidString.lowercased() == id else { throw MemberFailure.invalidInput }
+        let (reply, info) = try await read("/member/mandates/changes/" + id + "/prepare")
+        let prepared = try preparedChange(reply, session: info)
+        guard prepared.change.id == id, prepared.change.requiredSigners.contains(info.household) else { throw MemberFailure.scopeMismatch }
+        mandateChangeReview = prepared; return prepared
+    }
+    public func submitMandateChange(_ prepared: PreparedMemberMandateChange, assertion: MemberPasskeyResponse) async throws -> MemberMandateChange {
+        guard let held = mandateChangeReview, held.change == prepared.change, held.ceremony.id == prepared.ceremony.id,
+              let active, same(active.info.id, held.sessionID), live(active.info.expiresAt), live(held.ceremony.expiresAt),
+              same(assertion.id, held.credentialID), case .string(let clientData) = assertion.response["clientDataJSON"] else { throw MemberFailure.scopeMismatch }
+        let bytes = try PasskeyBytes.decode(clientData, maximum: 8192)
+        guard let object = try JSONSerialization.jsonObject(with: bytes) as? [String: Any],
+              object["type"] as? String == "webauthn.get", object["origin"] as? String == environment.origin.absoluteString,
+              object["challenge"] as? String == Canonical.challenge(try held.change.mandate.canonical(host: environment.origin.host!)) else { throw MemberFailure.scopeMismatch }
+        func field(_ key: String) throws -> String {
+            guard case .string(let value) = assertion.response[key] else { throw MemberFailure.invalidInput }
+            return try PasskeyBytes.decode(value, maximum: 8192).base64EncodedString()
+        }
+        struct EngineAssertion: Encodable { let client_data_json: String; let authenticator_data: String; let signature: String }
+        struct Input: Encodable { let assertion: EngineAssertion }
+        let wire = try EngineAssertion(client_data_json: field("clientDataJSON"), authenticator_data: field("authenticatorData"), signature: field("signature"))
+        mandateChangeReview = nil
+        do {
+            let (reply, info) = try await read("/member/mandates/changes/" + held.change.id + "/submit", body: JSONEncoder().encode(Input(assertion: wire)))
+            let result = try decode(MemberMandateChange.self, reply, keys: ["id", "before", "mandate", "requiredSigners", "signedBy", "state", "createdAt", "updatedAt"])
+            try checkedChange(result, session: info); guard result.id == held.change.id else { throw MemberFailure.scopeMismatch }; return result
+        } catch { throw MemberFailure.uncertainVerification }
+    }
+    public func cancelMandateChange(_ id: String) async throws -> MemberMandateChange {
+        guard UUID(uuidString: id)?.uuidString.lowercased() == id else { throw MemberFailure.invalidInput }
+        let (reply, info) = try await read("/member/mandates/changes/" + id + "/cancel", body: Data("{}".utf8))
+        let result = try decode(MemberMandateChange.self, reply, keys: ["id", "before", "mandate", "requiredSigners", "signedBy", "state", "createdAt", "updatedAt"])
+        try checkedChange(result, session: info); guard result.id == id, result.state == "cancelled" else { throw MemberFailure.scopeMismatch }; return result
+    }
+}
+
+extension MemberClient {
+    private func digitalPrepared(_ reply: MemberHTTPReply, canonical: String) throws -> MemberPreparedDecision {
+        let value = try decode(MemberPreparedDecision.self, reply, keys: ["profile", "operationID", "requestDigest", "reviewedRevision", "expiresAt", "canonical", "review", "operationState", "publicKey"])
+        try value.validate(environment: environment, canonical: canonical)
+        return value
+    }
+    public func prepareDecision(_ local: PreparedMemberDecision, store: any MemberOperationStore) async throws -> (MemberOperationHandle, MemberPreparedDecision) {
+        guard let info = active?.info, same(local.session.id, info.id), local.environment == environment,
+              same(local.detail.household, info.household), info.presenters.contains(where: { same($0, local.detail.presenter) }) else { throw MemberFailure.scopeMismatch }
+        let rows = local.decisions.map { d -> MemberJSON in
+            var row: [String: MemberJSON] = ["candidate": .string(d.candidate), "valence": .string(d.valence)]
+            if let keptAs = d.keptAs { row["kept_as"] = .string(keptAs) }
+            return .object(row)
+        }
+        let body = try JSONEncoder().encode(MemberJSON.object(["offer": .string(local.detail.id), "decisions": .array(rows)]))
+        let (reply, _) = try await read("/member/decisions/prepare", body: body)
+        let prepared = try digitalPrepared(reply, canonical: local.canonical)
+        _ = try FrozenMemberDecision(prepared, local: local, now: now())
+        guard prepared.operationState == "prepared", live(prepared.expiresAt), prepared.expiresAt <= info.expiresAt,
+              case .string(let challenge) = prepared.publicKey["challenge"], case .array(let credentials) = prepared.publicKey["allowCredentials"],
+              case .object(let credential) = credentials[0], case .string(let id) = credential["id"] else { throw MemberFailure.malformed }
+        let handle = MemberOperationHandle(id: prepared.operationID, environment: environment.name, origin: environment.origin, sessionID: info.id, household: info.household, presenter: local.detail.presenter, offer: local.detail.id, canonical: local.canonical, expiresAt: prepared.expiresAt, requestDigest: prepared.requestDigest, reviewedRevision: prepared.reviewedRevision, challenge: challenge, credentialID: id, attempted: false, profile: memberDecisionProfile, digitalTermsDigest: try digitalTermsDigest(local.detail))
+        do { try store.save(handle); return (try store.load(id: handle.id) ?? handle, prepared) } catch { throw MemberFailure.storage }
+    }
+    public func decisionReview(_ handle: MemberOperationHandle) async throws -> MemberPreparedDecision {
+        try operationScope(handle, profile: memberDecisionProfile)
+        let (reply, _) = try await read("/member/operations/" + handle.id)
+        let value = try digitalPrepared(reply, canonical: handle.canonical)
+        guard value.operationID == handle.id, value.expiresAt == handle.expiresAt, value.requestDigest == handle.requestDigest,
+              value.reviewedRevision == handle.reviewedRevision, value.publicKey["challenge"] == .string(handle.challenge),
+              case .array(let credentials) = value.publicKey["allowCredentials"], case .object(let credential) = credentials[0], credential["id"] == .string(handle.credentialID) else { throw MemberFailure.scopeMismatch }
+        return value
+    }
+    private func decisionOutcome(_ reply: MemberHTTPReply, handle: MemberOperationHandle) throws -> MemberDecisionOutcome {
+        struct Envelope: Decodable { let operationID: String; let operationState: String; let decision: MemberJSON }
+        let value = try decode(Envelope.self, reply, keys: ["operationID", "operationState", "decision"])
+        guard value.operationID == handle.id else { throw MemberFailure.scopeMismatch }
+        if value.operationState != "committed" {
+            guard ["prepared", "dispatching", "uncertain", "cancelled", "refused"].contains(value.operationState), value.decision == .null else { throw MemberFailure.malformed }
+            return .pending(value.operationState)
+        }
+        // The operation stores a raw immutable engine offer, including its reminder count.
+        guard case .object(var object) = value.decision, case .integer(let reminders) = object.removeValue(forKey: "reminders_sent"),
+              (0...1).contains(reminders) else { throw MemberFailure.malformed }
+        let detail = try MemberOfferDetail.decode(JSONEncoder().encode(MemberJSON.object(object)), expectedID: handle.offer, household: handle.household, presenter: handle.presenter)
+        guard detail.binding == "digital", ["decided", "settled"].contains(detail.state), let decidedAt = detail.decidedAt,
+              decidedAt < handle.expiresAt, let expected = handle.digitalTermsDigest,
+              try same(digitalTermsDigest(detail), expected), detail.candidates.allSatisfy({ c in
+                  c.decidedAt == decidedAt && c.lineage == nil &&
+                  ((c.valence == "kept" && c.keptAs == "self") || (c.valence == "returned" && c.keptAs == nil))
+              }) else { throw MemberFailure.scopeMismatch }
+        let decisions = detail.candidates.map { Decision(candidate: $0.id, valence: $0.valence, keptAs: $0.keptAs) }
+        guard same(try Canonical.decisions(offer: detail.id, lines: decisions), handle.canonical) else { throw MemberFailure.scopeMismatch }
+        return .recorded(detail)
+    }
+    public func decisionOutcome(_ handle: MemberOperationHandle) async -> MemberDecisionOutcome {
+        do {
+            try Task.checkCancellation(); try operationScope(handle, profile: memberDecisionProfile)
+            let (reply, _) = try await read("/member/operations/" + handle.id + "/outcome")
+            try Task.checkCancellation()
+            return try decisionOutcome(reply, handle: handle)
+        } catch { return .unresolved }
+    }
+    public func submitDecision(_ handle: MemberOperationHandle, assertion: MemberPasskeyResponse, store: any MemberOperationStore) async throws -> MemberDecisionOutcome {
+        try Task.checkCancellation(); try operationScope(handle, profile: memberDecisionProfile)
+        guard live(handle.expiresAt), !handle.attempted, handle.digitalTermsDigest != nil else { throw MemberFailure.expired }
+        guard same(assertion.id, handle.credentialID), case .string(let encoded) = assertion.response["clientDataJSON"] else { throw MemberFailure.invalidInput }
+        let b64 = encoded.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+        guard let bytes = Data(base64Encoded: b64 + String(repeating: "=", count: (4 - b64.count % 4) % 4)),
+              let data = try JSONSerialization.jsonObject(with: bytes) as? [String: Any], data["type"] as? String == "webauthn.get",
+              data["challenge"] as? String == handle.challenge, data["origin"] as? String == environment.origin.absoluteString,
+              data["topOrigin"] == nil, data["crossOrigin"] == nil || data["crossOrigin"] as? Bool == false,
+              case .string(let signature) = assertion.response["signature"], !signature.isEmpty else { throw MemberFailure.scopeMismatch }
+        struct Input: Encodable { let assertion: MemberPasskeyResponse }
+        let body = try JSONEncoder().encode(Input(assertion: assertion))
+        guard body.count <= 16_384 else { throw MemberFailure.invalidInput }
+        try store.claim(handle, confirmation: signature)
+        do {
+            let (reply, _) = try await read("/member/operations/" + handle.id + "/submit", body: body)
+            try Task.checkCancellation()
+            return try decisionOutcome(reply, handle: handle.markedAttempted(confirmation: signature))
+        } catch { return .unresolved }
+    }
+}
+
+extension MemberClient {
+    public func prepareWithdrawal(_ originalHandle: MemberOperationHandle, store: any MemberOperationStore) async throws -> (MemberOperationHandle, MemberPreparedDecision, FrozenMemberWithdrawal) {
+        try operationScope(originalHandle, profile: memberDecisionProfile)
+        guard let session = active?.info, case .recorded(let original) = await decisionOutcome(originalHandle) else { throw MemberFailure.unavailable }
+        let originalReview = try await decisionReview(originalHandle)
+        let (reply, info) = try await read("/member/withdrawals/prepare", body: JSONEncoder().encode(["decisionOperationID": originalHandle.id]))
+        guard session.id == info.id else { throw MemberFailure.scopeMismatch }
+        let prepared = try decode(MemberPreparedDecision.self, reply, keys: ["profile", "operationID", "requestDigest", "reviewedRevision", "expiresAt", "canonical", "review", "operationState", "publicKey"])
+        let frozen = try FrozenMemberWithdrawal(prepared, originalHandle: originalHandle, original: original, originalReview: originalReview, environment: environment, session: info, now: now())
+        guard case .string(let challenge) = prepared.publicKey["challenge"], case .array(let credentials) = prepared.publicKey["allowCredentials"],
+              case .object(let credential) = credentials[0], credential["id"] == .string(originalHandle.credentialID) else { throw MemberFailure.scopeMismatch }
+        let handle = MemberOperationHandle(id: prepared.operationID, environment: environment.name, origin: environment.origin, sessionID: info.id, household: info.household, presenter: original.presenter, offer: original.id, canonical: prepared.canonical, expiresAt: prepared.expiresAt, requestDigest: prepared.requestDigest, reviewedRevision: prepared.reviewedRevision, challenge: challenge, credentialID: originalHandle.credentialID, attempted: false, profile: memberWithdrawalProfile, digitalTermsDigest: try digitalTermsDigest(original), withdrawalDecisionID: originalHandle.id, withdrawalNextIncarnation: frozen.nextIncarnation)
+        do { try store.save(handle); return (try store.load(id: handle.id) ?? handle, prepared, frozen) } catch { throw MemberFailure.storage }
+    }
+    public func withdrawalReview(_ handle: MemberOperationHandle) async throws -> MemberPreparedDecision {
+        try operationScope(handle, profile: memberWithdrawalProfile)
+        let (reply, _) = try await read("/member/operations/" + handle.id)
+        let value = try decode(MemberPreparedDecision.self, reply, keys: ["profile", "operationID", "requestDigest", "reviewedRevision", "expiresAt", "canonical", "review", "operationState", "publicKey"])
+        try value.validate(environment: environment, canonical: handle.canonical, profile: memberWithdrawalProfile)
+        guard value.operationID == handle.id, value.expiresAt == handle.expiresAt, value.requestDigest == handle.requestDigest, value.reviewedRevision == handle.reviewedRevision,
+              value.publicKey["challenge"] == .string(handle.challenge), case .array(let credentials) = value.publicKey["allowCredentials"], case .object(let credential) = credentials[0], credential["id"] == .string(handle.credentialID) else { throw MemberFailure.scopeMismatch }
+        return value
+    }
+    private func withdrawalOutcome(_ reply: MemberHTTPReply, handle: MemberOperationHandle) throws -> MemberWithdrawalOutcome {
+        struct Envelope: Decodable { let operationID: String; let operationState: String; let withdrawal: MemberJSON }
+        let value = try decode(Envelope.self, reply, keys: ["operationID", "operationState", "withdrawal"])
+        guard value.operationID == handle.id else { throw MemberFailure.scopeMismatch }
+        if value.operationState != "committed" {
+            guard ["prepared", "dispatching", "uncertain", "cancelled", "refused"].contains(value.operationState), value.withdrawal == .null else { throw MemberFailure.malformed }
+            return .pending(value.operationState)
+        }
+        guard let originalID = handle.withdrawalDecisionID, let next = handle.withdrawalNextIncarnation, next > 0, let expected = handle.digitalTermsDigest,
+              case .object(let result) = value.withdrawal, Set(result.keys) == ["decisionOperationID", "nextIncarnation", "offer"], result["decisionOperationID"] == .string(originalID), result["nextIncarnation"] == .integer(next), let offer = result["offer"] else { throw MemberFailure.scopeMismatch }
+        let detail = try rawDigitalOffer(offer, handle: handle)
+        guard detail.binding == "digital", detail.state == "presented", detail.decidedAt == nil, try digitalTermsDigest(detail) == expected,
+              detail.candidates.allSatisfy({ $0.valence == "offered" && $0.decidedAt == nil && $0.keptAs == nil && $0.lineage == nil }) else { throw MemberFailure.scopeMismatch }
+        return .recorded(detail)
+    }
+    public func withdrawalOutcome(_ handle: MemberOperationHandle) async -> MemberWithdrawalOutcome {
+        do {
+            try Task.checkCancellation(); try operationScope(handle, profile: memberWithdrawalProfile)
+            let (reply, _) = try await read("/member/operations/" + handle.id + "/outcome")
+            try Task.checkCancellation(); return try withdrawalOutcome(reply, handle: handle)
+        } catch { return .unresolved }
+    }
+
+    public func submitWithdrawal(_ handle: MemberOperationHandle, assertion: MemberPasskeyResponse, store: any MemberOperationStore) async throws -> MemberWithdrawalOutcome {
+        try Task.checkCancellation(); try operationScope(handle, profile: memberWithdrawalProfile)
+        guard live(handle.expiresAt), !handle.attempted, handle.digitalTermsDigest != nil else { throw MemberFailure.expired }
+        guard same(assertion.id, handle.credentialID), case .string(let encoded) = assertion.response["clientDataJSON"] else { throw MemberFailure.invalidInput }
+        let b64 = encoded.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+        guard let bytes = Data(base64Encoded: b64 + String(repeating: "=", count: (4 - b64.count % 4) % 4)),
+              let data = try JSONSerialization.jsonObject(with: bytes) as? [String: Any], data["type"] as? String == "webauthn.get",
+              data["challenge"] as? String == handle.challenge, data["origin"] as? String == environment.origin.absoluteString,
+              data["topOrigin"] == nil, data["crossOrigin"] == nil || data["crossOrigin"] as? Bool == false,
+              case .string(let signature) = assertion.response["signature"], !signature.isEmpty else { throw MemberFailure.scopeMismatch }
+        struct Input: Encodable { let assertion: MemberPasskeyResponse }
+        let body = try JSONEncoder().encode(Input(assertion: assertion))
+        guard body.count <= 16_384 else { throw MemberFailure.invalidInput }
+        try store.claim(handle, confirmation: signature)
+        do {
+            let (reply, _) = try await read("/member/operations/" + handle.id + "/submit", body: body)
+            try Task.checkCancellation()
+            return try withdrawalOutcome(reply, handle: handle.markedAttempted(confirmation: signature))
+        } catch { return .unresolved }
+    }
+}
+
+extension MemberClient {
+    public func permissionList() async throws -> MemberPermissionList {
+        let (reply, session) = try await read("/member/permissions/list")
+        let value = try decode(MemberJSON.self, reply)
+        guard case .object(let object) = value, Set(object.keys) == ["household", "checkedAt", "permissions"], object["household"] == .string(session.household),
+              case .integer(let at) = object["checkedAt"], ReviewValidation.safe(at), case .array(let raw) = object["permissions"] else { throw MemberFailure.scopeMismatch }
+        let rows = try raw.map { try MemberPermission.decode($0, household: session.household) }
+        guard Set(rows.map(\.id)).count == rows.count, rows.allSatisfy({ $0.granted_at <= at && ($0.revoked_at.map { $0 <= at } ?? true) }) else { throw MemberFailure.malformed }
+        return .init(household: session.household, checkedAt: at, permissions: rows)
+    }
+    public func revokePermission(_ permission: MemberPermission) async throws -> MemberPermission {
+        try Task.checkCancellation()
+        guard let session = active?.info, session.expiresAt > now(), permission.revoked_at == nil else { throw MemberFailure.unavailable }
+        let (reply, info) = try await read("/member/permissions/revoke", body: JSONEncoder().encode(["permission": permission.id]))
+        guard info.id == session.id else { throw MemberFailure.scopeMismatch }
+        let value = try decode(MemberJSON.self, reply)
+        guard case .object(let object) = value, Set(object.keys) == ["household", "permission"], object["household"] == .string(session.household), let raw = object["permission"] else { throw MemberFailure.scopeMismatch }
+        let result = try MemberPermission.decode(raw, household: session.household)
+        guard result.sameGrant(permission), result.revoked_at != nil else { throw MemberFailure.scopeMismatch }
+        return result
+    }
+}
+
+extension MemberClient {
+    public func permissionRequests() async throws -> [MemberPermissionRequest] {
+        let (reply, session) = try await read("/member/permissions/requests")
+        let value = try decode(MemberJSON.self, reply)
+        guard case .object(let o) = value, Set(o.keys) == ["household","checkedAt","requests"], o["household"] == .string(session.household), case .integer(let at) = o["checkedAt"], ReviewValidation.safe(at), case .array(let raw) = o["requests"] else { throw MemberFailure.malformed }
+        let rows = try raw.map { try MemberPermissionRequest.decode($0, household: session.household) }
+        guard Set(rows.map(\.id)).count == rows.count, rows.allSatisfy({ $0.terms.createdAt <= at && ($0.decidedAt.map { $0 <= at } ?? true) }) else { throw MemberFailure.malformed }
+        return rows
+    }
+    public func permissionRequest(_ id: String) async throws -> MemberPermissionRequest {
+        guard UUID(uuidString: id)?.uuidString.lowercased() == id else { throw MemberFailure.invalidInput }
+        let (reply, session) = try await read("/member/permissions/requests/" + id)
+        let row = try MemberPermissionRequest.decode(decode(MemberJSON.self, reply), household: session.household)
+        guard row.id == id else { throw MemberFailure.scopeMismatch }; return row
+    }
+    public func decidePermissionRequest(_ review: MemberPermissionRequest, grant: Bool) async throws -> MemberPermissionRequest {
+        try Task.checkCancellation()
+        guard let session = active?.info, session.expiresAt > now(), session.household == review.terms.household, review.canDecide(at: now()) else { throw MemberFailure.expired }
+        let (reply, info) = try await read("/member/permissions/requests/" + review.id + (grant ? "/grant" : "/cancel"), body: JSONEncoder().encode(["digest": review.digest]))
+        let row = try MemberPermissionRequest.decode(decode(MemberJSON.self, reply), household: info.household)
+        guard info.id == session.id, row.digest == review.digest, row.state == (grant ? "granted" : "cancelled") else { throw MemberFailure.scopeMismatch }; return row
     }
 }

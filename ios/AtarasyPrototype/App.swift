@@ -1,9 +1,24 @@
 import SwiftUI
 import AtarasyCore
+import UIKit
+
+extension Notification.Name {
+    static let atarasyAPNSToken = Notification.Name("dev.atarasy.apns-token")
+    static let atarasyRefreshHint = Notification.Name("dev.atarasy.refresh-hint")
+}
+final class AtarasyAppDelegate: NSObject, UIApplicationDelegate {
+    func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool { application.registerForRemoteNotifications(); return true }
+    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) { NotificationCenter.default.post(name: .atarasyAPNSToken, object: deviceToken) }
+    func application(_ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable: Any], fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
+        guard let data = try? JSONSerialization.data(withJSONObject: userInfo), MemberRefreshHint.validate(data) else { completionHandler(.noData); return }
+        NotificationCenter.default.post(name: .atarasyRefreshHint, object: data); completionHandler(.noData)
+    }
+}
 
 private func merchantName(_ id: String) -> String { id == "merchant-fixture-a" ? "Pantry Market" : "Neighbourhood Goods" }
 
 @main struct AtarasyPrototypeApp: App {
+    @UIApplicationDelegateAdaptor(AtarasyAppDelegate.self) private var delegate
     var body: some Scene { WindowGroup { InboxView() } }
 }
 struct InboxView: View {
@@ -32,13 +47,14 @@ struct InboxView: View {
                     }
                 }
                 Section { Button("Member account") { memberAccount = true }.accessibilityIdentifier("memberAccount") }
-                Section("Prototype scope") { Text("No real signing, network requests or payment. Dials and account recovery are specified but not interactive in this build.").font(.footnote).foregroundStyle(.secondary) }
+                Section("Prototype scope") { Text("No payment is performed by the sample inbox. Authenticated Dials require a configured member service; account recovery is not interactive in this build.").font(.footnote).foregroundStyle(.secondary) }
             }.navigationTitle("Overtures")
         } detail: {
             if let offer=fixtures.offers.first(where:{$0.id == selected}) { OfferView(offer:offer).id(offer.id) }
             else { ContentUnavailableView("Choose a proposal",systemImage:"tray",description:Text("Digital choices and physical statements remain separate.")) }
         }
         .sheet(isPresented: $memberAccount) { MemberAccountSheet(holder: memberHolder) }
+        .onReceive(NotificationCenter.default.publisher(for: .atarasyAPNSToken)) { if let token = $0.object as? Data { memberHolder.apnsToken = token } }
         .onAppear { if ProcessInfo.processInfo.arguments.contains("--physical") { selected="physical-a" }; if ProcessInfo.processInfo.arguments.contains("--digital") { selected="digital-a" } }
     }
 }

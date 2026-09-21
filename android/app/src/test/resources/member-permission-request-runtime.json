@@ -1,0 +1,118 @@
+{
+  "environment": {
+    "name": "test",
+    "origin": "https://unit.example"
+  },
+  "session": {
+    "id": "22652efa-73a3-4709-a7d2-477937771383",
+    "household": "key:RulgSGf9J7UZy-G790BhIJI0PaYzMhoHimKLOC6ntl8",
+    "presenters": [
+      "merchant-1"
+    ],
+    "expiresAt": 1800000090001
+  },
+  "review": {
+    "terms": {
+      "profile": "atarasy.permission-review.1",
+      "requestID": "8e3602b0-34ab-4e38-9346-10c1f761db43",
+      "household": "key:RulgSGf9J7UZy-G790BhIJI0PaYzMhoHimKLOC6ntl8",
+      "action": "Check whether you already have synthetic tea",
+      "requester": {
+        "id": "giver-one",
+        "name": "Example giver"
+      },
+      "purpose": "Avoid proposing a gift you already have",
+      "fields": [
+        {
+          "id": "duplicate_check",
+          "label": "Whether you already have a product"
+        }
+      ],
+      "createdAt": 1800000000001,
+      "reviewExpiresAt": 1800000005001,
+      "accessExpiresAt": 1800000010001
+    },
+    "digest": "8a2680df87720505f53e7f4943b157fa4ecc7ca1ab3abe41a7442aa8a1fc98d8",
+    "state": "pending",
+    "decidedAt": null,
+    "permission": null
+  },
+  "granted": {
+    "terms": {
+      "profile": "atarasy.permission-review.1",
+      "requestID": "8e3602b0-34ab-4e38-9346-10c1f761db43",
+      "household": "key:RulgSGf9J7UZy-G790BhIJI0PaYzMhoHimKLOC6ntl8",
+      "action": "Check whether you already have synthetic tea",
+      "requester": {
+        "id": "giver-one",
+        "name": "Example giver"
+      },
+      "purpose": "Avoid proposing a gift you already have",
+      "fields": [
+        {
+          "id": "duplicate_check",
+          "label": "Whether you already have a product"
+        }
+      ],
+      "createdAt": 1800000000001,
+      "reviewExpiresAt": 1800000005001,
+      "accessExpiresAt": 1800000010001
+    },
+    "digest": "8a2680df87720505f53e7f4943b157fa4ecc7ca1ab3abe41a7442aa8a1fc98d8",
+    "state": "granted",
+    "decidedAt": 1800000000001,
+    "permission": {
+      "id": "7a12e625-ee65-4587-afa2-f913058f812e",
+      "kind": "party",
+      "result_form": null,
+      "grantee": "giver-one",
+      "scope": [
+        "duplicate_check"
+      ],
+      "purpose": "Avoid proposing a gift you already have",
+      "granted_at": 1800000000001,
+      "expires_at": 1800000010001,
+      "asked_from": "d959c757-37a3-4ff9-8a2b-ed9f84ea6b82",
+      "revoked_at": null
+    }
+  },
+  "revoked": {
+    "terms": {
+      "profile": "atarasy.permission-review.1",
+      "requestID": "8e3602b0-34ab-4e38-9346-10c1f761db43",
+      "household": "key:RulgSGf9J7UZy-G790BhIJI0PaYzMhoHimKLOC6ntl8",
+      "action": "Check whether you already have synthetic tea",
+      "requester": {
+        "id": "giver-one",
+        "name": "Example giver"
+      },
+      "purpose": "Avoid proposing a gift you already have",
+      "fields": [
+        {
+          "id": "duplicate_check",
+          "label": "Whether you already have a product"
+        }
+      ],
+      "createdAt": 1800000000001,
+      "reviewExpiresAt": 1800000005001,
+      "accessExpiresAt": 1800000010001
+    },
+    "digest": "8a2680df87720505f53e7f4943b157fa4ecc7ca1ab3abe41a7442aa8a1fc98d8",
+    "state": "granted",
+    "decidedAt": 1800000000001,
+    "permission": {
+      "id": "7a12e625-ee65-4587-afa2-f913058f812e",
+      "kind": "party",
+      "result_form": null,
+      "grantee": "giver-one",
+      "scope": [
+        "duplicate_check"
+      ],
+      "purpose": "Avoid proposing a gift you already have",
+      "granted_at": 1800000000001,
+      "expires_at": 1800000010001,
+      "asked_from": "d959c757-37a3-4ff9-8a2b-ed9f84ea6b82",
+      "revoked_at": 1800000000001
+    }
+  }
+}

@@ -10,11 +10,22 @@ private func configuredMemberEnvironment() -> MemberEnvironment? {
           let url = URL(string: origin) else { return nil }
     return try? MemberEnvironment(name: name, origin: url)
 }
+private func configuredMoveTargetEnvironment() -> MemberEnvironment? {
+    guard let name = Bundle.main.object(forInfoDictionaryKey: "AtarasyMoveTargetEnvironment") as? String,
+          let origin = Bundle.main.object(forInfoDictionaryKey: "AtarasyMoveTargetOrigin") as? String,
+          let url = URL(string: origin) else { return nil }
+    return try? MemberEnvironment(name: name, origin: url)
+}
+private func configuredAPNSEnvironment() -> MemberAPNSEnvironment? {
+    guard let value = Bundle.main.object(forInfoDictionaryKey: "AtarasyAPNSEnvironment") as? String else { return nil }
+    return MemberAPNSEnvironment(rawValue: value)
+}
 @MainActor final class MemberWindow: ObservableObject { weak var window: UIWindow? }
 // Owned by the view that presents the sheet. Dismissing the sheet used to discard the
 // account while the server session stayed live, so the member had to sign in again.
 @MainActor final class MemberAccountHolder: ObservableObject {
     @Published var account: MemberAccount?
+    @Published var apnsToken: Data?
     let window = MemberWindow()
 }
 private struct MemberWindowReader: UIViewRepresentable {
@@ -34,7 +45,17 @@ struct MemberAccountSheet: View {
     var body: some View {
         NavigationStack {
             #if ATARASY_UI_TEST_FIXTURES
-            if ProcessInfo.processInfo.arguments.contains("--member-statement-fixture") {
+            if ProcessInfo.processInfo.arguments.contains("--member-dials-fixture") {
+                MemberDialsFixtureView()
+            } else if ProcessInfo.processInfo.arguments.contains("--member-request-fixture") {
+                MemberRequestFixtureView()
+            } else if ProcessInfo.processInfo.arguments.contains("--member-permission-fixture") {
+                MemberPermissionFixtureView()
+            } else if ProcessInfo.processInfo.arguments.contains("--member-withdrawal-fixture") {
+                MemberWithdrawalFixtureView()
+            } else if ProcessInfo.processInfo.arguments.contains("--member-digital-fixture") {
+                MemberDigitalFixtureView()
+            } else if ProcessInfo.processInfo.arguments.contains("--member-statement-fixture") {
                 MemberStatementFixtureView()
             } else if ProcessInfo.processInfo.arguments.contains("--member-list-fixture") {
                 MemberProposalFixtureView()
@@ -60,18 +81,23 @@ private struct ConfiguredMemberAccount: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @ObservedObject var holder: MemberAccountHolder
+    private var refreshRegistrationID: String {
+        guard let session = holder.account?.session, let token = holder.apnsToken, let environment = configuredAPNSEnvironment() else { return "unavailable" }
+        return session.id + ":" + token.base64EncodedString() + ":" + environment.rawValue
+    }
     var body: some View {
         Group {
             if let account = holder.account { MemberAccountForm(account: account) }
             else { ProgressView("Opening member account") }
         }
         .background(MemberWindowReader(reference: holder.window).frame(width: 0, height: 0))
+        .overlay { if scenePhase != .active { Color(uiColor: .systemBackground).ignoresSafeArea().accessibilityHidden(true) } }
         .navigationTitle("Member account")
         .onAppear { holder.account?.clearExpired(now: Int64(Date().timeIntervalSince1970 * 1000)) }
-        .task {
-            guard holder.account == nil else { return }
+        .task(id: scenePhase) {
+            guard scenePhase == .active, holder.account == nil else { return }
             do {
-                let base = try URLSessionMemberTransport(timeout: 30, maximumResponseBytes: 1_048_576)
+                let base = try URLSessionMemberTransport(timeout: 30, maximumResponseBytes: 8_000_000)
                 let transport: any MemberHTTPTransport
                 #if ATARASY_DEVICE_ACCEPTANCE
                 if ProcessInfo.processInfo.arguments.contains("--acceptance-drop-statement-response") {
@@ -87,17 +113,42 @@ private struct ConfiguredMemberAccount: View {
                 let service = MemberClient(environment: environment, transport: transport, vault: vault)
                 let reference = holder.window
                 let passkeys = NativePasskeyAuthoriser(environment: environment, anchor: { [weak reference] in reference?.window })
-                let directory = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true).appendingPathComponent("MemberOperations", isDirectory: true)
-                let store = try FileMemberOperationStore(directory: directory)
+                let support = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+                let installation = try MemberInstallationIdentity(file: support.appendingPathComponent("installation-id"))
+                let keys = try KeychainMemberOperationKeyVault(namespace: "dev.atarasy.native", installation: installation)
+                let store = try ProtectedFileMemberOperationStore(directory: support.appendingPathComponent("MemberOperations", isDirectory: true), environment: environment, vault: keys)
                 let statements = MemberStatementFlow(environment: environment, service: service, passkeys: passkeys, store: store, diagnostic: { event in
                     #if ATARASY_DEVICE_ACCEPTANCE
                     print("ATARASY_DEVICE_ACCEPTANCE: approval stopped " + event)
                     #endif
                 })
-                holder.account = MemberAccount(service: service, passkeys: passkeys, statements: statements)
+                let decisions = MemberDigitalFlow(environment: environment, service: service, passkeys: passkeys, store: store)
+                let withdrawals = MemberWithdrawalFlow(environment: environment, service: service, passkeys: passkeys, store: store)
+                let privateNode = MemberPrivateNode(environment: environment, service: service, vault: keys)
+                let recoveryVault = try KeychainMemberRecoveryMaterialVault(namespace: "dev.atarasy.native", installation: installation)
+                let noticeChannel = Bundle.main.object(forInfoDictionaryKey: "AtarasyRecoveryNoticeChannel") as? String
+                let recovery = MemberRecoveryFlow(environment: environment, service: service, privateNode: privateNode, passkeys: passkeys, vault: recoveryVault, noticeChannel: noticeChannel)
+                var hostMove: MemberHostMoveFlow?
+                if let targetEnvironment = configuredMoveTargetEnvironment(), targetEnvironment != environment {
+                    let targetTransport = try URLSessionMemberTransport(timeout: 30, maximumResponseBytes: 8_000_000), targetService = MemberClient(environment: targetEnvironment, transport: targetTransport, vault: vault)
+                    let targetPasskeys = NativePasskeyAuthoriser(environment: targetEnvironment, anchor: { [weak reference] in reference?.window }), targetNode = MemberPrivateNode(environment: targetEnvironment, service: targetService, vault: keys)
+                    hostMove = MemberHostMoveFlow(sourceEnvironment: environment, targetEnvironment: targetEnvironment, source: service, target: targetService, sourceNode: privateNode, targetNode: targetNode, sourcePasskeys: passkeys, targetPasskeys: targetPasskeys)
+                }
+                holder.account = MemberAccount(service: service, passkeys: passkeys, statements: statements, decisions: decisions, withdrawals: withdrawals, permissions: MemberPermissions(service: service), permissionRequests: MemberPermissionRequests(service: service), privateNode: privateNode, recovery: recovery, hostMove: hostMove)
             } catch { dismiss() }
         }
-        .onChange(of: scenePhase) { _, phase in if phase == .active { holder.account?.clearExpired(now: Int64(Date().timeIntervalSince1970 * 1000)) } }
+        .task(id: refreshRegistrationID) {
+            guard scenePhase == .active, let account = holder.account, account.session != nil, let token = holder.apnsToken, let environment = configuredAPNSEnvironment() else { return }
+            await account.registerRefresh(token: token, apnsEnvironment: environment)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .atarasyRefreshHint)) { notification in
+            guard scenePhase == .active, let data = notification.object as? Data, let account = holder.account else { return }
+            Task { await account.receiveRefreshHint(data) }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { holder.account?.clearExpired(now: Int64(Date().timeIntervalSince1970 * 1000)) }
+            else if phase == .background { holder.account?.lock(); holder.account = nil }
+        }
     }
 }
 private struct MemberAccountForm: View {
@@ -119,9 +170,22 @@ private struct MemberAccountForm: View {
                     Text("Expires \(Date(timeIntervalSince1970: Double(session.expiresAt) / 1000).formatted())")
                     Button("Sign out") { perform { await account.signOut() } }.accessibilityIdentifier("memberSignOut")
                 }
-                MemberMandateSection(account: account)
-                MemberProposalSections(model: account.proposals, statements: account.statements)
-                if let statements = account.statements { SavedMemberOperationSections(flow: statements) }
+                Section("Private node") {
+                    Text(account.privateNodeNotice.isEmpty ? "Private records have not been opened." : account.privateNodeNotice).accessibilityIdentifier("privateNodeStatus")
+                    if let recovery = account.recovery { NavigationLink("Recovery") { MemberRecoveryView(model: recovery, recoveryRequired: account.privateNodeState == .recoveryRequired) } }
+                    if let hostMove = account.hostMove { NavigationLink("Exit / Move Host") { MemberHostMoveView(model: hostMove) }.disabled(account.privateNodeState != .ready) }
+                }
+                if account.protectedAccessReady {
+                    if !account.refreshNotice.isEmpty { Section("Updates") { Text(account.refreshNotice).accessibilityIdentifier("memberRefreshNotice") } }
+                    if let requests = account.permissionRequests { Section { NavigationLink("Access requests") { MemberPermissionRequestsView(model: requests) } } }
+                    if let permissions = account.permissions { Section { NavigationLink("Permissions") { MemberPermissionsView(model: permissions) } } }
+                    MemberDialsSection(account: account)
+                    MemberMandateSection(account: account)
+                    MemberProposalSections(model: account.proposals, statements: account.statements, decisions: account.decisions)
+                    if let statements = account.statements { SavedMemberOperationSections(flow: statements) }
+                    if let withdrawals = account.withdrawals { SavedMemberWithdrawalSections(flow: withdrawals) }
+                    if let decisions = account.decisions { SavedMemberDecisionSections(flow: decisions, withdrawals: account.withdrawals) }
+                }
             } else {
                 Section {
                     Button("Sign in with a passkey") { perform { await account.signIn() } }.accessibilityIdentifier("memberSignIn")
@@ -147,5 +211,96 @@ private struct MemberAccountForm: View {
         .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() }.disabled(account.busy || action != nil) } }
         .onReceive(clock) { date in account.clearExpired(now: Int64(date.timeIntervalSince1970 * 1000)) }
         .onDisappear { invitation = ""; household = ""; action?.cancel() }
+    }
+}
+
+private struct MemberHostMoveView: View {
+    @ObservedObject var model: MemberHostMoveFlow
+    var body: some View {
+        Form {
+            Section("Target") {
+                Text("The configured target host must be trusted by this build. You will sign in there before anything is copied.")
+                Text(model.phase.rawValue).font(.headline).accessibilityIdentifier("hostMovePhase")
+            }
+            Section("Coverage") {
+                Text(model.coverage.isEmpty ? "Coverage has not been verified on the target host." : model.coverage)
+                if let receipt = model.targetReceipt { Text("Receipt: \(receipt.archiveDigest)").font(.footnote).textSelection(.enabled) }
+            }
+            Section("Rollback") {
+                Text(model.phase == .readyToRetire ? "The target is verified. Source access remains active until the final signed retirement." : "A failed or interrupted import does not retire source access.")
+            }
+            Section {
+                Button("Import and verify target") { Task { await model.prepare() } }.disabled([.signingIntoTarget, .exporting, .importing, .verifying, .retiring, .completed, .readyToRetire].contains(model.phase)).accessibilityIdentifier("hostMovePrepare")
+                if model.phase == .readyToRetire { Button("Retire source host access", role: .destructive) { Task { await model.retireSource() } }.accessibilityIdentifier("hostMoveRetire") }
+                if [.signingIntoTarget, .exporting, .importing, .verifying, .retiring].contains(model.phase) { ProgressView() }
+                if !model.notice.isEmpty { Text(model.notice).accessibilityIdentifier("hostMoveNotice") }
+            }
+        }
+        .navigationTitle("Move Host")
+        .interactiveDismissDisabled([.importing, .verifying, .retiring].contains(model.phase))
+    }
+}
+
+private struct MemberRecoveryView: View {
+    @ObservedObject var model: MemberRecoveryFlow
+    let recoveryRequired: Bool
+    @State private var recoverer = ""
+    var body: some View {
+        Form {
+            Section("Recovery role") {
+                if model.keyStatus?.publicKey == nil { Text("This device has no recovery-only encryption key.") }
+                else { Label("This device can receive a named recovery share", systemImage: "checkmark.shield") }
+                Button("Enable this device as a recoverer") { Task { await model.registerRecoveryKey() } }
+                    .disabled(model.busy || model.keyStatus?.publicKey != nil)
+                    .accessibilityIdentifier("recoveryRegisterDevice")
+            }
+            Section("Your recovery policy") {
+                if let configuration = model.configuration, configuration.configured {
+                    Text("Two participants are required: your device, the named recoverer, or the host.")
+                    Text("Recoverer: \(configuration.recoverer ?? "Unavailable")").font(.footnote).textSelection(.enabled)
+                    Text("Policy version \(configuration.epoch ?? 0)").font(.footnote)
+                } else { Text("Recovery has not been configured.") }
+                TextField("Recoverer household reference", text: $recoverer).textInputAutocapitalization(.never).autocorrectionDisabled()
+                Button("Review and configure recovery") { let value = recoverer; Task { await model.configure(recoverer: value) } }
+                    .disabled(model.busy || recoverer.isEmpty || !model.canConfigure)
+                    .accessibilityIdentifier("recoveryConfigure")
+                if !model.canConfigure { Text("This build has no independently delivered recovery notice channel, so recovery configuration remains closed.").font(.footnote) }
+            }
+            if recoveryRequired {
+                Section("Restore this device") {
+                    Text("A recovered passkey does not restore the encrypted records by itself.")
+                    Button("Begin lost-device recovery") { Task { await model.beginLostDeviceRecovery() } }.disabled(model.busy).accessibilityIdentifier("recoveryBegin")
+                }
+            }
+            Section("Ceremonies") {
+                if model.requests.isEmpty { Text("No recovery ceremony is visible to this account.") }
+                ForEach(model.requests) { request in
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(request.state.capitalized).font(.headline)
+                        Text(request.owner == model.currentHousehold ? "Your recovery" : "Recovery requested by a person who named you").font(.subheadline)
+                        Text("Policy version \(request.epoch)").font(.footnote)
+                        if request.recoverer == model.currentHousehold, request.state == "pending" {
+                            Button("Review and approve recovery") { Task { await model.approve(request) } }.buttonStyle(.borderless).accessibilityIdentifier("recoveryApprove")
+                        }
+                        if request.owner == model.currentHousehold, request.state == "completed" {
+                            Button("Install recovered key") { Task { await model.finish(request) } }.buttonStyle(.borderless).accessibilityIdentifier("recoveryFinish")
+                        }
+                        if request.owner == model.currentHousehold, request.state == "approved" { Text("The recoverer approved. The key remains unavailable until the independent notice is delivered.").font(.footnote) }
+                    }
+                }
+            }
+            Section("Recovery record") {
+                if let events = model.log?.events, !events.isEmpty {
+                    ForEach(events) { event in Text(event.state == "completed" ? "Notice delivered before recovery completed" : "Recovery recorded; notice delivery pending") }
+                } else { Text("No completed or pending recovery event.") }
+            }
+            Section {
+                Button("Refresh recovery status") { Task { await model.refresh() } }.disabled(model.busy)
+                if model.busy { ProgressView() }
+                if !model.notice.isEmpty { Text(model.notice).accessibilityIdentifier("recoveryNotice") }
+            }
+        }
+        .navigationTitle("Recovery")
+        .onAppear { Task { await model.refresh() } }
     }
 }

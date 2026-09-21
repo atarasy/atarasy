@@ -19,6 +19,7 @@ const offer = (over: Partial<InboxOffer> = {}): InboxOffer => ({
   state: "presented",
   binding: "digital",
   presented_at: 1_000,
+  decided_at: null,
   expires_at: 2_000,
   giver: null,
   candidates: [{ id: "c-1", valence: "offered" }],

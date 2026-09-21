@@ -1,0 +1,39 @@
+{
+  "date": "2026-09-21",
+  "baseline_commit": "b54582cc2e0090a96346a8cd3aa18d96cae0ff1c",
+  "scope": "Native host move, target-AAD private-record re-encryption, target verification, and explicit source retirement",
+  "source_hashes": {
+    "ios/AtarasyCore/Sources/AtarasyCore/MemberHostMove.swift": "ce0aeab612a26ca6c40d671946a6b3380d80970da08f6ad190ed4a9ae8040a83",
+    "ios/AtarasyCore/Sources/AtarasyCore/MemberPrivateNode.swift": "48544ca1193a69d4174a1c497e265b3223a417ecf884235088ad60b14e460292",
+    "ios/AtarasyCore/Sources/AtarasyCore/NativePasskeys.swift": "4c80bb60a9f4854b0a29dab234f4d29b2caa7decef6e2093780d39718bbe5627",
+    "ios/AtarasyCore/Sources/AtarasyCore/MemberAccount.swift": "d2f2ef42ea2649b0458d797f163f3e08cd5f2282277b57f078813aa43112c4ce",
+    "ios/AtarasyCore/Sources/AtarasyCore/MemberClient.swift": "cc52e4296d41311746179d40dcb996c0238c8b22191cdbe595b0f00d4e9be9d2",
+    "ios/AtarasyCore/Tests/AtarasyCoreTests/HostMoveTests.swift": "88ae3e334ddacd115a1f3f45011ab40d066a24d900a531d67375731f9c7b867c",
+    "ios/AtarasyCore/Tests/AtarasyCoreTests/PrivateStorageTests.swift": "b451011d7cf09d8fae6c1cbf7224f506f3e3fd94ddf715d684731f12c0682e27",
+    "ios/AtarasyPrototype/MemberAccountView.swift": "cf274b59147f6a47e34bd7c92bc8877e211b3532d5a911f36f8d785c9bc6ae84",
+    "ios/NATIVE_HOST_MOVE.md": "49b4c3b9b14f0a7674a18f8f97a4dc75aefee6cf788a12786f8739bab16caeb1"
+  },
+  "results": {
+    "swift_package": {
+      "passed": 180,
+      "skipped": 0,
+      "failed": 0
+    },
+    "ios_simulator_build": "passed"
+  },
+  "logs": {
+    "atarasy-build.log": {
+      "path": "/Users/yoichirohara/Documents/valence-reviews/2026-09-21-host-move/atarasy-build.log",
+      "sha256": "5642d25cc0646c34e323b0cf33517d36b3baa7192654059738b424f9868a19b7"
+    },
+    "atarasy-swift.log": {
+      "path": "/Users/yoichirohara/Documents/valence-reviews/2026-09-21-host-move/atarasy-swift.log",
+      "sha256": "238c46ca1809f2f57909bdcc6731cbebb22595c3ff589f123e2caeb9202baea1"
+    }
+  },
+  "limits": [
+    "Wire tests use captured synthetic responses and do not complete a deployed two-host move.",
+    "No physical-device passkey ceremony or deployed target routing was exercised.",
+    "The move UI is hidden until a trusted target environment and origin are bundled."
+  ]
+}

@@ -1,0 +1,592 @@
+{
+  "contract": "atarasy.member-withdrawal-authorisation.1",
+  "scope": "Synthetic PostgreSQL HTTP decision, withdrawal and redecision; no native authenticator or provider.",
+  "environment": {
+    "name": "test",
+    "origin": "https://unit.example"
+  },
+  "session": {
+    "id": "28989bec-6a4c-4986-8aa4-e7483c53438e",
+    "household": "key:UjcU1ZsbXkfxcVki_WX2Ef1IKHu9x_lNxnzmByT-_NU",
+    "presenters": [
+      "merchant-1"
+    ],
+    "expiresAt": 1800000090001
+  },
+  "decisionPrepared": {
+    "profile": "atarasy.member-decision-authorisation.1",
+    "operationID": "96c57085-93e0-4ec2-8e27-8da9a6b44557",
+    "requestDigest": "dc5f5c0493f16f7e24670fac1e61cade0f3ce515fa18b47636bf020f87022b1d",
+    "reviewedRevision": "f1e7acbc9129af2206054cd1004d96b383f5bc6843f0c423d9e20b5b3ed3528a",
+    "expiresAt": 1800000060001,
+    "canonical": "1d51b94a-7cde-4afb-9629-eb44b030324f\n75a0431a-4431-4628-9bb0-cd7cfdaf5449:kept:self:",
+    "review": {
+      "approval": {
+        "offer": "1d51b94a-7cde-4afb-9629-eb44b030324f",
+        "presenter": "merchant-1",
+        "expires_at": 1800003600000,
+        "carriage": 550,
+        "reminded": false,
+        "mandate": {
+          "kind": "standing",
+          "scope": "Test supplies",
+          "lapses_at": 1800010000000
+        },
+        "price_band": null,
+        "disclosures": [
+          {
+            "merchant": "maker-a",
+            "product": null,
+            "version": "d-1",
+            "items": [
+              {
+                "label": "payment",
+                "value": "charged when the household confirms"
+              },
+              {
+                "label": "delivery",
+                "value": "already placed"
+              },
+              {
+                "label": "returns",
+                "value": "as the merchant published"
+              }
+            ],
+            "signature": "P9YEvCNEBlae43W2DRPOwKy30B8FpDrxFMV82BGGTTJNPTsvWyJuPuxXaUeS5SvEYciMN+0l6GNt0wmkL8ehCQ=="
+          }
+        ],
+        "candidates": [
+          {
+            "id": "75a0431a-4431-4628-9bb0-cd7cfdaf5449",
+            "product": "digital-tea",
+            "quantity": 1,
+            "unit_price": 1200,
+            "merchant": "maker-a",
+            "maker": "made-by-tea",
+            "given_by": null,
+            "ships": "carrier-a",
+            "is_exploration": true,
+            "valence": "offered",
+            "collected_as": null,
+            "alternatives": [
+              "Use existing supplies"
+            ],
+            "argument_against": "You may already have enough.",
+            "disclosure": {
+              "merchant": "maker-a",
+              "product": null
+            }
+          }
+        ],
+        "excluded": []
+      },
+      "mandate": {
+        "ceiling_out_of_network": 10000,
+        "ceiling_daily": null,
+        "cooling_seconds": 3600,
+        "co_signers": [],
+        "lapses_at": 1800010000000,
+        "version": 2,
+        "id": "key:UjcU1ZsbXkfxcVki_WX2Ef1IKHu9x_lNxnzmByT-_NU.1",
+        "household": "key:UjcU1ZsbXkfxcVki_WX2Ef1IKHu9x_lNxnzmByT-_NU"
+      },
+      "decisions": [
+        {
+          "candidate": "75a0431a-4431-4628-9bb0-cd7cfdaf5449",
+          "valence": "kept",
+          "kept_as": "self"
+        }
+      ],
+      "goods": 1200,
+      "carriage": 550,
+      "total": 1750
+    },
+    "operationState": "prepared",
+    "publicKey": {
+      "challenge": "BdXGGRtGiOjKfyg_EFPidCh0jvTAK09E-tH4JWOlH4M",
+      "rpId": "unit.example",
+      "userVerification": "required",
+      "allowCredentials": [
+        {
+          "type": "public-key",
+          "id": "Rdz28PaBBKGpHfgVGqqh-pyO31Gvae_NHbWXnEr8eHw"
+        }
+      ]
+    }
+  },
+  "decisionOutcome": {
+    "operationID": "96c57085-93e0-4ec2-8e27-8da9a6b44557",
+    "operationState": "committed",
+    "decision": {
+      "id": "1d51b94a-7cde-4afb-9629-eb44b030324f",
+      "binding": "digital",
+      "household": "key:UjcU1ZsbXkfxcVki_WX2Ef1IKHu9x_lNxnzmByT-_NU",
+      "presenter": "merchant-1",
+      "purpose": "replenish",
+      "presenter_attested": false,
+      "price_band": null,
+      "giver": null,
+      "config_version": "digital-cfg",
+      "presented_at": 1800000000001,
+      "expires_at": 1800003600000,
+      "state": "decided",
+      "exploration_floor_met": true,
+      "mandate": "key:UjcU1ZsbXkfxcVki_WX2Ef1IKHu9x_lNxnzmByT-_NU.1",
+      "candidates": [
+        {
+          "id": "75a0431a-4431-4628-9bb0-cd7cfdaf5449",
+          "product": "digital-tea",
+          "quantity": 1,
+          "unit_price": 1200,
+          "merchant": "maker-a",
+          "maker": "made-by-tea",
+          "ships": "carrier-a",
+          "category": null,
+          "predicted_conversion": null,
+          "is_exploration": true,
+          "given_by": null,
+          "valence": "kept",
+          "decided_at": 1800000000001,
+          "kept_as": "self",
+          "lineage": null
+        }
+      ],
+      "disclosures": [
+        {
+          "merchant": "maker-a",
+          "product": null,
+          "version": "d-1",
+          "items": [
+            {
+              "label": "payment",
+              "value": "charged when the household confirms"
+            },
+            {
+              "label": "delivery",
+              "value": "already placed"
+            },
+            {
+              "label": "returns",
+              "value": "as the merchant published"
+            }
+          ],
+          "signature": "P9YEvCNEBlae43W2DRPOwKy30B8FpDrxFMV82BGGTTJNPTsvWyJuPuxXaUeS5SvEYciMN+0l6GNt0wmkL8ehCQ=="
+        }
+      ],
+      "reminders_sent": 0,
+      "decided_at": 1800000000001
+    }
+  },
+  "withdrawalPrepared": {
+    "profile": "atarasy.member-withdrawal-authorisation.1",
+    "operationID": "07b59d5f-7bfa-4d72-b667-f90a4c46aa0d",
+    "requestDigest": "ba4f7f893d0c984f609ee65674ccc1131331eea3d4c6d8b970f01d8155d68fae",
+    "reviewedRevision": "aa692ce7d582ab7ea0ec7ca9bd796c654bdcb024aa657e10c438daa5dc9293d1",
+    "expiresAt": 1800000060001,
+    "canonical": "valence.member-withdrawal.1\n1d51b94a-7cde-4afb-9629-eb44b030324f\n1800000000001\ne1375d0143dc7511795d9c1ef50c338f1069c6b5e81ba0a1f690f5a3826a4ca7",
+    "review": {
+      "decisionOperationID": "96c57085-93e0-4ec2-8e27-8da9a6b44557",
+      "incarnation": 0,
+      "offer": {
+        "id": "1d51b94a-7cde-4afb-9629-eb44b030324f",
+        "binding": "digital",
+        "household": "key:UjcU1ZsbXkfxcVki_WX2Ef1IKHu9x_lNxnzmByT-_NU",
+        "presenter": "merchant-1",
+        "purpose": "replenish",
+        "presenter_attested": false,
+        "price_band": null,
+        "giver": null,
+        "config_version": "digital-cfg",
+        "presented_at": 1800000000001,
+        "expires_at": 1800003600000,
+        "state": "decided",
+        "exploration_floor_met": true,
+        "mandate": "key:UjcU1ZsbXkfxcVki_WX2Ef1IKHu9x_lNxnzmByT-_NU.1",
+        "candidates": [
+          {
+            "id": "75a0431a-4431-4628-9bb0-cd7cfdaf5449",
+            "product": "digital-tea",
+            "quantity": 1,
+            "unit_price": 1200,
+            "merchant": "maker-a",
+            "maker": "made-by-tea",
+            "ships": "carrier-a",
+            "category": null,
+            "predicted_conversion": null,
+            "is_exploration": true,
+            "given_by": null,
+            "valence": "kept",
+            "decided_at": 1800000000001,
+            "kept_as": "self",
+            "lineage": null
+          }
+        ],
+        "disclosures": [
+          {
+            "merchant": "maker-a",
+            "product": null,
+            "version": "d-1",
+            "items": [
+              {
+                "label": "payment",
+                "value": "charged when the household confirms"
+              },
+              {
+                "label": "delivery",
+                "value": "already placed"
+              },
+              {
+                "label": "returns",
+                "value": "as the merchant published"
+              }
+            ],
+            "signature": "P9YEvCNEBlae43W2DRPOwKy30B8FpDrxFMV82BGGTTJNPTsvWyJuPuxXaUeS5SvEYciMN+0l6GNt0wmkL8ehCQ=="
+          }
+        ],
+        "reminders_sent": 0,
+        "decided_at": 1800000000001
+      },
+      "decisionReview": {
+        "approval": {
+          "offer": "1d51b94a-7cde-4afb-9629-eb44b030324f",
+          "presenter": "merchant-1",
+          "expires_at": 1800003600000,
+          "carriage": 550,
+          "reminded": false,
+          "mandate": {
+            "kind": "standing",
+            "scope": "Test supplies",
+            "lapses_at": 1800010000000
+          },
+          "price_band": null,
+          "disclosures": [
+            {
+              "merchant": "maker-a",
+              "product": null,
+              "version": "d-1",
+              "items": [
+                {
+                  "label": "payment",
+                  "value": "charged when the household confirms"
+                },
+                {
+                  "label": "delivery",
+                  "value": "already placed"
+                },
+                {
+                  "label": "returns",
+                  "value": "as the merchant published"
+                }
+              ],
+              "signature": "P9YEvCNEBlae43W2DRPOwKy30B8FpDrxFMV82BGGTTJNPTsvWyJuPuxXaUeS5SvEYciMN+0l6GNt0wmkL8ehCQ=="
+            }
+          ],
+          "candidates": [
+            {
+              "id": "75a0431a-4431-4628-9bb0-cd7cfdaf5449",
+              "product": "digital-tea",
+              "quantity": 1,
+              "unit_price": 1200,
+              "merchant": "maker-a",
+              "maker": "made-by-tea",
+              "given_by": null,
+              "ships": "carrier-a",
+              "is_exploration": true,
+              "valence": "offered",
+              "collected_as": null,
+              "alternatives": [
+                "Use existing supplies"
+              ],
+              "argument_against": "You may already have enough.",
+              "disclosure": {
+                "merchant": "maker-a",
+                "product": null
+              }
+            }
+          ],
+          "excluded": []
+        },
+        "mandate": {
+          "ceiling_out_of_network": 10000,
+          "ceiling_daily": null,
+          "cooling_seconds": 3600,
+          "co_signers": [],
+          "lapses_at": 1800010000000,
+          "version": 2,
+          "id": "key:UjcU1ZsbXkfxcVki_WX2Ef1IKHu9x_lNxnzmByT-_NU.1",
+          "household": "key:UjcU1ZsbXkfxcVki_WX2Ef1IKHu9x_lNxnzmByT-_NU"
+        },
+        "decisions": [
+          {
+            "candidate": "75a0431a-4431-4628-9bb0-cd7cfdaf5449",
+            "valence": "kept",
+            "kept_as": "self"
+          }
+        ],
+        "goods": 1200,
+        "carriage": 550,
+        "total": 1750
+      },
+      "mandate": {
+        "ceiling_out_of_network": 10000,
+        "ceiling_daily": null,
+        "cooling_seconds": 3600,
+        "co_signers": [],
+        "lapses_at": 1800010000000,
+        "version": 2,
+        "id": "key:UjcU1ZsbXkfxcVki_WX2Ef1IKHu9x_lNxnzmByT-_NU.1",
+        "household": "key:UjcU1ZsbXkfxcVki_WX2Ef1IKHu9x_lNxnzmByT-_NU"
+      },
+      "eligibility": {
+        "offer": "1d51b94a-7cde-4afb-9629-eb44b030324f",
+        "decidedAt": 1800000000001,
+        "decisionRevision": "e1375d0143dc7511795d9c1ef50c338f1069c6b5e81ba0a1f690f5a3826a4ca7",
+        "canonical": "valence.member-withdrawal.1\n1d51b94a-7cde-4afb-9629-eb44b030324f\n1800000000001\ne1375d0143dc7511795d9c1ef50c338f1069c6b5e81ba0a1f690f5a3826a4ca7",
+        "coolingEndsAt": 1800003600001
+      }
+    },
+    "operationState": "prepared",
+    "publicKey": {
+      "challenge": "bvnaJD6KKc-WBmX1PHJclzNan2Hk9hc_woz_wEQl_O0",
+      "rpId": "unit.example",
+      "userVerification": "required",
+      "allowCredentials": [
+        {
+          "type": "public-key",
+          "id": "Rdz28PaBBKGpHfgVGqqh-pyO31Gvae_NHbWXnEr8eHw"
+        }
+      ]
+    }
+  },
+  "withdrawalOutcome": {
+    "operationID": "07b59d5f-7bfa-4d72-b667-f90a4c46aa0d",
+    "operationState": "committed",
+    "withdrawal": {
+      "decisionOperationID": "96c57085-93e0-4ec2-8e27-8da9a6b44557",
+      "nextIncarnation": 1,
+      "offer": {
+        "id": "1d51b94a-7cde-4afb-9629-eb44b030324f",
+        "binding": "digital",
+        "household": "key:UjcU1ZsbXkfxcVki_WX2Ef1IKHu9x_lNxnzmByT-_NU",
+        "presenter": "merchant-1",
+        "purpose": "replenish",
+        "presenter_attested": false,
+        "price_band": null,
+        "giver": null,
+        "config_version": "digital-cfg",
+        "presented_at": 1800000000001,
+        "expires_at": 1800003600000,
+        "state": "presented",
+        "exploration_floor_met": true,
+        "mandate": "key:UjcU1ZsbXkfxcVki_WX2Ef1IKHu9x_lNxnzmByT-_NU.1",
+        "candidates": [
+          {
+            "id": "75a0431a-4431-4628-9bb0-cd7cfdaf5449",
+            "product": "digital-tea",
+            "quantity": 1,
+            "unit_price": 1200,
+            "merchant": "maker-a",
+            "maker": "made-by-tea",
+            "ships": "carrier-a",
+            "category": null,
+            "predicted_conversion": null,
+            "is_exploration": true,
+            "given_by": null,
+            "valence": "offered",
+            "decided_at": null,
+            "kept_as": null,
+            "lineage": null
+          }
+        ],
+        "disclosures": [
+          {
+            "merchant": "maker-a",
+            "product": null,
+            "version": "d-1",
+            "items": [
+              {
+                "label": "payment",
+                "value": "charged when the household confirms"
+              },
+              {
+                "label": "delivery",
+                "value": "already placed"
+              },
+              {
+                "label": "returns",
+                "value": "as the merchant published"
+              }
+            ],
+            "signature": "P9YEvCNEBlae43W2DRPOwKy30B8FpDrxFMV82BGGTTJNPTsvWyJuPuxXaUeS5SvEYciMN+0l6GNt0wmkL8ehCQ=="
+          }
+        ],
+        "reminders_sent": 0,
+        "decided_at": null
+      }
+    }
+  },
+  "redecisionPrepared": {
+    "profile": "atarasy.member-decision-authorisation.1",
+    "operationID": "98b2369f-9b98-4468-8c29-a9ccfff12e17",
+    "requestDigest": "17ba6f4647a8d3e1b0c3b3aa8b4b8710dd2564209f34f5aeff8996c16d21356d",
+    "reviewedRevision": "1d285210bbdb002e2623faaf9ac9911c81a2e2621b643d4c9286a5f9a3dbb525",
+    "expiresAt": 1800000060001,
+    "canonical": "1d51b94a-7cde-4afb-9629-eb44b030324f\n75a0431a-4431-4628-9bb0-cd7cfdaf5449:kept:self:",
+    "review": {
+      "approval": {
+        "offer": "1d51b94a-7cde-4afb-9629-eb44b030324f",
+        "presenter": "merchant-1",
+        "expires_at": 1800003600000,
+        "carriage": 550,
+        "reminded": false,
+        "mandate": {
+          "kind": "standing",
+          "scope": "Test supplies",
+          "lapses_at": 1800010000000
+        },
+        "price_band": null,
+        "disclosures": [
+          {
+            "merchant": "maker-a",
+            "product": null,
+            "version": "d-1",
+            "items": [
+              {
+                "label": "payment",
+                "value": "charged when the household confirms"
+              },
+              {
+                "label": "delivery",
+                "value": "already placed"
+              },
+              {
+                "label": "returns",
+                "value": "as the merchant published"
+              }
+            ],
+            "signature": "P9YEvCNEBlae43W2DRPOwKy30B8FpDrxFMV82BGGTTJNPTsvWyJuPuxXaUeS5SvEYciMN+0l6GNt0wmkL8ehCQ=="
+          }
+        ],
+        "candidates": [
+          {
+            "id": "75a0431a-4431-4628-9bb0-cd7cfdaf5449",
+            "product": "digital-tea",
+            "quantity": 1,
+            "unit_price": 1200,
+            "merchant": "maker-a",
+            "maker": "made-by-tea",
+            "given_by": null,
+            "ships": "carrier-a",
+            "is_exploration": true,
+            "valence": "offered",
+            "collected_as": null,
+            "alternatives": [
+              "Use existing supplies"
+            ],
+            "argument_against": "You may already have enough.",
+            "disclosure": {
+              "merchant": "maker-a",
+              "product": null
+            }
+          }
+        ],
+        "excluded": []
+      },
+      "mandate": {
+        "ceiling_out_of_network": 10000,
+        "ceiling_daily": null,
+        "cooling_seconds": 3600,
+        "co_signers": [],
+        "lapses_at": 1800010000000,
+        "version": 2,
+        "id": "key:UjcU1ZsbXkfxcVki_WX2Ef1IKHu9x_lNxnzmByT-_NU.1",
+        "household": "key:UjcU1ZsbXkfxcVki_WX2Ef1IKHu9x_lNxnzmByT-_NU"
+      },
+      "decisions": [
+        {
+          "candidate": "75a0431a-4431-4628-9bb0-cd7cfdaf5449",
+          "valence": "kept",
+          "kept_as": "self"
+        }
+      ],
+      "goods": 1200,
+      "carriage": 550,
+      "total": 1750
+    },
+    "operationState": "prepared",
+    "publicKey": {
+      "challenge": "F9SdROubpEn-9kDXBUy9auwyICNohm6WlHaBOVk9EKM",
+      "rpId": "unit.example",
+      "userVerification": "required",
+      "allowCredentials": [
+        {
+          "type": "public-key",
+          "id": "Rdz28PaBBKGpHfgVGqqh-pyO31Gvae_NHbWXnEr8eHw"
+        }
+      ]
+    }
+  },
+  "redecisionOutcome": {
+    "operationID": "98b2369f-9b98-4468-8c29-a9ccfff12e17",
+    "operationState": "committed",
+    "decision": {
+      "id": "1d51b94a-7cde-4afb-9629-eb44b030324f",
+      "binding": "digital",
+      "household": "key:UjcU1ZsbXkfxcVki_WX2Ef1IKHu9x_lNxnzmByT-_NU",
+      "presenter": "merchant-1",
+      "purpose": "replenish",
+      "presenter_attested": false,
+      "price_band": null,
+      "giver": null,
+      "config_version": "digital-cfg",
+      "presented_at": 1800000000001,
+      "expires_at": 1800003600000,
+      "state": "decided",
+      "exploration_floor_met": true,
+      "mandate": "key:UjcU1ZsbXkfxcVki_WX2Ef1IKHu9x_lNxnzmByT-_NU.1",
+      "candidates": [
+        {
+          "id": "75a0431a-4431-4628-9bb0-cd7cfdaf5449",
+          "product": "digital-tea",
+          "quantity": 1,
+          "unit_price": 1200,
+          "merchant": "maker-a",
+          "maker": "made-by-tea",
+          "ships": "carrier-a",
+          "category": null,
+          "predicted_conversion": null,
+          "is_exploration": true,
+          "given_by": null,
+          "valence": "kept",
+          "decided_at": 1800000000001,
+          "kept_as": "self",
+          "lineage": null
+        }
+      ],
+      "disclosures": [
+        {
+          "merchant": "maker-a",
+          "product": null,
+          "version": "d-1",
+          "items": [
+            {
+              "label": "payment",
+              "value": "charged when the household confirms"
+            },
+            {
+              "label": "delivery",
+              "value": "already placed"
+            },
+            {
+              "label": "returns",
+              "value": "as the merchant published"
+            }
+          ],
+          "signature": "P9YEvCNEBlae43W2DRPOwKy30B8FpDrxFMV82BGGTTJNPTsvWyJuPuxXaUeS5SvEYciMN+0l6GNt0wmkL8ehCQ=="
+        }
+      ],
+      "reminders_sent": 0,
+      "decided_at": 1800000000001
+    }
+  }
+}

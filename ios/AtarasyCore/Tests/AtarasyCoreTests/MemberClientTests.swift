@@ -50,6 +50,17 @@ private actor MemberScript: MemberHTTPTransport {
         let v = TestMemberVault(failRemoval: failRemoval); try v.save(StoredMemberSession(token: token, info: info ?? self.info), environment: env); return v
     }
     private func offer(_ household: String = "own") -> Data { Data("{\"id\":\"offer\",\"household\":\"\(household)\",\"presenter\":\"presenter\",\"binding\":\"digital\",\"state\":\"drafted\"}".utf8) }
+    private func recoveryFixture() throws -> [String: Any] {
+        let url = try XCTUnwrap(Bundle.module.url(forResource: "member-recovery-runtime", withExtension: "json", subdirectory: "Fixtures"))
+        return try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+    }
+    private func fixtureData(_ root: [String: Any], _ key: String) throws -> Data { try JSONSerialization.data(withJSONObject: try XCTUnwrap(root[key])) }
+    private func fixtureSession(_ root: [String: Any], _ key: String) throws -> MemberSessionInfo { try JSONDecoder().decode(MemberSessionInfo.self, from: fixtureData(root, key)) }
+    private func fixtureAssertion(_ prepared: [String: Any]) throws -> MemberPasskeyResponse {
+        let publicKey = try XCTUnwrap(prepared["publicKey"] as? [String: Any]), challenge = try XCTUnwrap(publicKey["challenge"] as? String), allowed = try XCTUnwrap(publicKey["allowCredentials"] as? [[String: Any]]), credential = try XCTUnwrap(allowed.first?["id"] as? String)
+        let client = try JSONSerialization.data(withJSONObject: ["type": "webauthn.get", "origin": env.origin.absoluteString, "challenge": challenge])
+        return .assertion(id: credential, clientDataJSON: PasskeyBytes.encode(client), authenticatorData: "YQ", signature: "Yg", userHandle: "Yw")
+    }
 
     func testVerifiedLoginInspectsBeforeSavingAndBindsBearerToNamedOrigin() async throws {
         let grant = Data("{\"id\":\"session\",\"token\":\"\(token)\",\"expiresAt\":5000}".utf8)
@@ -107,6 +118,14 @@ private actor MemberScript: MemberHTTPTransport {
         _ = try await client.logout(); await script.release()
         do { _ = try await read.value; XCTFail() } catch { XCTAssertEqual(error as? MemberFailure, .superseded) }
     }
+    func testDeviceLockFencesLateReadsWithoutRevokingTheSavedSession() async throws {
+        let v = try vault(), script = MemberScript([.init(status: 200, data: try data(info)), .init(status: 200, data: offer())], holdAt: 1)
+        let client = MemberClient(environment: env, transport: script, vault: v, now: { 1000 }); _ = try await client.restore(household: "own")
+        let read = Task { try await client.offer(id: "offer") }; await script.waitForHold(); await client.lockLocalAccess(); await script.release()
+        do { _ = try await read.value; XCTFail() } catch { XCTAssertEqual(error as? MemberFailure, .superseded) }
+        do { _ = try await client.offer(id: "offer"); XCTFail() } catch { XCTAssertEqual(error as? MemberFailure, .expired) }
+        XCTAssertNotNil(try v.load(environment: env, household: "own"))
+    }
     func testInFlightLoginCannotRestoreAfterLogoutAndSecondLoginIsRefused() async throws {
         let grant = Data("{\"id\":\"session\",\"token\":\"\(token)\",\"expiresAt\":5000}".utf8)
         let script = MemberScript([.init(status: 200, data: grant)], holdAt: 0); let v = TestMemberVault()
@@ -133,6 +152,55 @@ private actor MemberScript: MemberHTTPTransport {
         let calls = await script.requests.count; XCTAssertEqual(calls, 1)
         let readScript = MemberScript([.init(status: 200, data: try data(info)), .init(status: 200, data: Data("[]".utf8))]); let reader = MemberClient(environment: env, transport: readScript, vault: try vault(), now: { 1000 }); _ = try await reader.restore(household: "own")
         do { _ = try await reader.offers(presenter: "presenter"); XCTFail() } catch { XCTAssertEqual(error as? MemberFailure, .malformed) }
+    }
+    func testPrivateNodeClientValidatesOpaqueRecordsAndSendsNoPlaintext() async throws {
+        let id = "33333333-3333-4333-8333-333333333333", key = Data(repeating: 4, count: 32), clear = Data("member private record".utf8)
+        let crypto = try MemberPrivateNodeCrypto(key: key), envelope = try crypto.seal(clear, environment: env, household: info.household, id: id, revision: 1)
+        let record = MemberPrivateNodeRecord(id: id, revision: 1, updatedAt: 1001, envelope: envelope)
+        let index = MemberPrivateNodeIndex(profile: "atarasy.private-node-index.1", checkedAt: 1000, records: [])
+        let script = MemberScript([.init(status: 200, data: try data(info)), .init(status: 200, data: try data(index)), .init(status: 200, data: try data(record)), .init(status: 200, data: try data(record))])
+        let client = MemberClient(environment: env, transport: script, vault: try vault(), now: { 1000 }); _ = try await client.restore(household: "own")
+        let listed = try await client.privateNodeRecords(); XCTAssertEqual(listed.records, [])
+        let written = try await client.writePrivateNodeRecord(id: id, expectedRevision: 0, envelope: envelope); XCTAssertEqual(written, record)
+        let read = try await client.privateNodeRecord(id: id); XCTAssertEqual(read, record)
+        let requests = await script.requests, body = try XCTUnwrap(requests[2].httpBody), text = String(decoding: body, as: UTF8.self)
+        XCTAssertFalse(text.contains("member private record")); XCTAssertFalse(text.contains(info.household)); XCTAssertEqual(requests[2].url?.path, "/member/private-node/records/" + id)
+    }
+    func testPrivateNodeClientRejectsUnsortedDuplicateAndPlaintextShapedHostResponses() async throws {
+        let id = "44444444-4444-4444-8444-444444444444", envelope = MemberPrivateNodeEnvelope(nonce: Data(repeating: 1, count: 12).base64EncodedString(), ciphertext: Data(repeating: 2, count: 32).base64EncodedString())
+        let row: [String: Any] = ["id": id, "revision": 1, "updatedAt": 1000, "envelope": ["profile": envelope.profile, "nonce": envelope.nonce, "ciphertext": envelope.ciphertext]]
+        for records in [[row, row], [["id": id, "revision": 1, "updatedAt": 1000, "envelope": ["profile": envelope.profile, "nonce": envelope.nonce, "ciphertext": envelope.ciphertext, "plaintext": "secret"]]]] {
+            let response = try JSONSerialization.data(withJSONObject: ["profile": "atarasy.private-node-index.1", "checkedAt": 1000, "records": records])
+            let script = MemberScript([.init(status: 200, data: try data(info)), .init(status: 200, data: response)]), client = MemberClient(environment: env, transport: script, vault: try vault(), now: { 1000 })
+            _ = try await client.restore(household: "own")
+            do { _ = try await client.privateNodeRecords(); XCTFail() } catch { XCTAssertEqual(error as? MemberFailure, .malformed) }
+        }
+    }
+    func testActualValenceRecoveryOwnerResponsesStayScopedAndRevealSharesOnlyAfterNotice() async throws {
+        let root = try recoveryFixture(), owner = try fixtureSession(root, "ownerSession"), requesterKey = ((root["created"] as! [String: Any])["requesterPublicKey"] as! String)
+        let script = MemberScript([.init(status: 200, data: try fixtureData(root, "ownerSession")), .init(status: 200, data: try fixtureData(root, "configured")), .init(status: 201, data: try fixtureData(root, "created")), .init(status: 200, data: try fixtureData(root, "completed")), .init(status: 200, data: try fixtureData(root, "finalLog"))])
+        let client = MemberClient(environment: env, transport: script, vault: try vault(owner), now: { 1_800_000_000_001 }); _ = try await client.restore(household: owner.household)
+        let configuration = try await client.recoveryConfiguration(); XCTAssertTrue(configuration.configured); XCTAssertEqual(configuration.owner, owner.household)
+        let created = try await client.createRecoveryRequest(requesterPublicKey: requesterKey); XCTAssertEqual(created.state, "pending"); XCTAssertNil(created.hostShare); XCTAssertNil(created.release)
+        let completed = try await client.recoveryRequest(id: created.id); XCTAssertEqual(completed.state, "completed"); XCTAssertNotNil(completed.hostShare); XCTAssertNotNil(completed.release); XCTAssertNil(completed.recovererPacket)
+        let log = try await client.recoveryLog(); XCTAssertEqual(log.events.first?.state, "completed")
+        let requests = await script.requests, createBody = try XCTUnwrap(JSONSerialization.jsonObject(with: try XCTUnwrap(requests[2].httpBody)) as? [String: Any])
+        XCTAssertEqual(Set(createBody.keys), ["requesterPublicKey"]); XCTAssertFalse(String(decoding: requests[2].httpBody!, as: UTF8.self).contains(try XCTUnwrap(completed.hostShare)))
+    }
+    func testActualValenceRecoveryApprovalBindsDisplayedReleaseAndNeverReturnsTheHostShare() async throws {
+        let root = try recoveryFixture(), recoverer = try fixtureSession(root, "recovererSession"), preparedObject = root["preparedApproval"] as! [String: Any], release = preparedObject["release"] as! String
+        let script = MemberScript([.init(status: 200, data: try fixtureData(root, "recovererSession")), .init(status: 200, data: try fixtureData(root, "preparedApproval")), .init(status: 200, data: try fixtureData(root, "approved"))])
+        let client = MemberClient(environment: env, transport: script, vault: try vault(recoverer), now: { 1_800_000_000_001 }); _ = try await client.restore(household: recoverer.household)
+        let requestID = ((preparedObject["request"] as! [String: Any])["id"] as! String), prepared = try await client.prepareRecoveryApproval(id: requestID, release: release)
+        let approved = try await client.approveRecovery(prepared, assertion: try fixtureAssertion(preparedObject)); XCTAssertEqual(approved.state, "approved"); XCTAssertNil(approved.hostShare); XCTAssertNil(approved.keyDigest); XCTAssertNotNil(approved.recovererPacket)
+        let requests = await script.requests, approvalBody = try XCTUnwrap(JSONSerialization.jsonObject(with: try XCTUnwrap(requests[2].httpBody)) as? [String: Any])
+        XCTAssertEqual(Set(approvalBody.keys), ["preparation", "release", "assertion"]); XCTAssertEqual(approvalBody["release"] as? String, release); XCTAssertFalse(String(decoding: requests[2].httpBody!, as: UTF8.self).contains((root["configuration"] as! [String: Any])["hostShare"] as! String))
+    }
+    func testRecoveryClientRejectsAHostShareProjectedToTheRecoverer() async throws {
+        let root = try recoveryFixture(), recoverer = try fixtureSession(root, "recovererSession"), completed = root["completed"] as! [String: Any]
+        let script = MemberScript([.init(status: 200, data: try fixtureData(root, "recovererSession")), .init(status: 200, data: try JSONSerialization.data(withJSONObject: completed))]), client = MemberClient(environment: env, transport: script, vault: try vault(recoverer), now: { 1_800_000_000_001 })
+        _ = try await client.restore(household: recoverer.household)
+        do { _ = try await client.recoveryRequest(id: completed["id"] as! String); XCTFail() } catch { XCTAssertEqual(error as? MemberFailure, .scopeMismatch) }
     }
     func testOptionsValidateRPAndDoNotSendStoredCredentials() async throws {
         let payload = Data("{\"id\":\"\(flow.id)\",\"expiresAt\":2000,\"publicKey\":{\"challenge\":\"\(String(repeating: "A", count: 43))\",\"rpId\":\"foreign.example\",\"allowCredentials\":[],\"userVerification\":\"required\"}}".utf8)
@@ -266,6 +334,31 @@ private actor MemberScript: MemberHTTPTransport {
         let review = try await client.prepareMandate(m); _ = try await client.logout()
         do { try await client.submitMandate(review, assertion: mandateAssertion(m)); XCTFail() } catch {}
         let requests = await script.requests; XCTAssertEqual(requests.count, 3)
+    }
+    func testDialsReadsEffectiveVersionAndSubmitsFixedZeroCosignerChangeOnce() async throws {
+        let before = unsignedMandate(), after = MemberMandate(id: before.id, household: before.household, ceilingOutOfNetwork: 0, ceilingDaily: 0, coolingSeconds: 60, coSigners: [], lapsesAt: 3500, version: 2)
+        let change = MemberMandateChange(id: "11111111-1111-4111-8111-111111111111", before: before, mandate: after, requiredSigners: [mandateHousehold], signedBy: [], state: "pending", createdAt: 1000, updatedAt: 1000)
+        var prepared = try JSONSerialization.jsonObject(with: data(change)) as! [String: Any]
+        prepared["publicKey"] = ["challenge": try Canonical.challenge(after.canonical(host: "unit.example")), "rpId": "unit.example", "userVerification": "required", "allowCredentials": [["type": "public-key", "id": "YQ"]]]
+        let completed = MemberMandateChange(id: change.id, before: before, mandate: after, requiredSigners: change.requiredSigners, signedBy: change.requiredSigners, state: "effective", createdAt: 1000, updatedAt: 1001)
+        let (client, script) = try mandateClient([
+            .init(status: 200, data: data(["mandates": [before]])),
+            .init(status: 200, data: data(["changes": [MemberMandateChange]() ])),
+            .init(status: 201, data: try JSONSerialization.data(withJSONObject: prepared)),
+            .init(status: 200, data: data(completed))
+        ])
+        _ = try await client.restore(household: mandateHousehold)
+        let effective = try await client.effectiveMandates(), changes = try await client.mandateChanges()
+        XCTAssertEqual(effective, [before]); XCTAssertTrue(changes.isEmpty)
+        let review = try await client.prepareMandateChange(after)
+        XCTAssertEqual(review.change, change)
+        let result = try await client.submitMandateChange(review, assertion: mandateAssertion(after))
+        XCTAssertEqual(result, completed)
+        do { _ = try await client.submitMandateChange(review, assertion: mandateAssertion(after)); XCTFail("replayed") } catch {}
+        let requests = await script.requests
+        XCTAssertEqual(requests.map { $0.url!.path }, ["/auth/session", "/member/mandates/effective", "/member/mandates/changes", "/member/mandates/changes", "/member/mandates/changes/" + change.id + "/submit"])
+        let body = try JSONSerialization.jsonObject(with: requests[4].httpBody!) as! [String: Any]
+        XCTAssertEqual(Set(body.keys), ["assertion"])
     }
 
 }

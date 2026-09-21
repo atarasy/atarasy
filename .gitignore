@@ -6,3 +6,9 @@ node_modules/
 ios/AtarasyCore/.build/
 ios/AtarasyPrototype.xcodeproj/
 ios/DerivedData/
+
+# Android local build products and machine-specific SDK selection
+android/.gradle/
+android/.kotlin/
+android/local.properties
+android/**/build/

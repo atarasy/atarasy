@@ -16,6 +16,7 @@ public struct MemberProposalSource: Identifiable, Sendable {
     public let presenter: String
     public internal(set) var status: Status
     public internal(set) var offers: [MemberOfferSummary]
+    public internal(set) var verifiedAt: Int64?
 }
 private enum ProposalRead: Sendable {
     case success(Int, [MemberOfferSummary]), failed(Int), invalidSession
@@ -30,6 +31,7 @@ private enum ProposalRead: Sendable {
     @Published public private(set) var review: MemberReview?
     @Published public private(set) var reviewLoading = false
     @Published public private(set) var reviewUnavailable = false
+    @Published public private(set) var stale = false
     private var reviewGeneration: UInt64 = 0
     private var detailGeneration: UInt64 = 0
     public var incomplete: Bool { sources.contains { $0.status == .unavailable } }
@@ -42,7 +44,7 @@ private enum ProposalRead: Sendable {
         self.service = service; self.now = now
     }
     public func setSession(_ session: MemberSessionInfo?) {
-        generation &+= 1; self.session = session; sources = []; loading = false; clearDetail()
+        generation &+= 1; self.session = session; sources = []; loading = false; stale = session != nil; clearDetail()
         sessionIdentity = session == nil ? nil : UUID()
     }
     private func invalidate() { setSession(nil); onSessionUnavailable?() }
@@ -50,6 +52,7 @@ private enum ProposalRead: Sendable {
         reviewGeneration &+= 1; review = nil; reviewLoading = false; reviewUnavailable = false
         detailGeneration &+= 1; detail = nil; detailLoading = false; detailUnavailable = false
     }
+    public func markStale() { guard session != nil else { return }; stale = true; clearDetail() }
     public func loadReview(_ selected: MemberOfferSummary) async {
         let expectedSelection = detailGeneration &+ 1
         await loadDetail(selected)
@@ -93,10 +96,10 @@ private enum ProposalRead: Sendable {
     public func refresh() async {
         guard !loading, let session else { return }
         guard session.expiresAt > now() else { invalidate(); return }
-        generation &+= 1; let started = generation; clearDetail()
+        generation &+= 1; let started = generation, previous = Dictionary(uniqueKeysWithValues: sources.map { ($0.presenter, $0) }); clearDetail()
         var seen = Set<Data>()
         let presenters = session.presenters.filter { seen.insert(Data($0.utf8)).inserted }
-        sources = presenters.map { MemberProposalSource(presenter: $0, status: .loading, offers: []) }
+        sources = presenters.map { MemberProposalSource(presenter: $0, status: .loading, offers: [], verifiedAt: previous[$0]?.verifiedAt) }
         loading = true
         defer { if generation == started { loading = false } }
         let service = self.service
@@ -122,16 +125,21 @@ private enum ProposalRead: Sendable {
                 guard session.expiresAt > now() else { invalidate(); group.cancelAll(); continue }
                 if Task.isCancelled {
                     // A cancelled refresh is incomplete, never a checked empty list.
-                    for index in sources.indices where sources[index].status == .loading { sources[index].status = .unavailable }
+                    for index in sources.indices where sources[index].status == .loading {
+                        sources[index].offers = previous[presenters[index]]?.offers ?? []
+                        sources[index].verifiedAt = previous[presenters[index]]?.verifiedAt
+                        sources[index].status = .unavailable
+                    }
                     group.cancelAll(); continue
                 }
                 switch result {
-                case .success(let index, let rows): sources[index].offers = rows; sources[index].status = .available
-                case .failed(let index): sources[index].status = .unavailable
+                case .success(let index, let rows): sources[index].offers = rows; sources[index].status = .available; sources[index].verifiedAt = now()
+                case .failed(let index): sources[index].offers = previous[presenters[index]]?.offers ?? []; sources[index].verifiedAt = previous[presenters[index]]?.verifiedAt; sources[index].status = .unavailable
                 case .invalidSession: invalidate(); group.cancelAll(); continue
                 }
                 if next < presenters.count { enqueue(next); next += 1 }
             }
         }
+        if generation == started { stale = sources.contains { $0.status != .available } }
     }
 }

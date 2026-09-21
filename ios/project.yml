@@ -26,6 +26,8 @@ targets:
       - path: AtarasyPrototype
       - path: ../contracts/ios-first/fixtures.json
         buildPhase: resources
+      - path: AtarasyPrototype/Fixtures/member-permission-request-runtime.json
+        buildPhase: resources
     dependencies:
       - package: AtarasyCore
     settings:

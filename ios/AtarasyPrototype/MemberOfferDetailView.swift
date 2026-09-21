@@ -6,6 +6,9 @@ struct MemberOfferDetailView: View {
     @ObservedObject var model: MemberProposals
     let selected: MemberOfferSummary
     var statements: MemberStatementFlow? = nil
+    var decisions: MemberDigitalFlow? = nil
+    @State private var digitalDraft: MemberDigitalDraft?
+    @State private var draftNow = Date()
     private let clock = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     var body: some View {
         Form {
@@ -23,7 +26,26 @@ struct MemberOfferDetailView: View {
                     }
                     if model.reviewLoading { ProgressView("Loading review information") }
                     else if let review = model.review {
-                        MemberReviewSections(review: review)
+                        MemberReviewSections(review: review, digitalDraft: $digitalDraft)
+                        if let draft = digitalDraft, case .approval = review {
+                            Section("Unsent choices") {
+                                Text("Choices stay on this screen. Leaving or refreshing discards them. Nothing is signed, sent or ordered.").font(.footnote)
+                                if let summary = try? draft.summary(now: Int64(draftNow.timeIntervalSince1970 * 1000)) {
+                                    Text("Selected goods: \(summary.goods)")
+                                    Text("Carriage: \(summary.carriage)")
+                                    Text("Draft total: \(summary.total), in the merchant's supplied units")
+                                        .accessibilityIdentifier("digitalDraftTotal")
+                                } else {
+                                    Text("A draft total requires a choice for every item, known carriage and unexpired terms.")
+                                }
+                                if let decisions {
+                                    NavigationLink("Review digital decision") { MemberDigitalScreen(flow: decisions, detail: detail, draft: draft) }
+                                        .disabled((try? draft.summary(now: Int64(draftNow.timeIntervalSince1970 * 1000))) == nil)
+                                        .accessibilityIdentifier("openDigitalDecision")
+                                } else { Text("Submitting a digital decision is not available in this view.").font(.footnote) }
+                                Button("Discard choices") { digitalDraft?.discard() }
+                            }
+                        }
                         if case .statement(let statement) = review, let statements {
                             Section {
                                 NavigationLink("Review and approve statement") { MemberStatementScreen(flow: statements, detail: detail, statement: statement) }
@@ -78,7 +100,14 @@ struct MemberOfferDetailView: View {
             }
         }
         .task(id: model.sessionIdentity) { await model.loadDetail(selected) }
-        .onReceive(clock) { _ in model.checkExpiry() }
-        .onDisappear { model.clearDetail() }
+        .onChange(of: model.review) { _, review in
+            digitalDraft = nil
+            if model.detail?.state == "presented", case .approval(let approval) = review {
+                digitalDraft = MemberDigitalDraft(approval: approval)
+            }
+        }
+        .onChange(of: model.sessionIdentity) { _, _ in digitalDraft = nil }
+        .onReceive(clock) { date in draftNow = date; model.checkExpiry() }
+        .onDisappear { digitalDraft = nil; model.clearDetail() }
     }
 }

@@ -54,13 +54,13 @@ public struct FrozenMemberStatement: Sendable {
     private let environment: MemberEnvironment
     private let service: any MemberStatementService
     private let passkeys: any MemberPasskeyAuthorising
-    private let store: FileMemberOperationStore
+    private let store: any MemberOperationStore
     private let diagnostic: (String) -> Void
     private let now: () -> Int64
     private var session: MemberSessionInfo?
     private var prepared: MemberPreparedOperation?
     private var generation: UInt64 = 0
-    public init(environment: MemberEnvironment, service: any MemberStatementService, passkeys: any MemberPasskeyAuthorising, store: FileMemberOperationStore, diagnostic: @escaping (String) -> Void = { _ in }, now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }) {
+    public init(environment: MemberEnvironment, service: any MemberStatementService, passkeys: any MemberPasskeyAuthorising, store: any MemberOperationStore, diagnostic: @escaping (String) -> Void = { _ in }, now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }) {
         self.environment = environment; self.service = service; self.passkeys = passkeys; self.store = store; self.diagnostic = diagnostic; self.now = now
     }
     public func setSession(_ session: MemberSessionInfo?) {
@@ -87,7 +87,7 @@ public struct FrozenMemberStatement: Sendable {
         guard let session, session.expiresAt > now() else { saved = []; return }
         do {
             saved = try store.handles().filter {
-                Data($0.environment.utf8) == Data(environment.name.utf8) && $0.origin == environment.origin &&
+                $0.operationProfile == "atarasy.member-statement-authorisation.1" && Data($0.environment.utf8) == Data(environment.name.utf8) && $0.origin == environment.origin &&
                 Data($0.household.utf8) == Data(session.household.utf8) &&
                 session.presenters.contains($0.presenter)
             }

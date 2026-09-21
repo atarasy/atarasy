@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { canonicalDecisions, canonicalStatement, challengeFor, challengeForStatement, STATEMENT_DOMAIN } from "../src/shared/canonical.js";
+import { canonicalDecisions, canonicalStatement, canonicalWithdrawal, challengeFor, challengeForStatement, STATEMENT_DOMAIN } from "../src/shared/canonical.js";
 
 describe("§10.5: the canonical form of a decided set", () => {
   test("is the offer id, then one line per decision in ascending candidate id", () => {
@@ -24,6 +24,13 @@ describe("§10.5: the canonical form of a decided set", () => {
     // A browser writes the challenge into clientDataJSON as unpadded base64url,
     // which is the string the engine compares against.
     expect(Buffer.from(challenge).toString("base64url")).toBe(expected.toString("base64url"));
+  });
+});
+
+describe("§16.5: the canonical form of a withdrawal", () => {
+  test("binds the offer and exact decision generation", () => {
+    expect(canonicalWithdrawal("offer-1", 1_800_000_000_001))
+      .toBe("valence.withdraw.1\noffer-1\n1800000000001");
   });
 });
 

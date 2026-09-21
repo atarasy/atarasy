@@ -1,0 +1,213 @@
+{
+  "profile": "atarasy.member-recovery-fixture.1",
+  "scope": "Synthetic PostgreSQL recovery ceremony; no bearer token, private key or live notice destination.",
+  "environment": {
+    "name": "test",
+    "origin": "https://unit.example"
+  },
+  "ownerSession": {
+    "id": "a1220133-c868-4f6a-8485-aa5fa54094e6",
+    "household": "key:xHnrdZeRE-Epw-aGz-eA_D5soWpF_CVcR4iGfE-ehGE",
+    "presenters": [
+      "merchant-1"
+    ],
+    "expiresAt": 1800000090001
+  },
+  "recovererSession": {
+    "id": "81d3c6b2-aedf-4060-b836-b6a449e4f578",
+    "household": "key:lvm9gtBRA8v7kHnR69lWgUzmZ2l_r7QOTXHUmgBIIag",
+    "presenters": [],
+    "expiresAt": 1800000100001
+  },
+  "recoveryPublicKey": "BAC0ukXQXe8wPS7krLis0z9nes_pN6DciSXkcRhL7xUZXEcQTH89-kH8xROlGTGkcvD5heU7gPB6ZWPavFGWaSo",
+  "registered": {
+    "profile": "atarasy.member-recovery-key.1",
+    "household": "key:lvm9gtBRA8v7kHnR69lWgUzmZ2l_r7QOTXHUmgBIIag",
+    "publicKey": "BAC0ukXQXe8wPS7krLis0z9nes_pN6DciSXkcRhL7xUZXEcQTH89-kH8xROlGTGkcvD5heU7gPB6ZWPavFGWaSo",
+    "updatedAt": 1800000000001
+  },
+  "participant": {
+    "profile": "atarasy.member-recovery-participant.1",
+    "household": "key:lvm9gtBRA8v7kHnR69lWgUzmZ2l_r7QOTXHUmgBIIag",
+    "publicKey": "BAC0ukXQXe8wPS7krLis0z9nes_pN6DciSXkcRhL7xUZXEcQTH89-kH8xROlGTGkcvD5heU7gPB6ZWPavFGWaSo",
+    "keyDigest": "IQnAfJ3f1_nn2RofabCOLN-LTbZ5qlawZaqSXyMWH8U",
+    "updatedAt": 1800000000001
+  },
+  "configuration": {
+    "epoch": 1,
+    "recoverer": "key:lvm9gtBRA8v7kHnR69lWgUzmZ2l_r7QOTXHUmgBIIag",
+    "keyDigest": "9MBUhf_ivpNoBSTE40_AYX69tjUx9w3j8jYomlylONQ",
+    "hostShare": "4sjko1_ScUsjTcw0x-T2kwsYiv0TgVA557sVjh0vTk3DESz-3HZVWezi1CFpXeOmbTmIq1JiEyhMI1jab46iTw",
+    "recovererPacket": "Jo6-TwZRBO-wWWlAYrHcLVcDsBJYPwjNnv3c-0o7qm_RqcqHWmooMiM2wSWqx9VTfEVQISndOyrhc0SgUsa35JE0yQOIn2uWY0P9_DVPpoNF2DxAR_jst_j6qboae383Fope8RjQLtJ1CbVJN1d6ML6xYQISIxgm5CTObbh2zRY",
+    "noticeChannel": "anc1_ucCtzCIA0YqWoOuTmqrAhuqDkM9cXJpQQ4CWH5kq-64"
+  },
+  "preparedConfiguration": {
+    "profile": "atarasy.member-recovery-configuration-review.1",
+    "configuration": {
+      "owner": "key:xHnrdZeRE-Epw-aGz-eA_D5soWpF_CVcR4iGfE-ehGE",
+      "recoverer": "key:lvm9gtBRA8v7kHnR69lWgUzmZ2l_r7QOTXHUmgBIIag",
+      "recovererKeyDigest": "IQnAfJ3f1_nn2RofabCOLN-LTbZ5qlawZaqSXyMWH8U",
+      "keyDigest": "9MBUhf_ivpNoBSTE40_AYX69tjUx9w3j8jYomlylONQ",
+      "hostShare": "4sjko1_ScUsjTcw0x-T2kwsYiv0TgVA557sVjh0vTk3DESz-3HZVWezi1CFpXeOmbTmIq1JiEyhMI1jab46iTw",
+      "recovererPacket": "Jo6-TwZRBO-wWWlAYrHcLVcDsBJYPwjNnv3c-0o7qm_RqcqHWmooMiM2wSWqx9VTfEVQISndOyrhc0SgUsa35JE0yQOIn2uWY0P9_DVPpoNF2DxAR_jst_j6qboae383Fope8RjQLtJ1CbVJN1d6ML6xYQISIxgm5CTObbh2zRY",
+      "noticeChannel": "anc1_ucCtzCIA0YqWoOuTmqrAhuqDkM9cXJpQQ4CWH5kq-64",
+      "epoch": 1
+    },
+    "id": "ba2b7d6a-ca2b-43a3-a2df-0340d9278b95",
+    "expiresAt": 1800000060001,
+    "publicKey": {
+      "challenge": "o4QHWjPSqGKlBTatR_4NAHI1tSRo9eT4nZg36AISD0w",
+      "rpId": "unit.example",
+      "timeout": 60000,
+      "userVerification": "required",
+      "allowCredentials": [
+        {
+          "type": "public-key",
+          "id": "Sxn6meCPKdY5fQmwat1IouFeig0HOg401kMqykdxqZo"
+        }
+      ]
+    }
+  },
+  "configured": {
+    "profile": "atarasy.member-recovery-configuration.1",
+    "owner": "key:xHnrdZeRE-Epw-aGz-eA_D5soWpF_CVcR4iGfE-ehGE",
+    "configured": true,
+    "recoverer": "key:lvm9gtBRA8v7kHnR69lWgUzmZ2l_r7QOTXHUmgBIIag",
+    "recovererKeyDigest": "IQnAfJ3f1_nn2RofabCOLN-LTbZ5qlawZaqSXyMWH8U",
+    "keyDigest": "9MBUhf_ivpNoBSTE40_AYX69tjUx9w3j8jYomlylONQ",
+    "epoch": 1,
+    "createdAt": 1800000000001,
+    "updatedAt": 1800000000001
+  },
+  "created": {
+    "profile": "atarasy.member-recovery-request.1",
+    "id": "6e886fb2-b50f-4745-8889-4bfbe46ee67f",
+    "owner": "key:xHnrdZeRE-Epw-aGz-eA_D5soWpF_CVcR4iGfE-ehGE",
+    "recoverer": "key:lvm9gtBRA8v7kHnR69lWgUzmZ2l_r7QOTXHUmgBIIag",
+    "epoch": 1,
+    "requesterPublicKey": "BOgq553KjP6-P9L1KLAUPgClLn_-er4nd6_99hu26M0oemKoUHmRPxZG-okMdP0CJsn9AEDly15lixckjGpqvpg",
+    "state": "pending",
+    "createdAt": 1800000000001,
+    "updatedAt": 1800000000001,
+    "recovererPacket": null,
+    "release": null,
+    "hostShare": null,
+    "keyDigest": null
+  },
+  "recovererList": {
+    "profile": "atarasy.member-recovery-request-list.1",
+    "checkedAt": 1800000000001,
+    "requests": [
+      {
+        "profile": "atarasy.member-recovery-request.1",
+        "id": "6e886fb2-b50f-4745-8889-4bfbe46ee67f",
+        "owner": "key:xHnrdZeRE-Epw-aGz-eA_D5soWpF_CVcR4iGfE-ehGE",
+        "recoverer": "key:lvm9gtBRA8v7kHnR69lWgUzmZ2l_r7QOTXHUmgBIIag",
+        "epoch": 1,
+        "requesterPublicKey": "BOgq553KjP6-P9L1KLAUPgClLn_-er4nd6_99hu26M0oemKoUHmRPxZG-okMdP0CJsn9AEDly15lixckjGpqvpg",
+        "state": "pending",
+        "createdAt": 1800000000001,
+        "updatedAt": 1800000000001,
+        "recovererPacket": "Jo6-TwZRBO-wWWlAYrHcLVcDsBJYPwjNnv3c-0o7qm_RqcqHWmooMiM2wSWqx9VTfEVQISndOyrhc0SgUsa35JE0yQOIn2uWY0P9_DVPpoNF2DxAR_jst_j6qboae383Fope8RjQLtJ1CbVJN1d6ML6xYQISIxgm5CTObbh2zRY",
+        "release": null,
+        "hostShare": null,
+        "keyDigest": null
+      }
+    ]
+  },
+  "preparedApproval": {
+    "profile": "atarasy.member-recovery-approval-review.1",
+    "request": {
+      "profile": "atarasy.member-recovery-request.1",
+      "id": "6e886fb2-b50f-4745-8889-4bfbe46ee67f",
+      "owner": "key:xHnrdZeRE-Epw-aGz-eA_D5soWpF_CVcR4iGfE-ehGE",
+      "recoverer": "key:lvm9gtBRA8v7kHnR69lWgUzmZ2l_r7QOTXHUmgBIIag",
+      "epoch": 1,
+      "requesterPublicKey": "BOgq553KjP6-P9L1KLAUPgClLn_-er4nd6_99hu26M0oemKoUHmRPxZG-okMdP0CJsn9AEDly15lixckjGpqvpg",
+      "state": "pending",
+      "createdAt": 1800000000001,
+      "updatedAt": 1800000000001,
+      "recovererPacket": "Jo6-TwZRBO-wWWlAYrHcLVcDsBJYPwjNnv3c-0o7qm_RqcqHWmooMiM2wSWqx9VTfEVQISndOyrhc0SgUsa35JE0yQOIn2uWY0P9_DVPpoNF2DxAR_jst_j6qboae383Fope8RjQLtJ1CbVJN1d6ML6xYQISIxgm5CTObbh2zRY",
+      "release": null,
+      "hostShare": null,
+      "keyDigest": null
+    },
+    "release": "YO4vQghDVyUk7LMwp2vNDVNtIJUSVL2w0tnBCrj_aTGkKK7W3IIbJF3ULHf8JWWSKVsuttiSy9K8SwxUzRiLO7qXvmVODJHqVM07sl6qPgS0XviUs8w6IrNNJGIJd6TzbDOBbwQ9ixaHcWdTYZBn4Wn7VJhTeKz0jO_8r4Unb6s",
+    "id": "fbc1721d-422b-4f92-aa7c-ae3e86dd9e68",
+    "expiresAt": 1800000060001,
+    "publicKey": {
+      "challenge": "P-HGiiOP60UPPC4myMNVfefU-AowCP4tT9LxWepQb7E",
+      "rpId": "unit.example",
+      "timeout": 60000,
+      "userVerification": "required",
+      "allowCredentials": [
+        {
+          "type": "public-key",
+          "id": "r2peDSjS-7PjBM4PjHN2KpElx9taLGBil49b3ML15kM"
+        }
+      ]
+    }
+  },
+  "approved": {
+    "profile": "atarasy.member-recovery-request.1",
+    "id": "6e886fb2-b50f-4745-8889-4bfbe46ee67f",
+    "owner": "key:xHnrdZeRE-Epw-aGz-eA_D5soWpF_CVcR4iGfE-ehGE",
+    "recoverer": "key:lvm9gtBRA8v7kHnR69lWgUzmZ2l_r7QOTXHUmgBIIag",
+    "epoch": 1,
+    "requesterPublicKey": "BOgq553KjP6-P9L1KLAUPgClLn_-er4nd6_99hu26M0oemKoUHmRPxZG-okMdP0CJsn9AEDly15lixckjGpqvpg",
+    "state": "approved",
+    "createdAt": 1800000000001,
+    "updatedAt": 1800000000001,
+    "recovererPacket": "Jo6-TwZRBO-wWWlAYrHcLVcDsBJYPwjNnv3c-0o7qm_RqcqHWmooMiM2wSWqx9VTfEVQISndOyrhc0SgUsa35JE0yQOIn2uWY0P9_DVPpoNF2DxAR_jst_j6qboae383Fope8RjQLtJ1CbVJN1d6ML6xYQISIxgm5CTObbh2zRY",
+    "release": "YO4vQghDVyUk7LMwp2vNDVNtIJUSVL2w0tnBCrj_aTGkKK7W3IIbJF3ULHf8JWWSKVsuttiSy9K8SwxUzRiLO7qXvmVODJHqVM07sl6qPgS0XviUs8w6IrNNJGIJd6TzbDOBbwQ9ixaHcWdTYZBn4Wn7VJhTeKz0jO_8r4Unb6s",
+    "hostShare": null,
+    "keyDigest": null
+  },
+  "pendingLog": {
+    "profile": "atarasy.member-recovery-log.1",
+    "owner": "key:xHnrdZeRE-Epw-aGz-eA_D5soWpF_CVcR4iGfE-ehGE",
+    "events": [
+      {
+        "id": "5acc24b3-1b28-482f-b602-7ff2a18bdfec",
+        "owner": "key:xHnrdZeRE-Epw-aGz-eA_D5soWpF_CVcR4iGfE-ehGE",
+        "recovery": "6e886fb2-b50f-4745-8889-4bfbe46ee67f",
+        "recoverer": "key:lvm9gtBRA8v7kHnR69lWgUzmZ2l_r7QOTXHUmgBIIag",
+        "state": "notice_pending",
+        "occurredAt": 1800000000001,
+        "deliveredAt": null,
+        "receipt": null
+      }
+    ]
+  },
+  "completed": {
+    "profile": "atarasy.member-recovery-request.1",
+    "id": "6e886fb2-b50f-4745-8889-4bfbe46ee67f",
+    "owner": "key:xHnrdZeRE-Epw-aGz-eA_D5soWpF_CVcR4iGfE-ehGE",
+    "recoverer": "key:lvm9gtBRA8v7kHnR69lWgUzmZ2l_r7QOTXHUmgBIIag",
+    "epoch": 1,
+    "requesterPublicKey": "BOgq553KjP6-P9L1KLAUPgClLn_-er4nd6_99hu26M0oemKoUHmRPxZG-okMdP0CJsn9AEDly15lixckjGpqvpg",
+    "state": "completed",
+    "createdAt": 1800000000001,
+    "updatedAt": 1800000000001,
+    "recovererPacket": null,
+    "release": "YO4vQghDVyUk7LMwp2vNDVNtIJUSVL2w0tnBCrj_aTGkKK7W3IIbJF3ULHf8JWWSKVsuttiSy9K8SwxUzRiLO7qXvmVODJHqVM07sl6qPgS0XviUs8w6IrNNJGIJd6TzbDOBbwQ9ixaHcWdTYZBn4Wn7VJhTeKz0jO_8r4Unb6s",
+    "hostShare": "4sjko1_ScUsjTcw0x-T2kwsYiv0TgVA557sVjh0vTk3DESz-3HZVWezi1CFpXeOmbTmIq1JiEyhMI1jab46iTw",
+    "keyDigest": "9MBUhf_ivpNoBSTE40_AYX69tjUx9w3j8jYomlylONQ"
+  },
+  "finalLog": {
+    "profile": "atarasy.member-recovery-log.1",
+    "owner": "key:xHnrdZeRE-Epw-aGz-eA_D5soWpF_CVcR4iGfE-ehGE",
+    "events": [
+      {
+        "id": "5acc24b3-1b28-482f-b602-7ff2a18bdfec",
+        "owner": "key:xHnrdZeRE-Epw-aGz-eA_D5soWpF_CVcR4iGfE-ehGE",
+        "recovery": "6e886fb2-b50f-4745-8889-4bfbe46ee67f",
+        "recoverer": "key:lvm9gtBRA8v7kHnR69lWgUzmZ2l_r7QOTXHUmgBIIag",
+        "state": "completed",
+        "occurredAt": 1800000000001,
+        "deliveredAt": 1800000000001,
+        "receipt": "notice-receipt-5acc24b3-1b28-482f-b602-7ff2a18bdfec"
+      }
+    ]
+  }
+}
