@@ -45,6 +45,8 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import java.io.File
 
 class MainActivity : ComponentActivity() {
@@ -64,6 +66,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var privateNode: MemberPrivateNode
     private lateinit var recoveryFlow: MemberRecoveryFlow
     private var hostMoveFlow: MemberHostMoveFlow? = null
+    private lateinit var androidRefresh: MemberAndroidRefresh
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -109,6 +112,7 @@ class MainActivity : ComponentActivity() {
             EncryptedFileRecoveryMaterialVault(File(noBackupFilesDir, "member-recovery-material"), installationCipher),
             getString(R.string.atarasy_recovery_notice_channel).trim().ifEmpty { null },
         )
+        androidRefresh = MemberAndroidRefresh(memberSessions, FirebaseRefreshRegistrationProvider(this))
         val moveTarget = runCatching {
             val name = getString(R.string.atarasy_move_target_name).trim(); val origin = getString(R.string.atarasy_move_target_origin).trim()
             if (name.isEmpty() || origin.isEmpty()) null else MemberEnvironment.create(name, origin)
@@ -164,6 +168,8 @@ class MainActivity : ComponentActivity() {
                 onSetHostMoveSession = { hostMoveFlow?.setSession(it) },
                 onPrepareHostMove = { hostMoveFlow?.prepare() ?: MemberHostMoveState(MemberHostMovePhase.SOURCE_RETAINED, "No trusted target host is configured.") },
                 onRetireSourceHost = { hostMoveFlow?.retireSource() ?: MemberHostMoveState(MemberHostMovePhase.UNRESOLVED, "Source retirement is unavailable.") },
+                onRegisterRefresh = androidRefresh::register,
+                refreshEvents = MemberAndroidRefreshEvents.events,
             )
         }
     }
@@ -213,6 +219,8 @@ fun AtarasyApp(
     onSetHostMoveSession: (MemberSessionInfo?) -> Unit = {},
     onPrepareHostMove: suspend () -> MemberHostMoveState = { MemberHostMoveState(MemberHostMovePhase.SOURCE_RETAINED) },
     onRetireSourceHost: suspend () -> MemberHostMoveState = { MemberHostMoveState(MemberHostMovePhase.UNRESOLVED) },
+    onRegisterRefresh: suspend () -> MemberAndroidRefreshSubscription = { throw MemberFailure.Unavailable },
+    refreshEvents: Flow<Unit> = emptyFlow(),
 ) {
     var selectedSection by rememberSaveable { mutableStateOf("Offers") }
     var session by remember { mutableStateOf<MemberSessionInfo?>(null) }
@@ -225,6 +233,8 @@ fun AtarasyApp(
     var reviewFailure by remember { mutableStateOf(false) }
     var refreshGeneration by remember { mutableStateOf(0L) }
     var privateNodeState by remember { mutableStateOf(MemberPrivateNodeState.LOCKED) }
+    var refreshNotice by remember { mutableStateOf("") }
+    var hintedRefresh by remember { mutableStateOf(false) }
     val accessSession = session?.takeIf { privateNodeState == MemberPrivateNodeState.READY }
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -239,10 +249,25 @@ fun AtarasyApp(
     }
     LaunchedEffect(accessSession, refreshGeneration) {
         val current = accessSession ?: run { offers = null; return@LaunchedEffect }
-        offers = null; offerFailure = false; selectedOffer = null; detail = null
-        try { offers = onLoadOffers(current) } catch (failure: Exception) {
+        val retained = offers; val hinted = hintedRefresh
+        if (!hinted) offers = null
+        offerFailure = false; selectedOffer = null; detail = null
+        try {
+            offers = onLoadOffers(current)
+            if (hinted) refreshNotice = "Configured sources were refreshed."
+        } catch (failure: Exception) {
             if (failure is CancellationException) throw failure
             if (failure.endsPrivateSession()) session = null else offerFailure = true
+            if (hinted) { offers = retained; offerFailure = retained == null; refreshNotice = "Some sources could not be checked. Cached rows remain stale." }
+        }
+        if (hinted) hintedRefresh = false
+    }
+    LaunchedEffect(refreshEvents) {
+        refreshEvents.collect {
+            if (session != null) {
+                selectedOffer = null; detail = null; review = null; offerFailure = false; detailFailure = false; reviewFailure = false
+                hintedRefresh = true; refreshNotice = "An update is available. Checking configured sources."; refreshGeneration++
+            }
         }
     }
     LaunchedEffect(selectedOffer, accessSession) {
@@ -273,6 +298,7 @@ fun AtarasyApp(
                             if (privateNodeState == MemberPrivateNodeState.RECOVERY_REQUIRED) "This installation has no key for the encrypted private records. Protected actions remain closed." else "Open the encrypted private records before using protected actions.",
                         )
                     }
+                    if (refreshNotice.isNotEmpty()) MemberCard("Updates", refreshNotice)
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         (listOf("Offers", "Saved", "Access", "Dials", "Recovery") + (if (hostMoveAvailable) listOf("Move Host") else emptyList()) + "Account").chunked(3).forEach { sections ->
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -330,6 +356,9 @@ fun AtarasyApp(
                             onSignedIn = { info ->
                                 session = info; privateNodeState = onOpenPrivateNode(info)
                                 onSetHostMoveSession(info)
+                                refreshNotice = try {
+                                    onRegisterRefresh(); "Private update notifications are enabled. Notifications contain no proposal details."
+                                } catch (_: Exception) { "Update notifications are unavailable. Foreground refresh remains available." }
                                 selectedSection = if (privateNodeState == MemberPrivateNodeState.READY) "Offers" else "Account"
                                 privateNodeState
                             },

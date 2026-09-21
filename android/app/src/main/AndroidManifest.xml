@@ -9,6 +9,7 @@
         android:label="Atarasy"
         android:supportsRtl="true"
         android:theme="@style/Theme.Atarasy">
+        <meta-data android:name="firebase_messaging_installation_id_enabled" android:value="true" />
         <activity
             android:name=".MainActivity"
             android:exported="true">
@@ -17,5 +18,12 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <service
+            android:name=".AtarasyMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
     </application>
 </manifest>

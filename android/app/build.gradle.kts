@@ -17,6 +17,10 @@ android {
         resValue("string", "atarasy_recovery_notice_channel", providers.gradleProperty("atarasyRecoveryNoticeChannel").orElse("").get())
         resValue("string", "atarasy_move_target_name", providers.gradleProperty("atarasyMoveTargetName").orElse("").get())
         resValue("string", "atarasy_move_target_origin", providers.gradleProperty("atarasyMoveTargetOrigin").orElse("").get())
+        resValue("string", "google_app_id", providers.gradleProperty("atarasyFirebaseAppId").orElse("").get())
+        resValue("string", "google_api_key", providers.gradleProperty("atarasyFirebaseApiKey").orElse("").get())
+        resValue("string", "gcm_defaultSenderId", providers.gradleProperty("atarasyFirebaseSenderId").orElse("").get())
+        resValue("string", "project_id", providers.gradleProperty("atarasyFirebaseProjectId").orElse("").get())
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -51,6 +55,9 @@ dependencies {
     implementation("androidx.credentials:credentials-play-services-auth:1.6.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+    implementation(platform("com.google.firebase:firebase-bom:34.19.0"))
+    implementation("com.google.firebase:firebase-messaging")
+    implementation("com.google.firebase:firebase-installations")
     debugImplementation("androidx.compose.ui:ui-tooling")
     testImplementation("junit:junit:4.13.2")
 }
