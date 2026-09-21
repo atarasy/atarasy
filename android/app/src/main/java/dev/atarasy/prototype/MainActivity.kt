@@ -58,6 +58,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var withdrawals: MemberWithdrawalFlow
     private lateinit var savedOperations: MemberSavedOperations
     private lateinit var operationActions: MemberOperationActions
+    private lateinit var permissions: MemberPermissions
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -87,6 +88,7 @@ class MainActivity : ComponentActivity() {
         withdrawals = MemberWithdrawalFlow(memberSessions, withdrawalOperations, passkeys)
         savedOperations = MemberSavedOperations(environment, memberSessions, operationStore, decisionOperations, statementOperations, withdrawalOperations)
         operationActions = MemberOperationActions(environment, memberSessions)
+        permissions = MemberPermissions(memberSessions)
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         setContent {
             AtarasyApp(
@@ -104,6 +106,11 @@ class MainActivity : ComponentActivity() {
                 onPrepareWithdrawal = withdrawals::prepare,
                 onApproveWithdrawal = withdrawals::approve,
                 onCancelOperation = operationActions::cancel,
+                onLoadPermissions = permissions::list,
+                onRevokePermission = permissions::revoke,
+                onLoadPermissionRequests = permissions::requests,
+                onReadPermissionRequest = permissions::request,
+                onDecidePermissionRequest = permissions::decide,
             )
         }
     }
@@ -130,6 +137,11 @@ fun AtarasyApp(
     onPrepareWithdrawal: suspend (MemberSessionInfo, MemberOperationHandle) -> MemberWithdrawalReview = { _, _ -> throw MemberFailure.Unavailable },
     onApproveWithdrawal: suspend (MemberWithdrawalReview) -> MemberWithdrawalActionResult = { MemberWithdrawalActionResult.Failed(MemberFailure.Unavailable) },
     onCancelOperation: suspend (MemberOperationHandle) -> Unit = { throw MemberFailure.Unavailable },
+    onLoadPermissions: suspend () -> MemberPermissionList = { throw MemberFailure.Unavailable },
+    onRevokePermission: suspend (MemberPermission) -> MemberPermission = { throw MemberFailure.Unavailable },
+    onLoadPermissionRequests: suspend () -> List<MemberPermissionRequest> = { throw MemberFailure.Unavailable },
+    onReadPermissionRequest: suspend (String) -> MemberPermissionRequest = { throw MemberFailure.Unavailable },
+    onDecidePermissionRequest: suspend (MemberPermissionRequest, Boolean) -> MemberPermissionRequest = { _, _ -> throw MemberFailure.Unavailable },
 ) {
     var selectedSection by rememberSaveable { mutableStateOf("Offers") }
     var session by remember { mutableStateOf<MemberSessionInfo?>(null) }
@@ -182,7 +194,7 @@ fun AtarasyApp(
                     Text("Atarasy", style = MaterialTheme.typography.headlineLarge, modifier = Modifier.semantics { heading() })
                     Text("Your household", style = MaterialTheme.typography.titleMedium)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf("Offers", "Saved", "Account").forEach { section ->
+                        listOf("Offers", "Saved", "Access", "Account").forEach { section ->
                             TextButton(onClick = { selectedSection = section }) { Text(section) }
                         }
                     }
@@ -208,6 +220,8 @@ fun AtarasyApp(
                         )
                     } else if (selectedSection == "Saved") {
                         MemberSavedOperationsCard(session, onLoadSaved, onCheckSaved, onPrepareWithdrawal, onApproveWithdrawal, onCancelOperation)
+                    } else if (selectedSection == "Access") {
+                        MemberPermissionsCard(session, onLoadPermissions, onRevokePermission, onLoadPermissionRequests, onReadPermissionRequest, onDecidePermissionRequest)
                     } else {
                         MemberAccountCard(
                             onSignIn = onSignIn,
@@ -353,6 +367,119 @@ private fun describeWithdrawal(value: MemberWithdrawalOutcome): String = when (v
     is MemberWithdrawalOutcome.Recorded -> "The withdrawal was recorded. Refresh the proposal before choosing again. This does not confirm payment or current order status."
     is MemberWithdrawalOutcome.Pending -> "No committed withdrawal is reported. State: ${value.state}. Nothing was resubmitted."
     MemberWithdrawalOutcome.Unresolved -> "The result could not be read. Check later and do not resubmit."
+}
+
+@Composable
+private fun MemberPermissionsCard(
+    session: MemberSessionInfo?,
+    onLoadPermissions: suspend () -> MemberPermissionList,
+    onRevoke: suspend (MemberPermission) -> MemberPermission,
+    onLoadRequests: suspend () -> List<MemberPermissionRequest>,
+    onReadRequest: suspend (String) -> MemberPermissionRequest,
+    onDecide: suspend (MemberPermissionRequest, Boolean) -> MemberPermissionRequest,
+) {
+    var permissions by remember(session) { mutableStateOf<List<MemberPermission>?>(null) }
+    var requests by remember(session) { mutableStateOf<List<MemberPermissionRequest>?>(null) }
+    var review by remember(session) { mutableStateOf<MemberPermissionRequest?>(null) }
+    var busy by remember(session) { mutableStateOf(false) }
+    var failed by remember(session) { mutableStateOf(false) }
+    var notice by remember(session) { mutableStateOf("") }
+    var refresh by remember(session) { mutableStateOf(0L) }
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(session, refresh) {
+        if (session == null) return@LaunchedEffect
+        failed = false
+        try {
+            permissions = onLoadPermissions().permissions
+            requests = onLoadRequests()
+        } catch (failureValue: Exception) {
+            if (failureValue is CancellationException) throw failureValue
+            failed = true
+        }
+    }
+    when {
+        session == null -> MemberCard("Access is locked", "Sign in before reviewing permissions or access requests.")
+        failed -> MemberCard("Access could not be checked", "Refresh before relying on current permission status.")
+        permissions == null || requests == null -> MemberCard("Checking access…", "Reading current permissions and requests.")
+        else -> Card(modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Access", style = MaterialTheme.typography.titleLarge)
+                Text("Permissions", fontWeight = FontWeight.SemiBold)
+                if (permissions!!.isEmpty()) Text("No permission history.")
+                permissions!!.forEach { permission ->
+                    val now = System.currentTimeMillis()
+                    val status = if (permission.revokedAt != null) "Revoked" else if (permission.expiresAt <= now) "Expired" else "Active"
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(permission.purpose, fontWeight = FontWeight.SemiBold)
+                            Text("Granted to ${permission.grantee} · ${permission.scope.joinToString()}")
+                            Text(status)
+                            if (status == "Active") Button(enabled = !busy, onClick = {
+                                busy = true; scope.launch {
+                                    notice = try { onRevoke(permission); "Permission revoked. Refreshing current access." }
+                                    catch (failureValue: Exception) {
+                                        if (failureValue is CancellationException) throw failureValue
+                                        "Revocation could not be confirmed. Refresh before taking another action."
+                                    }
+                                    busy = false; refresh++
+                                }
+                            }) { Text("Revoke permission") }
+                        }
+                    }
+                }
+                Text("Requests", fontWeight = FontWeight.SemiBold)
+                if (requests!!.isEmpty()) Text("No access requests.")
+                requests!!.forEach { request ->
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(request.terms.requester.name, fontWeight = FontWeight.SemiBold)
+                            Text(request.terms.action)
+                            Text("State: ${request.state}")
+                            if (request.canDecide(System.currentTimeMillis())) Button(enabled = !busy, onClick = {
+                                busy = true; scope.launch {
+                                    try { review = onReadRequest(request.id); notice = "Review the purpose, field, and access deadline before deciding." }
+                                    catch (failureValue: Exception) {
+                                        if (failureValue is CancellationException) throw failureValue
+                                        notice = "This request could not be checked."
+                                    }
+                                    busy = false
+                                }
+                            }) { Text("Review request") }
+                        }
+                    }
+                }
+                review?.let { selected ->
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("Permission request", fontWeight = FontWeight.SemiBold)
+                            Text(selected.terms.requester.name)
+                            Text(selected.terms.purpose)
+                            Text(selected.terms.fields.joinToString { it.label })
+                            Text("Access deadline: ${selected.terms.accessExpiresAt}")
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                listOf(true to "Grant", false to "Decline").forEach { (grant, label) ->
+                                    Button(enabled = !busy && selected.canDecide(System.currentTimeMillis()), onClick = {
+                                        busy = true; scope.launch {
+                                            notice = try {
+                                                val result = onDecide(selected, grant); review = result
+                                                if (grant) "Permission decision recorded." else "Request cancelled. No permission was granted."
+                                            } catch (failureValue: Exception) {
+                                                if (failureValue is CancellationException) throw failureValue
+                                                review = null; "The result could not be confirmed. Refresh before taking another action."
+                                            }
+                                            busy = false; refresh++
+                                        }
+                                    }) { Text(label) }
+                                }
+                            }
+                        }
+                    }
+                }
+                if (notice.isNotEmpty()) Text(notice)
+                TextButton(enabled = !busy, onClick = { refresh++ }) { Text("Refresh access") }
+            }
+        }
+    }
 }
 
 private fun Exception.endsPrivateSession() = this is MemberFailure.Expired || this is MemberFailure.Superseded || (this is MemberFailure.Http && status == 401)

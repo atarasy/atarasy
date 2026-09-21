@@ -14,6 +14,8 @@ Physical statements use the same durable operation boundary. The client reconstr
 
 The Saved screen opens the encrypted journal without exposing operation identifiers. It can reconcile decisions, statements and cooling-window withdrawals without resubmitting them, and it can cancel an unattempted prepared operation through the scoped acknowledgement route. A withdrawal first rereads the committed decision and its frozen review, then verifies the original immutable offer, choices, mandate, totals, decision revision, cooling deadline and next incarnation. The withdrawal operation is reread before Credential Manager opens and uses the same claim-before-dispatch rule; its historical result must restore the same immutable offer in a wholly presented state.
 
+The Access screen validates the complete permission history and pending permission-request terms before rendering them. Permission grants bind the requester, single supported field, purpose, review deadline and access deadline to the issuer's canonical digest. Grant, decline and revocation responses must preserve the reviewed grant or request exactly; an unconfirmed write forces a fresh read before another action.
+
 The development build deliberately has no Android passkey release identity. A usable ceremony requires all of the following to agree:
 
 - a reviewed release signing certificate;
