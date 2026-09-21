@@ -33,7 +33,10 @@ class MemberOperationStoreTest {
 
     @Test fun `claim atomically persists only a signature digest and cannot repeat`() {
         val signature = Base64.getEncoder().encodeToString("assertion-signature".toByteArray())
-        val store = store(); store.save(handle); store.claim(handle, signature)
+        val store = store(); store.save(handle)
+        val laterSession = handle.copy(sessionId = "later-session")
+        assertEquals(Unit, store.save(laterSession)); assertEquals(handle, store.load(handle.id))
+        store.claim(handle, signature)
         val claimed = store.load(handle.id)!!
         assertTrue(claimed.attempted); assertEquals(Canonical.digest(signature), claimed.confirmationFingerprint)
         assertThrows(MemberFailure.Busy::class.java) { store.claim(handle, Base64.getEncoder().encodeToString("another".toByteArray())) }

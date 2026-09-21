@@ -97,7 +97,7 @@ class EncryptedFileMemberOperationStore(
     override fun save(handle: MemberOperationHandle) = synchronized(lock) {
         validateScope(handle)
         val existing = read(handle.id)
-        if (existing != null && existing != handle) throw MemberFailure.Storage
+        if (existing != null && existing.copy(sessionId = handle.sessionId) != handle) throw MemberFailure.Storage
         if (existing == null) write(handle)
     }
 

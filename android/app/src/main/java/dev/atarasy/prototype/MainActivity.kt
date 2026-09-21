@@ -54,6 +54,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var offers: MemberOffers
     private lateinit var reviews: MemberReviews
     private lateinit var decisions: MemberDigitalDecisionFlow
+    private lateinit var statements: MemberStatementFlow
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -75,6 +76,8 @@ class MainActivity : ComponentActivity() {
             acceptedOrigins = AndroidSigningOrigins.current(this),
         )
         decisions = MemberDigitalDecisionFlow(environment, memberSessions, decisionOperations, passkeys)
+        val statementOperations = MemberStatementOperations(environment, memberSessions, operationStore, acceptedOrigins = AndroidSigningOrigins.current(this))
+        statements = MemberStatementFlow(environment, memberSessions, statementOperations, passkeys)
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         setContent {
             AtarasyApp(
@@ -85,6 +88,8 @@ class MainActivity : ComponentActivity() {
                 onLoadReview = reviews::load,
                 onPrepareDecision = decisions::prepare,
                 onApproveDecision = decisions::approve,
+                onPrepareStatement = statements::prepare,
+                onApproveStatement = statements::approve,
             )
         }
     }
@@ -104,6 +109,8 @@ fun AtarasyApp(
     onLoadReview: suspend (MemberOfferDetail) -> MemberReview = { throw MemberFailure.Unavailable },
     onPrepareDecision: suspend (MemberSessionInfo, MemberOfferDetail, MemberApproval, Map<String, MemberDigitalChoice>) -> MemberDecisionReview = { _, _, _, _ -> throw MemberFailure.Unavailable },
     onApproveDecision: suspend (MemberDecisionReview) -> MemberDecisionActionResult = { MemberDecisionActionResult.Failed(MemberFailure.Unavailable) },
+    onPrepareStatement: suspend (MemberSessionInfo, MemberOfferDetail, MemberStatement, List<String>) -> MemberStatementReview = { _, _, _, _ -> throw MemberFailure.Unavailable },
+    onApproveStatement: suspend (MemberStatementReview) -> MemberStatementActionResult = { MemberStatementActionResult.Failed(MemberFailure.Unavailable) },
 ) {
     var selectedSection by rememberSaveable { mutableStateOf("Offers") }
     var session by remember { mutableStateOf<MemberSessionInfo?>(null) }
@@ -175,6 +182,8 @@ fun AtarasyApp(
                             onPrepareDecision = onPrepareDecision,
                             onApproveDecision = onApproveDecision,
                             onRecorded = { selectedOffer = null; offers = null; offerFailure = false; refreshGeneration++ },
+                            onPrepareStatement = onPrepareStatement,
+                            onApproveStatement = onApproveStatement,
                             onSelect = { selectedOffer = it },
                             onAccount = { selectedSection = "Account" },
                         )
@@ -252,6 +261,8 @@ private fun MemberOffersCard(
     onPrepareDecision: suspend (MemberSessionInfo, MemberOfferDetail, MemberApproval, Map<String, MemberDigitalChoice>) -> MemberDecisionReview,
     onApproveDecision: suspend (MemberDecisionReview) -> MemberDecisionActionResult,
     onRecorded: () -> Unit,
+    onPrepareStatement: suspend (MemberSessionInfo, MemberOfferDetail, MemberStatement, List<String>) -> MemberStatementReview,
+    onApproveStatement: suspend (MemberStatementReview) -> MemberStatementActionResult,
     onSelect: (MemberOfferSummary?) -> Unit,
     onAccount: () -> Unit,
 ) {
@@ -261,7 +272,7 @@ private fun MemberOffersCard(
         }
         failed -> MemberCard("Offers are unavailable", "Your private offer list could not be loaded. Sign in again to retry.")
         offers == null -> MemberCard("Loading offers…", "Checking every presenter connected to your household.")
-        selectedOffer != null -> MemberOfferDetailCard(detail, detailFailed, review, reviewFailed, session, onPrepareDecision, onApproveDecision, onRecorded) { onSelect(null) }
+        selectedOffer != null -> MemberOfferDetailCard(detail, detailFailed, review, reviewFailed, session, onPrepareDecision, onApproveDecision, onPrepareStatement, onApproveStatement, onRecorded) { onSelect(null) }
         offers.isEmpty() -> MemberCard("No offers waiting", "New offers and boxes that need your decision will appear here.")
         else -> Card(modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -288,6 +299,8 @@ private fun MemberOfferDetailCard(
     session: MemberSessionInfo?,
     onPrepareDecision: suspend (MemberSessionInfo, MemberOfferDetail, MemberApproval, Map<String, MemberDigitalChoice>) -> MemberDecisionReview,
     onApproveDecision: suspend (MemberDecisionReview) -> MemberDecisionActionResult,
+    onPrepareStatement: suspend (MemberSessionInfo, MemberOfferDetail, MemberStatement, List<String>) -> MemberStatementReview,
+    onApproveStatement: suspend (MemberStatementReview) -> MemberStatementActionResult,
     onRecorded: () -> Unit,
     onBack: () -> Unit,
 ) {
@@ -330,6 +343,7 @@ private fun MemberOfferDetailCard(
                             Text("Statement", style = MaterialTheme.typography.titleMedium)
                             review.value.lines.forEach { Text("${it.product}: ${it.amount}${if (it.givenBy != null) " (gift)" else ""}") }
                             Text(review.value.carriage?.let { "Delivery: $it" } ?: "Delivery amount is not known yet.")
+                            if (session != null && detail.state in setOf("decided", "expired")) MemberStatementControls(session, detail, review.value, onPrepareStatement, onApproveStatement, onRecorded)
                         }
                         review is MemberReview.Settlement -> {
                             Text("Settled", style = MaterialTheme.typography.titleMedium)
@@ -341,6 +355,57 @@ private fun MemberOfferDetailCard(
             }
         }
     }
+}
+
+@Composable
+private fun MemberStatementControls(
+    session: MemberSessionInfo,
+    detail: MemberOfferDetail,
+    statement: MemberStatement,
+    onPrepare: suspend (MemberSessionInfo, MemberOfferDetail, MemberStatement, List<String>) -> MemberStatementReview,
+    onApprove: suspend (MemberStatementReview) -> MemberStatementActionResult,
+    onRecorded: () -> Unit,
+) {
+    var disputed by remember(detail.id) { mutableStateOf<Set<String>>(emptySet()) }
+    var frozen by remember(detail.id) { mutableStateOf<MemberStatementReview?>(null) }
+    var busy by remember(detail.id) { mutableStateOf(false) }
+    var notice by remember(detail.id) { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
+    statement.lines.filter { it.valence in setOf("consumed", "lost") }.forEach { line ->
+        TextButton(enabled = !busy && frozen == null, onClick = { disputed = if (line.candidate in disputed) disputed - line.candidate else disputed + line.candidate }) {
+            Text(if (line.candidate in disputed) "Disputed: ${line.product}" else "Dispute ${line.product}")
+        }
+    }
+    if (frozen == null) {
+        Button(enabled = !busy && statement.carriage != null, onClick = {
+            busy = true; notice = ""; scope.launch {
+                try { frozen = onPrepare(session, detail, statement, disputed.sorted()); notice = "Review the frozen statement before signing." }
+                catch (_: Exception) { notice = "The statement could not be prepared. Refresh the offer before trying again." }
+                busy = false
+            }
+        }) { Text(if (busy) "Preparing…" else "Review statement") }
+    } else {
+        val value = frozen!!
+        Text("Goods: ${value.local.goodsCharged} · Disputed: ${value.local.disputedGoods} · Delivery: ${value.local.carriage}", fontWeight = FontWeight.SemiBold)
+        Button(enabled = !busy, onClick = {
+            busy = true; notice = ""; scope.launch {
+                when (val result = onApprove(value)) {
+                    is MemberStatementActionResult.Outcome -> when (result.value) {
+                        is MemberStatementOutcome.Committed -> { notice = "Statement recorded."; onRecorded() }
+                        is MemberStatementOutcome.SettledElsewhere -> { frozen = null; notice = "This box was settled by another confirmation. Review the saved result." }
+                        is MemberStatementOutcome.Pending -> { frozen = null; notice = "The operation is ${result.value.state}. Check the saved result before another action." }
+                        MemberStatementOutcome.Unresolved -> { frozen = null; notice = "The result is unresolved. Check the saved result; do not submit again." }
+                    }
+                    MemberStatementActionResult.Cancelled -> notice = "Signing cancelled. Nothing was submitted."
+                    MemberStatementActionResult.NoCredential -> notice = "The required passkey is unavailable."
+                    is MemberStatementActionResult.Failed -> { frozen = null; notice = "The statement could not be confirmed. Check the saved result before another action." }
+                }
+                busy = false
+            }
+        }) { Text(if (busy) "Signing…" else "Sign and submit statement") }
+        TextButton(enabled = !busy, onClick = { frozen = null; notice = "Prepared statement kept in saved results." }) { Text("Close review") }
+    }
+    if (notice.isNotEmpty()) Text(notice)
 }
 
 @Composable

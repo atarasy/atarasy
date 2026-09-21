@@ -10,6 +10,8 @@ Opening an offer also reads its server review. Digital approvals are checked aga
 
 Digital decisions use a two-stage review and signing boundary. Complete local keep/decline choices produce a canonical decision and safe total, then the server's frozen operation is checked against the session, offer, approval, mandate, RP, credential and derived challenge. The operation is encrypted under the installation Keystore key before signing. Immediately before Credential Manager opens, the operation is read again and must be unchanged. Submission atomically marks the journal attempted with only a signature digest before the first network byte is sent; a lost response becomes unresolved and cannot be submitted again. Read-only outcome reconciliation validates the immutable offer terms and original canonical choices.
 
+Physical statements use the same durable operation boundary. The client reconstructs the statement from consumed, kept, defaulted and collection-confirmed lost lines, applies only eligible disputes, preserves gift zero amounts, and rechecks the server's frozen statement, mandate, carriage, canonical bytes and challenge before signing. Settlement readback recomputes the signed statement from the receipt and attributes it to this device only when the recorded confirmation digest matches.
+
 The development build deliberately has no Android passkey release identity. A usable ceremony requires all of the following to agree:
 
 - a reviewed release signing certificate;

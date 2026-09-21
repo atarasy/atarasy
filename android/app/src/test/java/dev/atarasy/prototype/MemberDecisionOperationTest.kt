@@ -14,7 +14,7 @@ import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-private class DecisionStore : MemberOperationStore {
+class DecisionStore : MemberOperationStore {
     var value: MemberOperationHandle? = null
     override fun save(handle: MemberOperationHandle) { if (value != null && value != handle) throw MemberFailure.Storage; value = handle }
     override fun load(id: String) = value?.takeIf { it.id == id }
@@ -24,11 +24,11 @@ private class DecisionStore : MemberOperationStore {
         value = handle.claimed(signature)
     }
 }
-private class DecisionTransport(private val replies: ArrayDeque<MemberHttpResponse>) : MemberHttpTransport {
+class DecisionTransport(private val replies: ArrayDeque<MemberHttpResponse>) : MemberHttpTransport {
     val requests = mutableListOf<MemberHttpRequest>()
     override suspend fun send(request: MemberHttpRequest): MemberHttpResponse { requests += request; return replies.removeFirst() }
 }
-private class DecisionVault(private var value: StoredMemberSession?) : MemberSessionVault {
+class DecisionVault(private var value: StoredMemberSession?) : MemberSessionVault {
     override fun load(environment: MemberEnvironment, household: String) = value
     override fun save(environment: MemberEnvironment, session: StoredMemberSession) { value = session }
     override fun remove(environment: MemberEnvironment, household: String) { value = null }
