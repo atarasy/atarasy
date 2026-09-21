@@ -26,6 +26,10 @@ import kotlinx.serialization.json.long
 data class MemberPrivateNodeEnvelope(val profile: String = "atarasy.private-node-record.1", val nonce: String, val ciphertext: String)
 data class MemberPrivateNodeRecord(val id: String, val revision: Long, val updatedAt: Long, val envelope: MemberPrivateNodeEnvelope)
 data class MemberPrivateNodeIndex(val profile: String, val checkedAt: Long, val records: List<MemberPrivateNodeRecord>)
+data class MemberPrivateNodeMove(val key: ByteArray, val source: List<MemberPrivateNodeRecord>, val target: List<MemberPrivateNodeRecord>, val clearDigests: Map<String, String>) {
+    override fun equals(other: Any?) = other is MemberPrivateNodeMove && key.contentEquals(other.key) && source == other.source && target == other.target && clearDigests == other.clearDigests
+    override fun hashCode() = 31 * key.contentHashCode() + source.hashCode()
+}
 enum class MemberPrivateNodeState { LOCKED, READY, RECOVERY_REQUIRED }
 
 object MemberPrivateNodeCodec {
@@ -166,6 +170,20 @@ class MemberPrivateNode(
     suspend fun recoveryKey(expected: MemberSessionInfo): ByteArray = mutex.withLock {
         if (state != MemberPrivateNodeState.READY || session != expected) throw MemberFailure.Storage
         vault.load(MemberPrivateNodeCodec.scope(environment, expected.household)) ?: throw MemberFailure.Storage
+    }
+    suspend fun prepareMove(target: MemberEnvironment, expected: MemberSessionInfo): MemberPrivateNodeMove = mutex.withLock {
+        val active = session ?: throw MemberFailure.Storage; val sourceCrypto = crypto ?: throw MemberFailure.Storage
+        if (state != MemberPrivateNodeState.READY || active != expected || target.origin == environment.origin) throw MemberFailure.Storage
+        val key = vault.load(MemberPrivateNodeCodec.scope(environment, expected.household)) ?: throw MemberFailure.Storage
+        val index = remote.records(); verify(index.records, sourceCrypto, expected.household)
+        val targetCrypto = MemberPrivateNodeCrypto(key); val targetRecords = mutableListOf<MemberPrivateNodeRecord>(); val digests = linkedMapOf<String, String>()
+        index.records.forEach { record ->
+            val clear = sourceCrypto.open(record, environment, expected.household)
+            val envelope = targetCrypto.seal(clear, target, expected.household, record.id, record.revision)
+            targetRecords += record.copy(envelope = envelope)
+            digests[record.id] = java.security.MessageDigest.getInstance("SHA-256").digest(clear).joinToString("") { "%02x".format(it) }
+        }
+        MemberPrivateNodeMove(key.copyOf(), index.records, targetRecords, digests)
     }
     suspend fun installRecoveredKey(key: ByteArray, expected: MemberSessionInfo) = mutex.withLock {
         if (state != MemberPrivateNodeState.RECOVERY_REQUIRED || key.size != 32) throw MemberFailure.Storage

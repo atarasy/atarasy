@@ -63,6 +63,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var dialsFlow: MemberDialsFlow
     private lateinit var privateNode: MemberPrivateNode
     private lateinit var recoveryFlow: MemberRecoveryFlow
+    private var hostMoveFlow: MemberHostMoveFlow? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -108,6 +109,21 @@ class MainActivity : ComponentActivity() {
             EncryptedFileRecoveryMaterialVault(File(noBackupFilesDir, "member-recovery-material"), installationCipher),
             getString(R.string.atarasy_recovery_notice_channel).trim().ifEmpty { null },
         )
+        val moveTarget = runCatching {
+            val name = getString(R.string.atarasy_move_target_name).trim(); val origin = getString(R.string.atarasy_move_target_origin).trim()
+            if (name.isEmpty() || origin.isEmpty()) null else MemberEnvironment.create(name, origin)
+        }.getOrNull()?.takeIf { it.origin != environment.origin }
+        if (moveTarget != null) {
+            val targetSessions = MemberSessionClient(moveTarget, UrlConnectionMemberHttpTransport(moveTarget), EncryptedFileSessionVault(sessionDirectory, installationCipher))
+            val targetNode = MemberPrivateNode(moveTarget, MemberPrivateNodeRemote(targetSessions), EncryptedFilePrivateNodeKeyVault(File(noBackupFilesDir, "member-private-node-key"), installationCipher))
+            hostMoveFlow = MemberHostMoveFlow(
+                moveTarget,
+                MemberHostMoveService(environment, memberSessions, acceptedOrigins = AndroidSigningOrigins.current(this)),
+                MemberHostMoveService(moveTarget, targetSessions, acceptedOrigins = AndroidSigningOrigins.current(this)),
+                targetSessions, privateNode, targetNode,
+                offers, MemberOffers(targetSessions), reviews, MemberReviews(targetSessions), permissions, MemberPermissions(targetSessions), passkeys,
+            )
+        }
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         setContent {
             AtarasyApp(
@@ -144,12 +160,16 @@ class MainActivity : ComponentActivity() {
                 onBeginRecovery = recoveryFlow::beginLostDeviceRecovery,
                 onApproveRecovery = recoveryFlow::approve,
                 onFinishRecovery = recoveryFlow::finish,
+                hostMoveAvailable = hostMoveFlow != null,
+                onSetHostMoveSession = { hostMoveFlow?.setSession(it) },
+                onPrepareHostMove = { hostMoveFlow?.prepare() ?: MemberHostMoveState(MemberHostMovePhase.SOURCE_RETAINED, "No trusted target host is configured.") },
+                onRetireSourceHost = { hostMoveFlow?.retireSource() ?: MemberHostMoveState(MemberHostMovePhase.UNRESOLVED, "Source retirement is unavailable.") },
             )
         }
     }
 
     override fun onStop() {
-        lifecycleScope.launch(start = CoroutineStart.UNDISPATCHED) { privateNode.lock(); memberSessions.lockLocalAccess() }
+        lifecycleScope.launch(start = CoroutineStart.UNDISPATCHED) { hostMoveFlow?.lock(); privateNode.lock(); memberSessions.lockLocalAccess() }
         super.onStop()
     }
 }
@@ -189,6 +209,10 @@ fun AtarasyApp(
     onBeginRecovery: suspend (MemberSessionInfo) -> MemberRecoveryActionResult = { MemberRecoveryActionResult.Failed(MemberFailure.Unavailable) },
     onApproveRecovery: suspend (MemberSessionInfo, MemberRecoveryRequest) -> MemberRecoveryActionResult = { _, _ -> MemberRecoveryActionResult.Failed(MemberFailure.Unavailable) },
     onFinishRecovery: suspend (MemberSessionInfo, MemberRecoveryRequest) -> MemberRecoveryActionResult = { _, _ -> MemberRecoveryActionResult.Failed(MemberFailure.Unavailable) },
+    hostMoveAvailable: Boolean = false,
+    onSetHostMoveSession: (MemberSessionInfo?) -> Unit = {},
+    onPrepareHostMove: suspend () -> MemberHostMoveState = { MemberHostMoveState(MemberHostMovePhase.SOURCE_RETAINED) },
+    onRetireSourceHost: suspend () -> MemberHostMoveState = { MemberHostMoveState(MemberHostMovePhase.UNRESOLVED) },
 ) {
     var selectedSection by rememberSaveable { mutableStateOf("Offers") }
     var session by remember { mutableStateOf<MemberSessionInfo?>(null) }
@@ -207,6 +231,7 @@ fun AtarasyApp(
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_STOP) {
                 session = null; privateNodeState = MemberPrivateNodeState.LOCKED; offers = null; selectedOffer = null; detail = null; review = null
+                onSetHostMoveSession(null)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -249,7 +274,7 @@ fun AtarasyApp(
                         )
                     }
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        listOf("Offers", "Saved", "Access", "Dials", "Recovery", "Account").chunked(3).forEach { sections ->
+                        (listOf("Offers", "Saved", "Access", "Dials", "Recovery") + (if (hostMoveAvailable) listOf("Move Host") else emptyList()) + "Account").chunked(3).forEach { sections ->
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 sections.forEach { section -> TextButton(onClick = { selectedSection = section }) { Text(section) } }
                             }
@@ -287,18 +312,76 @@ fun AtarasyApp(
                             onBeginRecovery, onApproveRecovery,
                             onFinish = { info, request -> onFinishRecovery(info, request).also { if (it is MemberRecoveryActionResult.Completed) privateNodeState = MemberPrivateNodeState.READY } },
                         )
+                    } else if (selectedSection == "Move Host") {
+                        MemberHostMoveCard(
+                            accessSession, onPrepareHostMove,
+                            onRetire = {
+                                onRetireSourceHost().also {
+                                    if (it.phase == MemberHostMovePhase.COMPLETED) {
+                                        session = null; privateNodeState = MemberPrivateNodeState.LOCKED; onSetHostMoveSession(null); selectedSection = "Account"
+                                    }
+                                }
+                            },
+                        )
                     } else {
                         MemberAccountCard(
                             onSignIn = onSignIn,
                             onRegister = onRegister,
                             onSignedIn = { info ->
                                 session = info; privateNodeState = onOpenPrivateNode(info)
+                                onSetHostMoveSession(info)
                                 selectedSection = if (privateNodeState == MemberPrivateNodeState.READY) "Offers" else "Account"
                                 privateNodeState
                             },
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MemberHostMoveCard(
+    session: MemberSessionInfo?,
+    onPrepare: suspend () -> MemberHostMoveState,
+    onRetire: suspend () -> MemberHostMoveState,
+) {
+    var state by remember(session) { mutableStateOf(MemberHostMoveState()) }
+    var busy by remember(session) { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    fun run(action: suspend () -> MemberHostMoveState) {
+        if (busy || session == null) return
+        busy = true
+        scope.launch {
+            state = try { action() } catch (failure: Exception) {
+                if (failure is CancellationException) throw failure
+                state.copy(phase = MemberHostMovePhase.UNRESOLVED, notice = "The host move is unresolved. Source access has not been retired.")
+            }
+            busy = false
+        }
+    }
+    when {
+        session == null -> MemberCard("Host move is locked", "Sign in and open the encrypted private records before moving hosts.")
+        else -> Card(modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Move Host", style = MaterialTheme.typography.titleLarge)
+                Text("Target", fontWeight = FontWeight.SemiBold)
+                Text("The configured target host is trusted by this build. You will sign in there before anything is copied.")
+                Text(state.phase.name.lowercase().replace('_', ' '), fontWeight = FontWeight.SemiBold)
+                Text("Coverage", fontWeight = FontWeight.SemiBold)
+                Text(state.coverage.ifEmpty { "Coverage has not been verified on the target host." })
+                state.receipt?.let { Text("Receipt: ${it.archiveDigest}") }
+                Text("Rollback", fontWeight = FontWeight.SemiBold)
+                Text(if (state.phase == MemberHostMovePhase.READY_TO_RETIRE) "The target is verified. Source access remains active until the final signed retirement." else "A failed or interrupted import does not retire source access.")
+                Button(
+                    enabled = !busy && state.phase !in setOf(MemberHostMovePhase.READY_TO_RETIRE, MemberHostMovePhase.RETIRING, MemberHostMovePhase.COMPLETED),
+                    onClick = { run(onPrepare) },
+                ) { Text(if (busy) "Working…" else "Import and verify target") }
+                if (state.phase == MemberHostMovePhase.READY_TO_RETIRE) {
+                    Button(enabled = !busy, onClick = { run(onRetire) }) { Text(if (busy) "Retiring…" else "Retire source host access") }
+                }
+                if (state.notice.isNotEmpty()) Text(state.notice)
             }
         }
     }

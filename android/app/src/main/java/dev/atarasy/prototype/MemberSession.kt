@@ -91,6 +91,12 @@ class MemberSessionClient(
 
     suspend fun lockLocalAccess() = mutex.withLock { generation++; active = null }
 
+    suspend fun removeRetiredLocalSession(expected: MemberSessionInfo) = mutex.withLock {
+        val current = active ?: throw MemberFailure.Expired
+        if (current.info != expected) throw MemberFailure.ScopeMismatch
+        remove(expected.household); generation++; active = null
+    }
+
     suspend fun activeInfo(): MemberSessionInfo = mutex.withLock {
         val current = active ?: throw MemberFailure.Expired
         if (!valid(current.info)) {

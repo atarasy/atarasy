@@ -15,6 +15,8 @@ android {
         versionCode = 1
         versionName = "0.1.0"
         resValue("string", "atarasy_recovery_notice_channel", providers.gradleProperty("atarasyRecoveryNoticeChannel").orElse("").get())
+        resValue("string", "atarasy_move_target_name", providers.gradleProperty("atarasyMoveTargetName").orElse("").get())
+        resValue("string", "atarasy_move_target_origin", providers.gradleProperty("atarasyMoveTargetOrigin").orElse("").get())
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
