@@ -61,6 +61,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var permissions: MemberPermissions
     private lateinit var dials: MemberDials
     private lateinit var dialsFlow: MemberDialsFlow
+    private lateinit var privateNode: MemberPrivateNode
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -93,6 +94,11 @@ class MainActivity : ComponentActivity() {
         permissions = MemberPermissions(memberSessions)
         dials = MemberDials(environment, memberSessions, acceptedOrigins = AndroidSigningOrigins.current(this))
         dialsFlow = MemberDialsFlow(dials, passkeys)
+        privateNode = MemberPrivateNode(
+            environment,
+            MemberPrivateNodeRemote(memberSessions),
+            EncryptedFilePrivateNodeKeyVault(File(noBackupFilesDir, "member-private-node-key"), installationCipher),
+        )
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         setContent {
             AtarasyApp(
@@ -121,12 +127,13 @@ class MainActivity : ComponentActivity() {
                 onPrepareMandateSignature = dials::prepareSignature,
                 onApproveMandateChange = dialsFlow::approve,
                 onCancelMandateChange = dials::cancel,
+                onOpenPrivateNode = privateNode::open,
             )
         }
     }
 
     override fun onStop() {
-        lifecycleScope.launch(start = CoroutineStart.UNDISPATCHED) { memberSessions.lockLocalAccess() }
+        lifecycleScope.launch(start = CoroutineStart.UNDISPATCHED) { privateNode.lock(); memberSessions.lockLocalAccess() }
         super.onStop()
     }
 }
@@ -158,6 +165,7 @@ fun AtarasyApp(
     onPrepareMandateSignature: suspend (String) -> PreparedMemberMandateChange = { throw MemberFailure.Unavailable },
     onApproveMandateChange: suspend (PreparedMemberMandateChange) -> MemberDialsActionResult = { MemberDialsActionResult.Failed(MemberFailure.Unavailable) },
     onCancelMandateChange: suspend (String) -> MemberMandateChange = { throw MemberFailure.Unavailable },
+    onOpenPrivateNode: suspend (MemberSessionInfo) -> MemberPrivateNodeState = { MemberPrivateNodeState.LOCKED },
 ) {
     var selectedSection by rememberSaveable { mutableStateOf("Offers") }
     var session by remember { mutableStateOf<MemberSessionInfo?>(null) }
@@ -169,27 +177,29 @@ fun AtarasyApp(
     var review by remember { mutableStateOf<MemberReview?>(null) }
     var reviewFailure by remember { mutableStateOf(false) }
     var refreshGeneration by remember { mutableStateOf(0L) }
+    var privateNodeState by remember { mutableStateOf(MemberPrivateNodeState.LOCKED) }
+    val accessSession = session?.takeIf { privateNodeState == MemberPrivateNodeState.READY }
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_STOP) {
-                session = null; offers = null; selectedOffer = null; detail = null; review = null
+                session = null; privateNodeState = MemberPrivateNodeState.LOCKED; offers = null; selectedOffer = null; detail = null; review = null
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
-    LaunchedEffect(session, refreshGeneration) {
-        val current = session ?: run { offers = null; return@LaunchedEffect }
+    LaunchedEffect(accessSession, refreshGeneration) {
+        val current = accessSession ?: run { offers = null; return@LaunchedEffect }
         offers = null; offerFailure = false; selectedOffer = null; detail = null
         try { offers = onLoadOffers(current) } catch (failure: Exception) {
             if (failure is CancellationException) throw failure
             if (failure.endsPrivateSession()) session = null else offerFailure = true
         }
     }
-    LaunchedEffect(selectedOffer, session) {
+    LaunchedEffect(selectedOffer, accessSession) {
         val selected = selectedOffer ?: run { detail = null; review = null; return@LaunchedEffect }
-        if (session == null) return@LaunchedEffect
+        if (accessSession == null) return@LaunchedEffect
         detail = null; detailFailure = false; review = null; reviewFailure = false
         try {
             val loaded = onLoadDetail(selected); detail = loaded
@@ -209,6 +219,12 @@ fun AtarasyApp(
                 ) {
                     Text("Atarasy", style = MaterialTheme.typography.headlineLarge, modifier = Modifier.semantics { heading() })
                     Text("Your household", style = MaterialTheme.typography.titleMedium)
+                    if (session != null && privateNodeState != MemberPrivateNodeState.READY) {
+                        MemberCard(
+                            if (privateNodeState == MemberPrivateNodeState.RECOVERY_REQUIRED) "Recovery required" else "Private records are locked",
+                            if (privateNodeState == MemberPrivateNodeState.RECOVERY_REQUIRED) "This installation has no key for the encrypted private records. Protected actions remain closed." else "Open the encrypted private records before using protected actions.",
+                        )
+                    }
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         listOf("Offers", "Saved", "Access", "Dials", "Account").chunked(3).forEach { sections ->
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -219,7 +235,7 @@ fun AtarasyApp(
                     Spacer(Modifier.height(8.dp))
                     if (selectedSection == "Offers") {
                         MemberOffersCard(
-                            connected = session != null,
+                            connected = accessSession != null,
                             offers = offers,
                             failed = offerFailure,
                             selectedOffer = selectedOffer,
@@ -227,7 +243,7 @@ fun AtarasyApp(
                             detailFailed = detailFailure,
                             review = review,
                             reviewFailed = reviewFailure,
-                            session = session,
+                            session = accessSession,
                             onPrepareDecision = onPrepareDecision,
                             onApproveDecision = onApproveDecision,
                             onRecorded = { selectedOffer = null; offers = null; offerFailure = false; refreshGeneration++ },
@@ -237,16 +253,20 @@ fun AtarasyApp(
                             onAccount = { selectedSection = "Account" },
                         )
                     } else if (selectedSection == "Saved") {
-                        MemberSavedOperationsCard(session, onLoadSaved, onCheckSaved, onPrepareWithdrawal, onApproveWithdrawal, onCancelOperation)
+                        MemberSavedOperationsCard(accessSession, onLoadSaved, onCheckSaved, onPrepareWithdrawal, onApproveWithdrawal, onCancelOperation)
                     } else if (selectedSection == "Access") {
-                        MemberPermissionsCard(session, onLoadPermissions, onRevokePermission, onLoadPermissionRequests, onReadPermissionRequest, onDecidePermissionRequest)
+                        MemberPermissionsCard(accessSession, onLoadPermissions, onRevokePermission, onLoadPermissionRequests, onReadPermissionRequest, onDecidePermissionRequest)
                     } else if (selectedSection == "Dials") {
-                        MemberDialsCard(session, onLoadEffectiveMandates, onLoadMandateChanges, onPrepareMandateChange, onPrepareMandateSignature, onApproveMandateChange, onCancelMandateChange)
+                        MemberDialsCard(accessSession, onLoadEffectiveMandates, onLoadMandateChanges, onPrepareMandateChange, onPrepareMandateSignature, onApproveMandateChange, onCancelMandateChange)
                     } else {
                         MemberAccountCard(
                             onSignIn = onSignIn,
                             onRegister = onRegister,
-                            onSignedIn = { session = it; selectedSection = "Offers" },
+                            onSignedIn = { info ->
+                                session = info; privateNodeState = onOpenPrivateNode(info)
+                                selectedSection = if (privateNodeState == MemberPrivateNodeState.READY) "Offers" else "Account"
+                                privateNodeState
+                            },
                         )
                     }
                 }
@@ -642,7 +662,7 @@ private fun Exception.endsPrivateSession() = this is MemberFailure.Expired || th
 private fun MemberAccountCard(
     onSignIn: suspend () -> MemberAuthenticationResult,
     onRegister: suspend (String) -> MemberAuthenticationResult,
-    onSignedIn: (MemberSessionInfo) -> Unit,
+    onSignedIn: suspend (MemberSessionInfo) -> MemberPrivateNodeState,
 ) {
     var invitation by remember { mutableStateOf("") }
     var status by remember { mutableStateOf("Connect this device before viewing private household information.") }
@@ -662,7 +682,18 @@ private fun MemberAccountCard(
             Button(enabled = !busy, onClick = {
                 busy = true; scope.launch {
                     val result = onSignIn(); status = describe(result)
-                    if (result is MemberAuthenticationResult.SignedIn) onSignedIn(result.session)
+                    if (result is MemberAuthenticationResult.SignedIn) {
+                        status = try {
+                            when (onSignedIn(result.session)) {
+                                MemberPrivateNodeState.READY -> "Connected. Encrypted private records are ready."
+                                MemberPrivateNodeState.RECOVERY_REQUIRED -> "Connected, but this installation needs recovery before protected actions can open."
+                                MemberPrivateNodeState.LOCKED -> "Connected, but private records could not be opened."
+                            }
+                        } catch (failureValue: Exception) {
+                            if (failureValue is CancellationException) throw failureValue
+                            "Connected, but private records are unavailable. Protected actions remain closed."
+                        }
+                    }
                     busy = false
                 }
             }) { Text(if (busy) "Connecting…" else "Sign in with passkey") }

@@ -18,6 +18,8 @@ The Access screen validates the complete permission history and pending permissi
 
 The Dials screen reads effective mandates and pending co-signature changes with complete before/after versions and independently validates version progression, signer sets, state and canonical challenge. Every protection field is shown and editable; the fixed proposal, required signers and recorded signatures are displayed before Credential Manager opens. A prepared signature is bound to the current session and credential and is consumed before submission; an uncertain result clears the editor and must be recovered by refreshing the existing change rather than replaying the assertion.
 
+After sign-in, the app opens the authenticated blind private node before enabling protected screens. Record plaintext is encrypted locally with AES-256-GCM and authenticated environment, origin, household, record ID and revision; the host receives only nonce and ciphertext. The random ledger key is itself wrapped under the installation Keystore key in no-backup storage. Empty storage creates and verifies an encrypted bootstrap record. Existing ciphertext without a local ledger key enters recovery-required and stays closed; installing a recovered key is allowed only after every hosted record authenticates and decrypts. Backgrounding clears both the decrypted node object and bearer authority.
+
 The development build deliberately has no Android passkey release identity. A usable ceremony requires all of the following to agree:
 
 - a reviewed release signing certificate;
