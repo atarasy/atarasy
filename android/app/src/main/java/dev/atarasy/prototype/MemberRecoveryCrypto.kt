@@ -81,6 +81,14 @@ object MemberRecoveryPackets {
         val pair = KeyPairGenerator.getInstance("EC").apply { initialize(ECGenParameterSpec("secp256r1")) }.generateKeyPair()
         return MemberRecoveryKeyPair(pair.private.encoded, encodePublic(pair.public as ECPublicKey))
     }
+    fun restoreKeyPair(privateKeyPkcs8: ByteArray, publicKey: String): MemberRecoveryKeyPair = try {
+        val privateKey = KeyFactory.getInstance("EC").generatePrivate(PKCS8EncodedKeySpec(privateKeyPkcs8)); val decodedPublic = decodePublic(publicKey)
+        val probe = KeyPairGenerator.getInstance("EC").apply { initialize(ECGenParameterSpec("secp256r1")) }.generateKeyPair()
+        val fromPrivate = KeyAgreement.getInstance("ECDH").apply { init(privateKey); doPhase(probe.public, true) }.generateSecret()
+        val fromPublic = KeyAgreement.getInstance("ECDH").apply { init(probe.private); doPhase(decodedPublic, true) }.generateSecret()
+        if (!MessageDigest.isEqual(fromPrivate, fromPublic)) throw MemberFailure.Storage
+        MemberRecoveryKeyPair(privateKeyPkcs8.copyOf(), publicKey)
+    } catch (failure: Exception) { if (failure is MemberFailure) throw failure else throw MemberFailure.Storage }
     fun seal(clear: ByteArray, recipientPublicKey: String, context: MemberRecoveryPacketContext): String {
         if (clear.isEmpty() || clear.size > 1024) throw MemberFailure.Malformed
         return try {

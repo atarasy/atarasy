@@ -62,6 +62,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var dials: MemberDials
     private lateinit var dialsFlow: MemberDialsFlow
     private lateinit var privateNode: MemberPrivateNode
+    private lateinit var recoveryFlow: MemberRecoveryFlow
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -99,6 +100,14 @@ class MainActivity : ComponentActivity() {
             MemberPrivateNodeRemote(memberSessions),
             EncryptedFilePrivateNodeKeyVault(File(noBackupFilesDir, "member-private-node-key"), installationCipher),
         )
+        recoveryFlow = MemberRecoveryFlow(
+            environment,
+            MemberRecoveryService(environment, memberSessions, acceptedOrigins = AndroidSigningOrigins.current(this)),
+            privateNode,
+            passkeys,
+            EncryptedFileRecoveryMaterialVault(File(noBackupFilesDir, "member-recovery-material"), installationCipher),
+            getString(R.string.atarasy_recovery_notice_channel).trim().ifEmpty { null },
+        )
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         setContent {
             AtarasyApp(
@@ -128,6 +137,13 @@ class MainActivity : ComponentActivity() {
                 onApproveMandateChange = dialsFlow::approve,
                 onCancelMandateChange = dials::cancel,
                 onOpenPrivateNode = privateNode::open,
+                recoveryCanConfigure = recoveryFlow.noticeChannel != null,
+                onLoadRecovery = recoveryFlow::refresh,
+                onRegisterRecoveryKey = recoveryFlow::registerRecoveryKey,
+                onConfigureRecovery = recoveryFlow::configure,
+                onBeginRecovery = recoveryFlow::beginLostDeviceRecovery,
+                onApproveRecovery = recoveryFlow::approve,
+                onFinishRecovery = recoveryFlow::finish,
             )
         }
     }
@@ -166,6 +182,13 @@ fun AtarasyApp(
     onApproveMandateChange: suspend (PreparedMemberMandateChange) -> MemberDialsActionResult = { MemberDialsActionResult.Failed(MemberFailure.Unavailable) },
     onCancelMandateChange: suspend (String) -> MemberMandateChange = { throw MemberFailure.Unavailable },
     onOpenPrivateNode: suspend (MemberSessionInfo) -> MemberPrivateNodeState = { MemberPrivateNodeState.LOCKED },
+    recoveryCanConfigure: Boolean = false,
+    onLoadRecovery: suspend () -> MemberRecoverySnapshot = { throw MemberFailure.Unavailable },
+    onRegisterRecoveryKey: suspend (MemberSessionInfo) -> MemberRecoveryActionResult = { MemberRecoveryActionResult.Failed(MemberFailure.Unavailable) },
+    onConfigureRecovery: suspend (MemberSessionInfo, String) -> MemberRecoveryActionResult = { _, _ -> MemberRecoveryActionResult.Failed(MemberFailure.Unavailable) },
+    onBeginRecovery: suspend (MemberSessionInfo) -> MemberRecoveryActionResult = { MemberRecoveryActionResult.Failed(MemberFailure.Unavailable) },
+    onApproveRecovery: suspend (MemberSessionInfo, MemberRecoveryRequest) -> MemberRecoveryActionResult = { _, _ -> MemberRecoveryActionResult.Failed(MemberFailure.Unavailable) },
+    onFinishRecovery: suspend (MemberSessionInfo, MemberRecoveryRequest) -> MemberRecoveryActionResult = { _, _ -> MemberRecoveryActionResult.Failed(MemberFailure.Unavailable) },
 ) {
     var selectedSection by rememberSaveable { mutableStateOf("Offers") }
     var session by remember { mutableStateOf<MemberSessionInfo?>(null) }
@@ -226,7 +249,7 @@ fun AtarasyApp(
                         )
                     }
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        listOf("Offers", "Saved", "Access", "Dials", "Account").chunked(3).forEach { sections ->
+                        listOf("Offers", "Saved", "Access", "Dials", "Recovery", "Account").chunked(3).forEach { sections ->
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 sections.forEach { section -> TextButton(onClick = { selectedSection = section }) { Text(section) } }
                             }
@@ -258,6 +281,12 @@ fun AtarasyApp(
                         MemberPermissionsCard(accessSession, onLoadPermissions, onRevokePermission, onLoadPermissionRequests, onReadPermissionRequest, onDecidePermissionRequest)
                     } else if (selectedSection == "Dials") {
                         MemberDialsCard(accessSession, onLoadEffectiveMandates, onLoadMandateChanges, onPrepareMandateChange, onPrepareMandateSignature, onApproveMandateChange, onCancelMandateChange)
+                    } else if (selectedSection == "Recovery") {
+                        MemberRecoveryCard(
+                            session, privateNodeState, recoveryCanConfigure, onLoadRecovery, onRegisterRecoveryKey, onConfigureRecovery,
+                            onBeginRecovery, onApproveRecovery,
+                            onFinish = { info, request -> onFinishRecovery(info, request).also { if (it is MemberRecoveryActionResult.Completed) privateNodeState = MemberPrivateNodeState.READY } },
+                        )
                     } else {
                         MemberAccountCard(
                             onSignIn = onSignIn,
@@ -270,6 +299,120 @@ fun AtarasyApp(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MemberRecoveryCard(
+    session: MemberSessionInfo?,
+    privateNodeState: MemberPrivateNodeState,
+    canConfigure: Boolean,
+    onLoad: suspend () -> MemberRecoverySnapshot,
+    onRegister: suspend (MemberSessionInfo) -> MemberRecoveryActionResult,
+    onConfigure: suspend (MemberSessionInfo, String) -> MemberRecoveryActionResult,
+    onBegin: suspend (MemberSessionInfo) -> MemberRecoveryActionResult,
+    onApprove: suspend (MemberSessionInfo, MemberRecoveryRequest) -> MemberRecoveryActionResult,
+    onFinish: suspend (MemberSessionInfo, MemberRecoveryRequest) -> MemberRecoveryActionResult,
+) {
+    var snapshot by remember(session) { mutableStateOf<MemberRecoverySnapshot?>(null) }
+    var failed by remember(session) { mutableStateOf(false) }
+    var busy by remember(session) { mutableStateOf(false) }
+    var notice by remember(session) { mutableStateOf("") }
+    var recoverer by remember(session) { mutableStateOf("") }
+    var refresh by remember(session) { mutableStateOf(0L) }
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(session, refresh) {
+        if (session == null) { snapshot = null; return@LaunchedEffect }
+        failed = false
+        try { snapshot = onLoad() } catch (failure: Exception) {
+            if (failure is CancellationException) throw failure
+            failed = true
+        }
+    }
+    fun launchAction(block: suspend (MemberSessionInfo) -> MemberRecoveryActionResult) {
+        val current = session ?: return
+        if (busy) return
+        busy = true; notice = ""
+        scope.launch {
+            val result = try { block(current) } catch (failure: Exception) {
+                if (failure is CancellationException) throw failure
+                MemberRecoveryActionResult.Failed(failure)
+            }
+            notice = when (result) {
+                is MemberRecoveryActionResult.Completed -> result.notice
+                MemberRecoveryActionResult.Cancelled -> "Recovery signing was cancelled. Nothing was submitted."
+                MemberRecoveryActionResult.NoCredential -> "The required passkey is unavailable. Nothing was submitted."
+                is MemberRecoveryActionResult.Failed -> "Recovery is not confirmed. Existing encrypted records were not replaced; current status is being refreshed."
+            }
+            busy = false; refresh++
+        }
+    }
+    when {
+        session == null -> MemberCard("Recovery is locked", "Sign in before checking or starting a recovery ceremony.")
+        snapshot == null && failed -> MemberCard("Recovery status is unavailable", "Refresh before starting or approving a recovery ceremony.") {
+            TextButton(enabled = !busy, onClick = { refresh++ }) { Text("Refresh recovery status") }
+        }
+        snapshot == null -> MemberCard("Checking recovery…", "Reading the recovery policy and ceremony log.")
+        else -> Card(modifier = Modifier.fillMaxWidth()) {
+            val current = snapshot!!
+            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Recovery", style = MaterialTheme.typography.titleLarge)
+                Text("Recovery role", fontWeight = FontWeight.SemiBold)
+                Text(if (current.keyStatus.publicKey == null) "This device has no recovery-only encryption key." else "This device can receive a named recovery share.")
+                Button(enabled = !busy && current.keyStatus.publicKey == null, onClick = { launchAction(onRegister) }) { Text("Enable this device as a recoverer") }
+
+                Text("Your recovery policy", fontWeight = FontWeight.SemiBold)
+                if (current.configuration.configured) {
+                    Text("Two participants are required: your device, the named recoverer, or the host.")
+                    Text("Recoverer: ${current.configuration.recoverer ?: "Unavailable"}")
+                    Text("Policy version ${current.configuration.epoch ?: 0}")
+                } else Text("Recovery has not been configured.")
+                OutlinedTextField(
+                    value = recoverer,
+                    onValueChange = { recoverer = it.trim() },
+                    enabled = !busy && privateNodeState == MemberPrivateNodeState.READY,
+                    label = { Text("Recoverer household reference") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Button(
+                    enabled = !busy && canConfigure && privateNodeState == MemberPrivateNodeState.READY && recoverer.isNotEmpty() && recoverer != session.household,
+                    onClick = { val selected = recoverer; launchAction { onConfigure(it, selected) } },
+                ) { Text("Review and configure recovery") }
+                if (!canConfigure) Text("This build has no independently delivered recovery notice channel, so recovery configuration remains closed.")
+
+                if (privateNodeState == MemberPrivateNodeState.RECOVERY_REQUIRED) {
+                    Text("Restore this device", fontWeight = FontWeight.SemiBold)
+                    Text("A recovered passkey does not restore the encrypted records by itself.")
+                    Button(enabled = !busy, onClick = { launchAction(onBegin) }) { Text("Begin lost-device recovery") }
+                }
+
+                Text("Ceremonies", fontWeight = FontWeight.SemiBold)
+                if (current.requests.isEmpty()) Text("No recovery ceremony is visible to this account.")
+                current.requests.forEach { request ->
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(request.state.replaceFirstChar { it.uppercase() }, fontWeight = FontWeight.SemiBold)
+                            Text(if (request.owner == session.household) "Your recovery" else "Recovery requested by a person who named you")
+                            Text("Policy version ${request.epoch}")
+                            if (request.recoverer == session.household && request.state == "pending") {
+                                Button(enabled = !busy, onClick = { launchAction { onApprove(it, request) } }) { Text("Review and approve recovery") }
+                            }
+                            if (request.owner == session.household && request.state == "completed") {
+                                Button(enabled = !busy && privateNodeState == MemberPrivateNodeState.RECOVERY_REQUIRED, onClick = { launchAction { onFinish(it, request) } }) { Text("Install recovered key") }
+                            }
+                            if (request.owner == session.household && request.state == "approved") Text("The recoverer approved. The key remains unavailable until the independent notice is delivered.")
+                        }
+                    }
+                }
+
+                Text("Recovery record", fontWeight = FontWeight.SemiBold)
+                if (current.log.events.isEmpty()) Text("No completed or pending recovery event.")
+                current.log.events.forEach { event -> Text(if (event.state == "completed") "Notice delivered before recovery completed" else "Recovery recorded; notice delivery pending") }
+                TextButton(enabled = !busy, onClick = { refresh++ }) { Text("Refresh recovery status") }
+                if (busy) Text("Working…")
+                if (notice.isNotEmpty()) Text(notice)
             }
         }
     }

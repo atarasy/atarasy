@@ -20,11 +20,13 @@ class MemberRecoveryCryptoTest {
 
     @Test fun `recovery packet is end to end encrypted and bound to exact ceremony`() {
         val recipient = MemberRecoveryPackets.generateKeyPair(); val clear = ByteArray(64) { (it * 3).toByte() }
+        val restored = MemberRecoveryPackets.restoreKeyPair(recipient.privateKeyPkcs8, recipient.publicKey)
         val context = MemberRecoveryPacketContext("recoverer-share", "owner", "recoverer", "configuration", 2)
         val packet = MemberRecoveryPackets.seal(clear, recipient.publicKey, context)
-        assertTrue(MemberRecoveryPackets.open(packet, recipient, context).contentEquals(clear))
+        assertTrue(MemberRecoveryPackets.open(packet, restored, context).contentEquals(clear))
         assertThrows(MemberFailure.Storage::class.java) { MemberRecoveryPackets.open(packet, recipient, context.copy(epoch = 3)) }
         assertThrows(MemberFailure.Storage::class.java) { MemberRecoveryPackets.open(packet, MemberRecoveryPackets.generateKeyPair(), context) }
+        assertThrows(MemberFailure.Storage::class.java) { MemberRecoveryPackets.restoreKeyPair(recipient.privateKeyPkcs8, MemberRecoveryPackets.generateKeyPair().publicKey) }
         assertEquals(32, MemberPrivateNodeCodec.data(MemberRecoveryPackets.keyDigest(recipient.publicKey)).size)
     }
 }

@@ -14,6 +14,7 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
+        resValue("string", "atarasy_recovery_notice_channel", providers.gradleProperty("atarasyRecoveryNoticeChannel").orElse("").get())
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
