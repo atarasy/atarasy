@@ -55,6 +55,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var reviews: MemberReviews
     private lateinit var decisions: MemberDigitalDecisionFlow
     private lateinit var statements: MemberStatementFlow
+    private lateinit var savedOperations: MemberSavedOperations
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -78,6 +79,7 @@ class MainActivity : ComponentActivity() {
         decisions = MemberDigitalDecisionFlow(environment, memberSessions, decisionOperations, passkeys)
         val statementOperations = MemberStatementOperations(environment, memberSessions, operationStore, acceptedOrigins = AndroidSigningOrigins.current(this))
         statements = MemberStatementFlow(environment, memberSessions, statementOperations, passkeys)
+        savedOperations = MemberSavedOperations(environment, memberSessions, operationStore, decisionOperations, statementOperations)
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         setContent {
             AtarasyApp(
@@ -90,6 +92,8 @@ class MainActivity : ComponentActivity() {
                 onApproveDecision = decisions::approve,
                 onPrepareStatement = statements::prepare,
                 onApproveStatement = statements::approve,
+                onLoadSaved = savedOperations::list,
+                onCheckSaved = savedOperations::check,
             )
         }
     }
@@ -111,6 +115,8 @@ fun AtarasyApp(
     onApproveDecision: suspend (MemberDecisionReview) -> MemberDecisionActionResult = { MemberDecisionActionResult.Failed(MemberFailure.Unavailable) },
     onPrepareStatement: suspend (MemberSessionInfo, MemberOfferDetail, MemberStatement, List<String>) -> MemberStatementReview = { _, _, _, _ -> throw MemberFailure.Unavailable },
     onApproveStatement: suspend (MemberStatementReview) -> MemberStatementActionResult = { MemberStatementActionResult.Failed(MemberFailure.Unavailable) },
+    onLoadSaved: suspend (MemberSessionInfo) -> List<MemberOperationHandle> = { throw MemberFailure.Unavailable },
+    onCheckSaved: suspend (MemberOperationHandle) -> MemberSavedResult = { throw MemberFailure.Unavailable },
 ) {
     var selectedSection by rememberSaveable { mutableStateOf("Offers") }
     var session by remember { mutableStateOf<MemberSessionInfo?>(null) }
@@ -163,7 +169,7 @@ fun AtarasyApp(
                     Text("Atarasy", style = MaterialTheme.typography.headlineLarge, modifier = Modifier.semantics { heading() })
                     Text("Your household", style = MaterialTheme.typography.titleMedium)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf("Offers", "Account").forEach { section ->
+                        listOf("Offers", "Saved", "Account").forEach { section ->
                             TextButton(onClick = { selectedSection = section }) { Text(section) }
                         }
                     }
@@ -187,6 +193,8 @@ fun AtarasyApp(
                             onSelect = { selectedOffer = it },
                             onAccount = { selectedSection = "Account" },
                         )
+                    } else if (selectedSection == "Saved") {
+                        MemberSavedOperationsCard(session, onLoadSaved, onCheckSaved)
                     } else {
                         MemberAccountCard(
                             onSignIn = onSignIn,
@@ -197,6 +205,70 @@ fun AtarasyApp(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun MemberSavedOperationsCard(
+    session: MemberSessionInfo?,
+    onLoad: suspend (MemberSessionInfo) -> List<MemberOperationHandle>,
+    onCheck: suspend (MemberOperationHandle) -> MemberSavedResult,
+) {
+    var handles by remember(session) { mutableStateOf<List<MemberOperationHandle>?>(null) }
+    var failure by remember(session) { mutableStateOf(false) }
+    var checking by remember(session) { mutableStateOf<String?>(null) }
+    var notices by remember(session) { mutableStateOf<Map<String, String>>(emptyMap()) }
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(session) {
+        val current = session ?: return@LaunchedEffect
+        try { handles = onLoad(current) } catch (failureValue: Exception) {
+            if (failureValue is CancellationException) throw failureValue
+            failure = true
+        }
+    }
+    when {
+        session == null -> MemberCard("Saved activity is locked", "Sign in before checking saved decisions or statements.")
+        failure -> MemberCard("Saved activity is unavailable", "The private operation journal could not be opened.")
+        handles == null -> MemberCard("Loading saved activity…", "Opening the encrypted operation journal.")
+        handles!!.isEmpty() -> MemberCard("No saved activity", "Prepared and submitted decisions will appear here.")
+        else -> Card(modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Saved activity", style = MaterialTheme.typography.titleLarge)
+                handles!!.forEach { handle ->
+                    val label = if (handle.operationProfile == MEMBER_DECISION_PROFILE) "Digital decision" else "Box statement"
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(label, fontWeight = FontWeight.SemiBold)
+                            Text(if (handle.attempted) "Submission attempted" else "Prepared, not submitted")
+                            Button(enabled = checking == null, onClick = {
+                                checking = handle.id; scope.launch {
+                                    notices = notices + (handle.id to try { describeSaved(onCheck(handle)) } catch (failureValue: Exception) {
+                                        if (failureValue is CancellationException) throw failureValue
+                                        "The result could not be read. Check later and do not resubmit."
+                                    })
+                                    checking = null
+                                }
+                            }) { Text(if (checking == handle.id) "Checking…" else "Check result") }
+                            notices[handle.id]?.let { Text(it) }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun describeSaved(result: MemberSavedResult): String = when (result) {
+    is MemberSavedResult.Decision -> when (val value = result.value) {
+        is MemberDecisionOutcome.Recorded -> "The original decision was recorded. This does not confirm payment or current order status."
+        is MemberDecisionOutcome.Pending -> "No committed decision is reported. State: ${value.state}. Nothing was resubmitted."
+        MemberDecisionOutcome.Unresolved -> "The result could not be read. Check later and do not resubmit."
+    }
+    is MemberSavedResult.Statement -> when (val value = result.value) {
+        is MemberStatementOutcome.Committed -> "A matching protocol settlement was recorded for this device."
+        is MemberStatementOutcome.SettledElsewhere -> "The box settled under another or unverified confirmation."
+        is MemberStatementOutcome.Pending -> "No committed statement is reported. State: ${value.state}. Nothing was resubmitted."
+        MemberStatementOutcome.Unresolved -> "The result could not be read. Check later and do not resubmit."
     }
 }
 
