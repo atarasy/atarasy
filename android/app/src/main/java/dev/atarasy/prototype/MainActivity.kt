@@ -59,6 +59,8 @@ class MainActivity : ComponentActivity() {
     private lateinit var savedOperations: MemberSavedOperations
     private lateinit var operationActions: MemberOperationActions
     private lateinit var permissions: MemberPermissions
+    private lateinit var dials: MemberDials
+    private lateinit var dialsFlow: MemberDialsFlow
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -89,6 +91,8 @@ class MainActivity : ComponentActivity() {
         savedOperations = MemberSavedOperations(environment, memberSessions, operationStore, decisionOperations, statementOperations, withdrawalOperations)
         operationActions = MemberOperationActions(environment, memberSessions)
         permissions = MemberPermissions(memberSessions)
+        dials = MemberDials(environment, memberSessions, acceptedOrigins = AndroidSigningOrigins.current(this))
+        dialsFlow = MemberDialsFlow(dials, passkeys)
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         setContent {
             AtarasyApp(
@@ -111,6 +115,12 @@ class MainActivity : ComponentActivity() {
                 onLoadPermissionRequests = permissions::requests,
                 onReadPermissionRequest = permissions::request,
                 onDecidePermissionRequest = permissions::decide,
+                onLoadEffectiveMandates = dials::effective,
+                onLoadMandateChanges = dials::changes,
+                onPrepareMandateChange = dials::prepare,
+                onPrepareMandateSignature = dials::prepareSignature,
+                onApproveMandateChange = dialsFlow::approve,
+                onCancelMandateChange = dials::cancel,
             )
         }
     }
@@ -142,6 +152,12 @@ fun AtarasyApp(
     onLoadPermissionRequests: suspend () -> List<MemberPermissionRequest> = { throw MemberFailure.Unavailable },
     onReadPermissionRequest: suspend (String) -> MemberPermissionRequest = { throw MemberFailure.Unavailable },
     onDecidePermissionRequest: suspend (MemberPermissionRequest, Boolean) -> MemberPermissionRequest = { _, _ -> throw MemberFailure.Unavailable },
+    onLoadEffectiveMandates: suspend () -> List<Mandate> = { throw MemberFailure.Unavailable },
+    onLoadMandateChanges: suspend () -> List<MemberMandateChange> = { throw MemberFailure.Unavailable },
+    onPrepareMandateChange: suspend (Mandate) -> PreparedMemberMandateChange = { throw MemberFailure.Unavailable },
+    onPrepareMandateSignature: suspend (String) -> PreparedMemberMandateChange = { throw MemberFailure.Unavailable },
+    onApproveMandateChange: suspend (PreparedMemberMandateChange) -> MemberDialsActionResult = { MemberDialsActionResult.Failed(MemberFailure.Unavailable) },
+    onCancelMandateChange: suspend (String) -> MemberMandateChange = { throw MemberFailure.Unavailable },
 ) {
     var selectedSection by rememberSaveable { mutableStateOf("Offers") }
     var session by remember { mutableStateOf<MemberSessionInfo?>(null) }
@@ -193,9 +209,11 @@ fun AtarasyApp(
                 ) {
                     Text("Atarasy", style = MaterialTheme.typography.headlineLarge, modifier = Modifier.semantics { heading() })
                     Text("Your household", style = MaterialTheme.typography.titleMedium)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf("Offers", "Saved", "Access", "Account").forEach { section ->
-                            TextButton(onClick = { selectedSection = section }) { Text(section) }
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        listOf("Offers", "Saved", "Access", "Dials", "Account").chunked(3).forEach { sections ->
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                sections.forEach { section -> TextButton(onClick = { selectedSection = section }) { Text(section) } }
+                            }
                         }
                     }
                     Spacer(Modifier.height(8.dp))
@@ -222,6 +240,8 @@ fun AtarasyApp(
                         MemberSavedOperationsCard(session, onLoadSaved, onCheckSaved, onPrepareWithdrawal, onApproveWithdrawal, onCancelOperation)
                     } else if (selectedSection == "Access") {
                         MemberPermissionsCard(session, onLoadPermissions, onRevokePermission, onLoadPermissionRequests, onReadPermissionRequest, onDecidePermissionRequest)
+                    } else if (selectedSection == "Dials") {
+                        MemberDialsCard(session, onLoadEffectiveMandates, onLoadMandateChanges, onPrepareMandateChange, onPrepareMandateSignature, onApproveMandateChange, onCancelMandateChange)
                     } else {
                         MemberAccountCard(
                             onSignIn = onSignIn,
@@ -481,6 +501,140 @@ private fun MemberPermissionsCard(
         }
     }
 }
+
+@Composable
+private fun MemberDialsCard(
+    session: MemberSessionInfo?,
+    onLoadEffective: suspend () -> List<Mandate>,
+    onLoadChanges: suspend () -> List<MemberMandateChange>,
+    onPrepare: suspend (Mandate) -> PreparedMemberMandateChange,
+    onPrepareSignature: suspend (String) -> PreparedMemberMandateChange,
+    onApprove: suspend (PreparedMemberMandateChange) -> MemberDialsActionResult,
+    onCancelChange: suspend (String) -> MemberMandateChange,
+) {
+    var effective by remember(session) { mutableStateOf<List<Mandate>?>(null) }
+    var changes by remember(session) { mutableStateOf<List<MemberMandateChange>?>(null) }
+    var editing by remember(session) { mutableStateOf<Mandate?>(null) }
+    var prepared by remember(session) { mutableStateOf<PreparedMemberMandateChange?>(null) }
+    var outOfNetwork by remember(session) { mutableStateOf("") }
+    var daily by remember(session) { mutableStateOf("") }
+    var cooling by remember(session) { mutableStateOf("") }
+    var lapses by remember(session) { mutableStateOf("") }
+    var coSigners by remember(session) { mutableStateOf("") }
+    var busy by remember(session) { mutableStateOf(false) }
+    var failed by remember(session) { mutableStateOf(false) }
+    var notice by remember(session) { mutableStateOf("") }
+    var refresh by remember(session) { mutableStateOf(0L) }
+    val scope = rememberCoroutineScope()
+    fun begin(value: Mandate) {
+        editing = value; prepared = null; outOfNetwork = value.ceilingOutOfNetwork.toString(); daily = value.ceilingDaily?.toString().orEmpty()
+        cooling = value.coolingSeconds?.toString().orEmpty(); lapses = value.lapsesAt.toString(); coSigners = value.coSigners.joinToString(",")
+    }
+    LaunchedEffect(session, refresh) {
+        if (session == null) return@LaunchedEffect
+        failed = false
+        try { effective = onLoadEffective(); changes = onLoadChanges() }
+        catch (failureValue: Exception) { if (failureValue is CancellationException) throw failureValue; failed = true }
+    }
+    when {
+        session == null -> MemberCard("Dials are locked", "Sign in before reviewing or changing household protections.")
+        failed -> MemberCard("Dials could not be refreshed", "The effective mandate has not been changed. Refresh before editing.")
+        effective == null || changes == null -> MemberCard("Checking Dials…", "Reading effective protections and pending signatures.")
+        else -> Card(modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Dials", style = MaterialTheme.typography.titleLarge)
+                if (effective!!.isEmpty()) Text("No effective mandate is available.")
+                effective!!.forEach { mandate ->
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("Effective version ${mandate.version}", fontWeight = FontWeight.SemiBold)
+                            Text(describeMandate(mandate))
+                            Button(enabled = !busy, onClick = { begin(mandate) }) { Text("Edit protections") }
+                        }
+                    }
+                }
+                editing?.let { base ->
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Proposed version ${base.version + 1}", fontWeight = FontWeight.SemiBold)
+                            OutlinedTextField(outOfNetwork, { outOfNetwork = it }, label = { Text("Out-of-network ceiling") }, singleLine = true)
+                            OutlinedTextField(daily, { daily = it }, label = { Text("Daily ceiling (blank means none)") }, singleLine = true)
+                            OutlinedTextField(cooling, { cooling = it }, label = { Text("Cooling seconds (blank means none)") }, singleLine = true)
+                            OutlinedTextField(lapses, { lapses = it }, label = { Text("Lapses at") }, singleLine = true)
+                            OutlinedTextField(coSigners, { coSigners = it }, label = { Text("Co-signers, comma separated") }, singleLine = true)
+                            Button(enabled = !busy, onClick = {
+                                val proposal = try {
+                                    val signers = coSigners.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+                                    Mandate(base.id, base.household, checkNotNull(outOfNetwork.toLongOrNull()), daily.takeIf { it.isNotBlank() }?.toLong(),
+                                        cooling.takeIf { it.isNotBlank() }?.toLong(), signers, checkNotNull(lapses.toLongOrNull()), base.version + 1).also {
+                                        Canonical.validateMandate(it); require(signers.distinct().size == signers.size)
+                                    }
+                                } catch (_: Exception) { notice = "Enter valid safe integer limits and unique co-signers."; null }
+                                if (proposal != null) {
+                                    busy = true; scope.launch {
+                                        try { prepared = onPrepare(proposal); notice = "Review every before/after protection and required signer before signing." }
+                                        catch (failureValue: Exception) { if (failureValue is CancellationException) throw failureValue; notice = "The proposal could not be fixed. Refresh Dials before editing again." }
+                                        busy = false
+                                    }
+                                }
+                            }) { Text("Review fixed proposal") }
+                        }
+                    }
+                }
+                Text("Pending changes", fontWeight = FontWeight.SemiBold)
+                if (changes!!.isEmpty()) Text("No pending or historical mandate changes.")
+                changes!!.forEach { change ->
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("${change.state.replaceFirstChar { it.uppercase() }} · version ${change.mandate.version}", fontWeight = FontWeight.SemiBold)
+                            Text("Before: ${describeMandate(change.before)}")
+                            Text("After: ${describeMandate(change.mandate)}")
+                            Text("Required: ${change.requiredSigners.joinToString()}")
+                            Text("Signed: ${change.signedBy.joinToString().ifEmpty { "None" }}")
+                            if (change.state == "pending" && session.household in change.requiredSigners && session.household !in change.signedBy) {
+                                Button(enabled = !busy, onClick = { busy = true; scope.launch {
+                                    try { prepared = onPrepareSignature(change.id); notice = "Review this fixed proposal before adding your signature." }
+                                    catch (failureValue: Exception) { if (failureValue is CancellationException) throw failureValue; notice = "This pending proposal could not be checked." }
+                                    busy = false
+                                } }) { Text("Review signature") }
+                            }
+                            if (change.state == "pending") TextButton(enabled = !busy, onClick = { busy = true; scope.launch {
+                                notice = try { onCancelChange(change.id); prepared = null; "Pending change cancelled. The effective version was not changed." }
+                                catch (failureValue: Exception) { if (failureValue is CancellationException) throw failureValue; "Cancellation could not be confirmed. Refresh Dials." }
+                                busy = false; refresh++
+                            } }) { Text("Cancel pending change") }
+                        }
+                    }
+                }
+                prepared?.let { fixed ->
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("Signature review", fontWeight = FontWeight.SemiBold)
+                            Text("Before: ${describeMandate(fixed.change.before)}")
+                            Text("After: ${describeMandate(fixed.change.mandate)}")
+                            Text("Required signers: ${fixed.change.requiredSigners.joinToString()}")
+                            Button(enabled = !busy, onClick = { busy = true; scope.launch {
+                                notice = when (val result = onApprove(fixed)) {
+                                    is MemberDialsActionResult.Recorded -> if (result.change.state == "effective") "Mandate version ${result.change.mandate.version} is effective." else "Signature recorded. Waiting for required signers."
+                                    MemberDialsActionResult.Cancelled -> "Signing cancelled. The effective mandate was not changed."
+                                    MemberDialsActionResult.NoCredential -> "No passkey is available for this mandate."
+                                    is MemberDialsActionResult.Failed -> "The submission result is unconfirmed. Refresh Dials; do not sign a new version yet."
+                                }
+                                prepared = null; editing = null; busy = false; refresh++
+                            } }) { Text("Sign fixed proposal") }
+                            TextButton(enabled = !busy, onClick = { prepared = null }) { Text("Close review") }
+                        }
+                    }
+                }
+                if (notice.isNotEmpty()) Text(notice)
+                TextButton(enabled = !busy, onClick = { prepared = null; editing = null; refresh++ }) { Text("Refresh Dials") }
+            }
+        }
+    }
+}
+
+private fun describeMandate(value: Mandate) = "Out-of-network ${value.ceilingOutOfNetwork}; daily ${value.ceilingDaily?.toString() ?: "none"}; " +
+    "cooling ${value.coolingSeconds?.toString() ?: "none"}; co-signers ${value.coSigners.joinToString().ifEmpty { "none" }}; lapses ${value.lapsesAt}"
 
 private fun Exception.endsPrivateSession() = this is MemberFailure.Expired || this is MemberFailure.Superseded || (this is MemberFailure.Http && status == 401)
 

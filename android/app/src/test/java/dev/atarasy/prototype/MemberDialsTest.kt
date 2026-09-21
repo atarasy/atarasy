@@ -33,7 +33,7 @@ class MemberDialsTest {
         val transport = DecisionTransport(ArrayDeque(listOf(response("/auth/session", sessionBody)) + replies))
         val sessions = MemberSessionClient(environment, transport, DecisionVault(StoredMemberSession("amr1_" + "A".repeat(43), session))) { 100 }
         runBlocking { sessions.restore(household) }
-        return MemberDials(environment, sessions) { 100 } to transport
+        return MemberDials(environment, sessions, now = { 100 }) to transport
     }
     private fun assertion(): String {
         val client = """{"type":"webauthn.get","origin":"${environment.origin}","challenge":"${Canonical.challenge(Canonical.mandate(after, environment.relyingPartyId))}"}"""
@@ -50,7 +50,12 @@ class MemberDialsTest {
         ))
         assertEquals(listOf(before), service.effective()); assertEquals(emptyList<MemberMandateChange>(), service.changes())
         val review = service.prepare(after); assertEquals(after, review.change.mandate)
-        assertEquals("effective", service.submit(review, assertion()).state)
+        var serverRequest = ""
+        val flow = MemberDialsFlow(service, object : PasskeyAuthorizer {
+            override suspend fun authenticate(serverRequestJson: String): PasskeyResult { serverRequest = serverRequestJson; return PasskeyResult.Completed(assertion()) }
+        })
+        val action = flow.approve(review) as MemberDialsActionResult.Recorded
+        assertEquals("effective", action.change.state); assertEquals(review.publicKeyJson, serverRequest)
         assertThrows(MemberFailure.ScopeMismatch::class.java) { runBlocking { service.submit(review, assertion()) } }
         assertEquals(listOf("/auth/session", "/member/mandates/effective", "/member/mandates/changes", "/member/mandates/changes", "/member/mandates/changes/$id/submit"), transport.requests.map { it.path })
         Unit

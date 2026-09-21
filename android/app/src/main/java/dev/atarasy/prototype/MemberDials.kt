@@ -78,7 +78,8 @@ object MemberDialsCodec {
         require(publicKey.string("rpId") == environment.relyingPartyId && publicKey.string("userVerification") == "required")
         val allowed = publicKey.getValue("allowCredentials").jsonArray; require(allowed.size == 1)
         val credential = allowed.single().jsonObject; require(credential.keys == setOf("type", "id") && credential.string("type") == "public-key")
-        PreparedMemberMandateChange(change, publicKey, publicKey.toString(), session.id, credential.string("id"), minOf(session.expiresAt, now + 300_000))
+        val rawPublicKey = MemberAuthenticationWire.rawObjectMember(text, "publicKey") ?: error("publicKey")
+        PreparedMemberMandateChange(change, publicKey, rawPublicKey, session.id, credential.string("id"), minOf(session.expiresAt, now + 300_000))
     }
     private fun <T> list(bytes: ByteArray, key: String, decode: (JsonElement) -> T): List<T> = malformed {
         val root = json.parseToJsonElement(bytes.toString(Charsets.UTF_8)).jsonObject; require(root.keys == setOf(key))
@@ -98,6 +99,7 @@ class MemberDials(
     private val environment: MemberEnvironment,
     private val sessions: MemberSessionClient,
     private val now: () -> Long = System::currentTimeMillis,
+    private val acceptedOrigins: Set<String> = setOf(environment.origin),
 ) {
     private var held: PreparedMemberMandateChange? = null
     suspend fun effective(): List<Mandate> { val (reply, session) = sessions.readWithSession("/member/mandates/effective"); json200(reply); return MemberDialsCodec.effective(reply.body, session.household) }
@@ -124,7 +126,8 @@ class MemberDials(
         if (assertion.stringOrNull("id") != retained.credentialId) throw MemberFailure.ScopeMismatch
         val encodedClient = response.stringOrNull("clientDataJSON") ?: throw MemberFailure.Malformed
         val clientBytes = decode64(encodedClient); val client = try { Json.parseToJsonElement(clientBytes.toString(Charsets.UTF_8)).jsonObject } catch (_: Exception) { throw MemberFailure.ScopeMismatch }
-        if (client.stringOrNull("type") != "webauthn.get" || client.stringOrNull("origin") != environment.origin ||
+        if (client.stringOrNull("type") != "webauthn.get" || client.stringOrNull("origin") !in acceptedOrigins || client.containsKey("topOrigin") ||
+            (client.containsKey("crossOrigin") && client["crossOrigin"] != JsonPrimitive(false)) ||
             client.stringOrNull("challenge") != Canonical.challenge(Canonical.mandate(retained.change.mandate, environment.relyingPartyId))) throw MemberFailure.ScopeMismatch
         fun standard(key: String) = Base64.getEncoder().encodeToString(decode64(response.stringOrNull(key) ?: throw MemberFailure.Malformed))
         val body = buildJsonObject { put("assertion", buildJsonObject {
