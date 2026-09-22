@@ -43,6 +43,8 @@ interface MemberOperationStore {
     fun load(id: String): MemberOperationHandle?
     fun handles(): List<MemberOperationHandle>
     fun claim(handle: MemberOperationHandle, signature: String)
+    /** §14.3. Every operation of a household this device holds goes when the account is deleted. */
+    fun removeAll(household: String) {}
 }
 
 object MemberOperationCodec {
@@ -131,6 +133,16 @@ class EncryptedFileMemberOperationStore(
         val current = read(handle.id)
         if (current != handle || current.attempted) throw MemberFailure.Busy
         write(current.claimed(signature))
+    }
+
+    override fun removeAll(household: String) = synchronized(lock) {
+        val files = directory.listFiles { file -> file.isFile && file.extension == "operation" } ?: emptyArray()
+        for (file in files) {
+            // A file this installation's key cannot open is left alone: it belongs to
+            // no household this device can name.
+            val handle = runCatching { read(file.nameWithoutExtension) }.getOrNull() ?: continue
+            if (handle.household == household) file.delete()
+        }
     }
 
     private fun read(id: String): MemberOperationHandle? {

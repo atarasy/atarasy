@@ -4,7 +4,9 @@ import android.net.Uri
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -40,6 +42,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextDecoration
@@ -52,6 +55,7 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import java.io.File
+import java.time.LocalDate
 
 class MainActivity : ComponentActivity() {
     private lateinit var memberSessions: MemberSessionClient
@@ -71,6 +75,8 @@ class MainActivity : ComponentActivity() {
     private lateinit var recoveryFlow: MemberRecoveryFlow
     private var hostMoveFlow: MemberHostMoveFlow? = null
     private lateinit var androidRefresh: MemberAndroidRefresh
+    private lateinit var leaveService: MemberLeaveService
+    private lateinit var leaveFlow: MemberLeaveFlow
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -117,6 +123,8 @@ class MainActivity : ComponentActivity() {
             getString(R.string.atarasy_recovery_notice_channel).trim().ifEmpty { null },
         )
         androidRefresh = MemberAndroidRefresh(memberSessions, FirebaseRefreshRegistrationProvider(this))
+        leaveService = MemberLeaveService(environment, memberSessions, acceptedOrigins = AndroidSigningOrigins.current(this))
+        leaveFlow = MemberLeaveFlow(leaveService, memberSessions, privateNode, passkeys, operationStore)
         val moveTarget = runCatching {
             val name = getString(R.string.atarasy_move_target_name).trim(); val origin = getString(R.string.atarasy_move_target_origin).trim()
             if (name.isEmpty() || origin.isEmpty()) null else MemberEnvironment.create(name, origin)
@@ -169,11 +177,14 @@ class MainActivity : ComponentActivity() {
                 onApproveRecovery = recoveryFlow::approve,
                 onFinishRecovery = recoveryFlow::finish,
                 hostMoveAvailable = hostMoveFlow != null,
-                onSetHostMoveSession = { hostMoveFlow?.setSession(it) },
+                onSetHostMoveSession = { hostMoveFlow?.setSession(it); leaveFlow.setSession(it) },
                 onPrepareHostMove = { hostMoveFlow?.prepare() ?: MemberHostMoveState(MemberHostMovePhase.SOURCE_RETAINED, "No trusted target host is configured.") },
                 onRetireSourceHost = { hostMoveFlow?.retireSource() ?: MemberHostMoveState(MemberHostMovePhase.UNRESOLVED, "Source retirement is unavailable.") },
                 onRegisterRefresh = androidRefresh::register,
                 refreshEvents = MemberAndroidRefreshEvents.events,
+                onRefreshLeaveStatus = leaveFlow::refreshStatus,
+                onDeleteAccount = leaveFlow::deleteAccount,
+                onRequestAccountExport = leaveService::export,
             )
         }
     }
@@ -225,6 +236,9 @@ fun AtarasyApp(
     onRetireSourceHost: suspend () -> MemberHostMoveState = { MemberHostMoveState(MemberHostMovePhase.UNRESOLVED) },
     onRegisterRefresh: suspend () -> MemberAndroidRefreshSubscription = { throw MemberFailure.Unavailable },
     refreshEvents: Flow<Unit> = emptyFlow(),
+    onRefreshLeaveStatus: suspend () -> MemberLeaveState = { MemberLeaveState() },
+    onDeleteAccount: suspend () -> MemberLeaveState = { MemberLeaveState() },
+    onRequestAccountExport: suspend () -> MemberExport = { throw MemberFailure.Unavailable },
 ) {
     var selectedSection by rememberSaveable { mutableStateOf("Offers") }
     var session by remember { mutableStateOf<MemberSessionInfo?>(null) }
@@ -304,7 +318,7 @@ fun AtarasyApp(
                     }
                     if (refreshNotice.isNotEmpty()) MemberCard("Updates", refreshNotice)
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        (listOf("Offers", "Saved", "Access", "Dials", "Recovery") + (if (hostMoveAvailable) listOf("Move Host") else emptyList()) + "Account").chunked(3).forEach { sections ->
+                        (listOf("Offers", "Saved", "Access", "Dials", "Recovery") + (if (hostMoveAvailable) listOf("Move Host") else emptyList()) + listOf("Delete Account", "Account")).chunked(3).forEach { sections ->
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 sections.forEach { section -> TextButton(onClick = { selectedSection = section }) { Text(section) } }
                             }
@@ -352,6 +366,19 @@ fun AtarasyApp(
                                     }
                                 }
                             },
+                        )
+                    } else if (selectedSection == "Delete Account") {
+                        MemberLeaveCard(
+                            accessSession,
+                            onRefreshStatus = onRefreshLeaveStatus,
+                            onDeleteAccount = {
+                                onDeleteAccount().also {
+                                    if (it.phase == MemberLeavePhase.DONE) {
+                                        session = null; privateNodeState = MemberPrivateNodeState.LOCKED; onSetHostMoveSession(null); selectedSection = "Account"
+                                    }
+                                }
+                            },
+                            onRequestExport = onRequestAccountExport,
                         )
                     } else {
                         MemberAccountCard(
@@ -413,6 +440,106 @@ private fun MemberHostMoveCard(
                 ) { Text(if (busy) "Working…" else "Import and verify target") }
                 if (state.phase == MemberHostMovePhase.READY_TO_RETIRE) {
                     Button(enabled = !busy, onClick = { run(onRetire) }) { Text(if (busy) "Retiring…" else "Retire source host access") }
+                }
+                if (state.notice.isNotEmpty()) Text(state.notice)
+            }
+        }
+    }
+}
+
+private fun describeLeaveBlocker(blocker: MemberLeaveBlocker) = when (blocker.kind) {
+    "offer_in_progress" -> "An offer is still being decided."
+    "statement_unsigned" -> "A statement is waiting for your signature."
+    "reservation_held" -> "A reservation is still held."
+    "gift_in_flight" -> "A gift you sent or received is still in transit."
+    "co_signer" -> "You are a required co-signer on another household's mandate."
+    "recoverer" -> "You are set as another household's recovery contact."
+    "host_move_pending" -> "A move to another host is in progress."
+    "operation_pending" -> "An operation is still awaiting its outcome."
+    "mandate_change_pending" -> "A change to your protections is still pending."
+    "recovery_request_pending" -> "A recovery request is still pending."
+    else -> "Something with an unrecognised kind (\"${blocker.kind}\") is still in progress."
+}
+
+/** §14.3. Shows what would block deletion, offers to save a copy of the member's records
+ * first, and only then asks for a passkey to confirm. `session` gates on the same
+ * `accessSession` (signed in and the encrypted private node open) the other protected
+ * sections use. */
+@Composable
+private fun MemberLeaveCard(
+    session: MemberSessionInfo?,
+    onRefreshStatus: suspend () -> MemberLeaveState,
+    onDeleteAccount: suspend () -> MemberLeaveState,
+    onRequestExport: suspend () -> MemberExport,
+) {
+    var state by remember(session) { mutableStateOf(MemberLeaveState()) }
+    var busy by remember(session) { mutableStateOf(false) }
+    var confirming by remember(session) { mutableStateOf(false) }
+    var exportBusy by remember(session) { mutableStateOf(false) }
+    var exportNotice by remember(session) { mutableStateOf("") }
+    var pendingExport by remember(session) { mutableStateOf<MemberExport?>(null) }
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val saveExport = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        val export = pendingExport
+        if (uri != null && export != null) {
+            scope.launch {
+                exportNotice = try {
+                    context.contentResolver.openOutputStream(uri)?.use { it.write(export.fileContents()) } ?: throw MemberFailure.Storage
+                    "Export saved."
+                } catch (failure: Exception) {
+                    if (failure is CancellationException) throw failure
+                    "The export could not be saved to that location."
+                }
+            }
+        }
+    }
+    LaunchedEffect(session) {
+        state = if (session == null) MemberLeaveState() else onRefreshStatus()
+    }
+    when {
+        session == null -> MemberCard("Delete account is locked", "Sign in and open the encrypted private records before deleting your account.")
+        else -> Card(modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Delete account", style = MaterialTheme.typography.titleLarge)
+                Text(
+                    "Deleting removes everything this host holds for your account: your offers, your permissions, your protections and your encrypted private records. " +
+                        "Shops keep their own records of what you bought. Gifts you gave stay in the other household's records, showing you as a member who has left.",
+                )
+                Button(enabled = !exportBusy, onClick = {
+                    exportBusy = true
+                    scope.launch {
+                        exportNotice = try {
+                            pendingExport = onRequestExport(); "Choose where to save the export."
+                        } catch (failure: Exception) {
+                            if (failure is CancellationException) throw failure
+                            "The export could not be prepared."
+                        }
+                        exportBusy = false
+                        if (pendingExport != null) saveExport.launch("atarasy-export-${LocalDate.now()}.json")
+                    }
+                }) { Text(if (exportBusy) "Preparing export…" else "Save a copy of my records") }
+                if (exportNotice.isNotEmpty()) Text(exportNotice)
+                when (state.phase) {
+                    MemberLeavePhase.IDLE, MemberLeavePhase.CHECKING_STATUS -> Text("Checking whether anything would block deletion…")
+                    MemberLeavePhase.BLOCKED -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("This is still in progress, so the account cannot be deleted yet:", fontWeight = FontWeight.SemiBold)
+                        state.blockers.forEach { blocker -> Text("• " + describeLeaveBlocker(blocker)) }
+                        TextButton(enabled = !busy, onClick = { busy = true; scope.launch { state = onRefreshStatus(); busy = false } }) { Text("Check again") }
+                    }
+                    MemberLeavePhase.READY -> if (!confirming) {
+                        Button(enabled = !busy, onClick = { confirming = true }) { Text("Delete account") }
+                    } else {
+                        Text("This cannot be undone. Confirm with your passkey to permanently delete your account.", fontWeight = FontWeight.SemiBold)
+                        Button(enabled = !busy, onClick = {
+                            busy = true
+                            scope.launch { state = onDeleteAccount(); confirming = false; busy = false }
+                        }) { Text(if (busy) "Deleting…" else "Confirm deletion") }
+                        TextButton(enabled = !busy, onClick = { confirming = false }) { Text("Cancel") }
+                    }
+                    MemberLeavePhase.SIGNING -> Text("Confirming with your passkey…")
+                    MemberLeavePhase.DONE -> Text("Deleted. This device is now signed out.")
+                    MemberLeavePhase.FAILED -> TextButton(enabled = !busy, onClick = { busy = true; scope.launch { state = onRefreshStatus(); busy = false } }) { Text("Check account status") }
                 }
                 if (state.notice.isNotEmpty()) Text(state.notice)
             }
