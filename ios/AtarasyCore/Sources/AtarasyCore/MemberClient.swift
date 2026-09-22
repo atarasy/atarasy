@@ -191,7 +191,8 @@ public actor MemberClient {
             guard same(session.household, detail.household), session.presenters.contains(where: { same($0, detail.presenter) }) else { throw MemberFailure.scopeMismatch }
             let receipt = try ReferenceResponseReader.settlement(status: reply.status, contentType: reply.contentType, data: reply.data, expectedOffer: detail.id)
             guard same(receipt.payer, detail.household), same(receipt.signedBy, detail.presenter) else { throw MemberFailure.scopeMismatch }
-            return .settlement(receipt)
+            let corrections = await readCorrections(offerID: detail.id, household: detail.household, presenter: detail.presenter)
+            return .settlement(receipt, corrections)
         }
         let (reply, session) = try await read("/offers/" + detail.id + (detail.binding == "physical" ? "/statement" : "/approval"))
         guard Data(session.household.utf8) == Data(detail.household.utf8), session.presenters.contains(where: { Data($0.utf8) == Data(detail.presenter.utf8) }) else { throw MemberFailure.scopeMismatch }
@@ -217,6 +218,16 @@ public actor MemberClient {
     public func settlement(offerID: String) async throws -> ProtocolSettlement {
         try identifier(offerID); let (reply, _) = try await read("/offers/" + offerID + "/settlement")
         return try ReferenceResponseReader.settlement(status: reply.status, contentType: reply.contentType, data: reply.data, expectedOffer: offerID)
+    }
+    /// §6.6, question 70. Read beside a settlement, never in its place. A 404 (nothing
+    /// corrected), a malformed body or a scope mismatch is read as "nothing to show" and
+    /// swallowed here: this screen's settlement must stand on its own even when the
+    /// corrections read fails, so no failure of this call ever reaches the caller.
+    private func readCorrections(offerID: String, household: String, presenter: String) async -> MemberCorrections? {
+        guard let (reply, session) = try? await read("/offers/" + offerID + "/corrections"),
+              same(session.household, household), session.presenters.contains(where: { same($0, presenter) })
+        else { return nil }
+        return try? ReferenceResponseReader.corrections(status: reply.status, contentType: reply.contentType, data: reply.data, expectedOffer: offerID)
     }
     public func mandate(id: String) async throws -> Mandate {
         try mandateIdentifier(id); let (reply, info) = try await read("/_node/mandates/" + id)

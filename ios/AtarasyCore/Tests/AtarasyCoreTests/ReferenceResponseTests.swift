@@ -106,4 +106,83 @@ final class ReferenceResponseTests: XCTestCase {
         lines[0]["disputed"] = false; lines[1]["disputed"] = false; changed["lines"] = lines
         XCTAssertThrowsError(try read(changed))
     }
+    // §6.6, question 70.
+    private func correctionsBody(net: Int64 = 800, carriage: Any = 0) -> [String: Any] {
+        [
+            "offer": "fixture-offer",
+            "original": ["charged": 1200, "carriage": carriage],
+            "corrections": [[
+                "id": "correction-1", "offer": "fixture-offer", "merchant": "merchant-1", "amount": 400,
+                "kind": "refund", "note": "One bottle arrived broken.", "corrected_at": 2000, "signature": "sig-1",
+            ]],
+            "net": net,
+        ]
+    }
+    private func readCorrections(_ body: [String: Any], expected: String? = nil, status: Int = 200, type: String? = "application/json") throws -> MemberCorrections {
+        try ReferenceResponseReader.corrections(status: status, contentType: type, data: JSONSerialization.data(withJSONObject: body), expectedOffer: expected ?? (body["offer"] as? String ?? "fixture-offer"))
+    }
+    func testCorrectionsDecodesTheOriginalEachCorrectionAndTheNet() throws {
+        let value = try readCorrections(correctionsBody())
+        XCTAssertEqual(value.original.charged, 1200)
+        XCTAssertEqual(value.original.carriage, 0)
+        XCTAssertEqual(value.net, 800)
+        XCTAssertEqual(value.corrections.count, 1)
+        XCTAssertEqual(value.corrections[0].kind, "refund")
+        XCTAssertEqual(value.corrections[0].amount, 400)
+        XCTAssertEqual(value.corrections[0].note, "One bottle arrived broken.")
+        // A null carriage decodes as nil, distinct from a recorded zero.
+        let unknown = try readCorrections(correctionsBody(net: 800, carriage: NSNull()))
+        XCTAssertNil(unknown.original.carriage)
+        XCTAssertEqual(unknown.net, 1200 - 400)
+    }
+    func testCorrectionsWithMismatchedArithmeticIsRefused() throws {
+        XCTAssertThrowsError(try readCorrections(correctionsBody(net: 799))) {
+            XCTAssertEqual($0 as? ReferenceReadFailure, .inconsistentSettlement)
+        }
+        XCTAssertThrowsError(try readCorrections(correctionsBody(net: 801))) {
+            XCTAssertEqual($0 as? ReferenceReadFailure, .inconsistentSettlement)
+        }
+    }
+    func testCorrectionsWithAnExtraOrMissingFieldIsRefused() throws {
+        var extra = correctionsBody(); extra["disputed"] = 0
+        XCTAssertThrowsError(try readCorrections(extra))
+        for key in correctionsBody().keys {
+            var missing = correctionsBody(); missing.removeValue(forKey: key)
+            XCTAssertThrowsError(try readCorrections(missing))
+        }
+        var rows = correctionsBody()["corrections"] as! [[String: Any]]
+        rows[0]["extra"] = "not this specification's field"
+        var badRow = correctionsBody(); badRow["corrections"] = rows
+        XCTAssertThrowsError(try readCorrections(badRow))
+    }
+    func testCorrectionThatWouldRaiseTheChargeIsRefused() throws {
+        var rows = correctionsBody()["corrections"] as! [[String: Any]]
+        rows[0]["amount"] = 0
+        var body = correctionsBody(); body["corrections"] = rows; body["net"] = 1200
+        XCTAssertThrowsError(try readCorrections(body))
+    }
+    func testCorrectionsExceedingWhatWasChargedIsRefused() throws {
+        var rows = correctionsBody()["corrections"] as! [[String: Any]]
+        rows[0]["amount"] = 2000
+        var body = correctionsBody(); body["corrections"] = rows; body["net"] = 0
+        XCTAssertThrowsError(try readCorrections(body))
+    }
+    func testCorrectionsNamingAnotherOfferInARowIsRefused() throws {
+        var rows = correctionsBody()["corrections"] as! [[String: Any]]
+        rows[0]["offer"] = "another-offer"
+        var body = correctionsBody(); body["corrections"] = rows
+        XCTAssertThrowsError(try readCorrections(body))
+    }
+    func testCorrectionsDifferentResourceIsRefused() throws {
+        XCTAssertThrowsError(try readCorrections(correctionsBody(), expected: "another-offer")) {
+            XCTAssertEqual($0 as? ReferenceReadFailure, .mismatchedResource)
+        }
+    }
+    func testCorrectionsRefusalsAndMalformedBodiesAreRefused() throws {
+        XCTAssertThrowsError(try readCorrections(correctionsBody(), status: 404)) {
+            XCTAssertEqual($0 as? ReferenceReadFailure, .unexpectedHTTP(status: 404))
+        }
+        XCTAssertThrowsError(try readCorrections(correctionsBody(), type: "text/html"))
+        XCTAssertThrowsError(try ReferenceResponseReader.corrections(status: 200, contentType: "application/json", data: Data("broken".utf8), expectedOffer: "fixture-offer"))
+    }
 }

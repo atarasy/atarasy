@@ -56,13 +56,14 @@ struct MemberReviewSections: View {
                 if approval.excluded.isEmpty { Text("No excluded products were reported.") }
                 ForEach(Array(approval.excluded.enumerated()), id: \.offset) { _, item in Text("\(item.product): \(item.reason)").accessibilityIdentifier("reviewExclusion") }
             }
-        case .settlement(let settlement):
+        case .settlement(let settlement, let corrections):
             Section("Settlement") {
                 Text("This box has settled. There is nothing left to sign.").accessibilityIdentifier("settledBox")
                 Text("Settled: \(date(settlement.settledAt))")
                 Text("Goods charged: \(settlement.charged)").accessibilityIdentifier("settledGoodsCharged")
                 if settlement.disputedAmount > 0 { Text("Disputed and not charged here: \(settlement.disputedAmount)") }
                 Text("This record does not confirm provider payment.").font(.footnote)
+                Text("The settlement above is signed and is never rewritten.").font(.footnote)
             }
             ForEach(Array(settlement.lines.enumerated()), id: \.offset) { _, line in
                 Section("Settled: \(line.product)") {
@@ -71,6 +72,21 @@ struct MemberReviewSections: View {
                     if line.valence == "lost" { Text(MemberOfferDetail.lostOutcome(nil, supplied: false)) }
                     else { Text("Outcome: \(line.valence); goods amount: \(line.amount)") }
                     if line.disputed { Text(line.valence == "lost" ? "Disputed: you said it was in the box." : "Disputed: excluded from the goods charge.") }
+                }
+            }
+            // §6.6, question 70. A correction only ever lowers what was signed, appended
+            // beside it rather than rewriting it. There is nothing to sign or dispute here:
+            // no refund request, no dispute control, no messaging (clause 54).
+            if let corrections, !corrections.corrections.isEmpty {
+                Section("Corrections") {
+                    Text("The merchant of record has appended these to the settlement above. Nothing here is yours to sign or dispute.").font(.footnote)
+                    ForEach(Array(corrections.corrections.enumerated()), id: \.offset) { _, correction in
+                        Text("\(correction.kind == "refund" ? "Refund" : "Collection") from \(correction.merchant): -\(correction.amount)")
+                            .accessibilityIdentifier("correctionLine")
+                        Text(verbatim: correction.note)
+                        Text("Corrected: \(date(correction.correctedAt))").font(.footnote)
+                    }
+                    Text("Net after corrections: \(corrections.net)").accessibilityIdentifier("settlementNet")
                 }
             }
         case .statement(let statement):
