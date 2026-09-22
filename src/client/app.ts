@@ -1157,8 +1157,22 @@ function correctionReturnRows(c: Corrections, disclosures: Statement["disclosure
         ? el("p", {}, `The refund of ${amount} from ${ret.merchant} did not reach you. The shop still owes it to you, off this platform.`)
         : el("p", {}, `${ret.merchant} reports it repaid this another way.`),
       el("p", { class: "muted" }, ret.note),
-      ...blockFor(disclosures, { merchant: ret.merchant, product: null }));
+      ...merchantContactOrTerms(disclosures, ret.merchant));
   });
+}
+
+/**
+ * SPEC §6.6a. A correction_return has no product, so the merchant's standing
+ * disclosure (its `product`-less block) is what "its return terms" names. Where
+ * the merchant signed a contact there, that is shown; where it signed none, the
+ * block's own items stand in its place. Nothing is shown for a merchant with no
+ * standing block at all: this hub never invents terms.
+ */
+function merchantContactOrTerms(disclosures: Statement["disclosures"], merchant: string): Node[] {
+  const block = disclosures.find((b) => b.merchant === merchant && b.product === null);
+  if (!block) return [];
+  if (block.contact) return [contactLink(block.contact)];
+  return [el("dl", { class: "terms" }, ...block.items.flatMap((i) => [el("dt", {}, i.label), el("dd", {}, i.value)]))];
 }
 
 /**
