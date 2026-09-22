@@ -12,7 +12,7 @@
  * key the passkey releases after they verify (`signOver`). This page holds
  * that key for the length of one signature; the hub's server never sees it.
  */
-import { canonicalDecisions, canonicalLeave, canonicalStatement, canonicalWithdrawal, type Decision, type StatementLine } from "../shared/canonical.js";
+import { canonicalDecisions, canonicalExport, canonicalLeave, canonicalStatement, canonicalWithdrawal, type Decision, type StatementLine } from "../shared/canonical.js";
 import { canonicalMandate, type Mandate } from "../shared/mandate.js";
 import { fromBase64, memberKeyFromHandle, newMemberKey, toBase64, toBase64Url } from "../shared/encoding.js";
 // The rule that sorts a member's own list, in a module the suite can reach:
@@ -1399,9 +1399,13 @@ function renderLeave(member: Member, blockers: LeaveBlocker[], notice?: string) 
       // device before anything is deleted. `api()` is not used here: it parses
       // a body as JSON, and this file is handed to the browser to save as it
       // came, not re-encoded.
+      // Signed, with the moment: the export carries notes and permissions no
+      // other read here does, so the engine hands it over only to the household.
+      const at = Date.now();
+      const signature = await signOver(member, new TextEncoder().encode(canonicalExport(member.household, location.hostname, at)));
       let response: Response;
       try {
-        response = await fetch(`/api/households/${encodeURIComponent(member.household)}/export`);
+        response = await fetch(`/api/households/${encodeURIComponent(member.household)}/export`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ at, signature }) });
       } catch {
         throw new Error("This page could not reach the service that serves it. Nothing was saved.");
       }
@@ -1429,17 +1433,17 @@ function renderLeave(member: Member, blockers: LeaveBlocker[], notice?: string) 
       // §14.3, §16.1. Signed for this host, the way a mandate is: the relying
       // party the engine behind it asserts for, so the signature records
       // nowhere else.
-      const signature = await signOver(member, new TextEncoder().encode(canonicalLeave(member.household, location.hostname)));
+      const at = Date.now();
+      const signature = await signOver(member, new TextEncoder().encode(canonicalLeave(member.household, location.hostname, at)));
       const done = await api<{ deleted?: Record<string, number>; blockers?: LeaveBlocker[]; error?: string; message?: string }>(
         "POST",
         `/households/${encodeURIComponent(member.household)}/leave`,
-        { signature }
+        { at, signature }
       );
       if (done.status === 409) {
         // **Something opened between the read above and this signature.** The
-        // engine's refusal carries its blockers as words in one sentence and
-        // not as a list this screen can draw, so what is holding the
-        // household here is read again rather than parsed out of a message.
+        // refusal carries its blockers; an older engine's did not, so they are
+        // read again when the body has none.
         const blockers = Array.isArray(done.body.blockers)
           ? done.body.blockers
           : (await api<{ blockers?: LeaveBlocker[] }>("GET", `/households/${encodeURIComponent(member.household)}/leave`)).body.blockers ?? [];

@@ -12,7 +12,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createHash, generateKeyPairSync, sign, type KeyPairKeyObjectResult } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { canonicalDecisions, canonicalLeave, canonicalWithdrawal, challengeFor, type Decision } from "../src/shared/canonical.js";
+import { canonicalDecisions, canonicalExport, canonicalLeave, canonicalWithdrawal, challengeFor, type Decision } from "../src/shared/canonical.js";
 import { canonicalMandate } from "../src/shared/mandate.js";
 import { spkiToPem, toBase64 } from "../src/shared/encoding.js";
 
@@ -445,9 +445,12 @@ describe("the hub in front of an engine", () => {
       // member's: only the read of one, `GET .../corrections`, is carried.
       ["POST", `/api/offers/${offerId}/corrections`],
       // Clause 52. A move's receiving side, never the member's own: unlike
-      // `GET .../export` and `GET`/`POST .../leave` below, nothing here signs
+      // `POST .../export` and `GET`/`POST .../leave` below, nothing here signs
       // for the household this would write over.
       ["POST", `/api/households/${HOUSEHOLD}/import`],
+      // Clause 43. The unsigned export would hand a household's notes and
+      // permissions to anyone who knows its identifier; only the signed POST is carried.
+      ["GET", `/api/households/${HOUSEHOLD}/export`],
     ];
     for (const [method, path] of refused) {
       const r = await fetch(`${HUB}${path}`, { method, headers: { "content-type": "application/json" }, body: method === "GET" ? undefined : "{}" });
@@ -624,14 +627,21 @@ describe("a member leaving this host (§14.3)", () => {
     };
     expect(read).toEqual({ household, blockers: [] });
 
-    // Clause 43. Offered before deleting, and the hub is a plain proxy for it.
-    const exported = await fetch(`${HUB}/api/households/${encodeURIComponent(household)}/export`);
+    // Clause 43. Offered before deleting, on the household's own timed signature.
+    const exportAt = Date.now();
+    const exported = await fetch(`${HUB}/api/households/${encodeURIComponent(household)}/export`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ at: exportAt, assertion: assertOver(canonicalExport(household, RP, exportAt), pair.privateKey) }),
+    });
     expect(exported.status).toBe(200);
     const node = (await exported.json()) as { format?: string };
     expect(typeof node.format).toBe("string");
 
+    const leaveAt = Date.now();
     const done = await post(HUB, `/api/households/${encodeURIComponent(household)}/leave`, {
-      assertion: assertOver(canonicalLeave(household, RP), pair.privateKey),
+      at: leaveAt,
+      assertion: assertOver(canonicalLeave(household, RP, leaveAt), pair.privateKey),
     });
     expect(done.status).toBe(200);
     expect(typeof (done.body as { deleted?: unknown }).deleted).toBe("object");
@@ -667,8 +677,10 @@ describe("a member leaving this host (§14.3)", () => {
     expect(read.blockers.length).toBeGreaterThan(0);
     expect(read.blockers.some((b) => b.kind === "offer_in_progress" && b.id === offer.id)).toBe(true);
 
+    const at = Date.now();
     const refused = await post(HUB, `/api/households/${encodeURIComponent(household)}/leave`, {
-      assertion: assertOver(canonicalLeave(household, RP), pair.privateKey),
+      at,
+      assertion: assertOver(canonicalLeave(household, RP, at), pair.privateKey),
     });
     expect(refused.status).toBe(409);
     expect((refused.body as { error?: string }).error).toBe("leave_blocked");
@@ -679,8 +691,10 @@ describe("a member leaving this host (§14.3)", () => {
     // Signed for a different household than the one named in the path: the
     // canonical bytes carry the household, so this is a `bad_signature` and
     // not the household's own act, however it arrived.
+    const at = Date.now();
     const bad = await post(HUB, `/api/households/${encodeURIComponent(household)}/leave`, {
-      assertion: assertOver(canonicalLeave("key:someone-else", RP), pair.privateKey),
+      at,
+      assertion: assertOver(canonicalLeave("key:someone-else", RP, at), pair.privateKey),
     });
     expect(bad.status).toBe(422);
     expect((bad.body as { error?: string }).error).toBe("bad_signature");

@@ -171,10 +171,11 @@ function carries(method: string, path: string): boolean {
   if (method === "GET" && parts.length === 3 && parts[0] === "households" && parts[2] === "leave") return true;
   if (method === "POST" && parts.length === 3 && parts[0] === "households" && parts[2] === "leave") return true;
   // Clause 43. Offered before deleting, so a member can keep a copy of what
-  // this host held. The same read the engine already answers to anyone who
-  // asks (`08` §3 of the concept documents records this as the open half of
-  // clause 53): carrying it adds no exposure this list does not already have.
-  if (method === "GET" && parts.length === 3 && parts[0] === "households" && parts[2] === "export") return true;
+  // this host held. Only the signed `POST`: the export carries the household's
+  // notes (clause 27), permissions and recovery log, which no other read here
+  // does, and the unsigned `GET` would hand them to anyone who knew the
+  // household's identifier. Merchants know it.
+  if (method === "POST" && parts.length === 3 && parts[0] === "households" && parts[2] === "export") return true;
   return false;
 }
 

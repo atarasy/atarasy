@@ -51,8 +51,15 @@ export function canonicalWithdrawal(offerId: string, decidedAt: number): string 
  */
 export const LEAVE_DOMAIN = "valence.leave.1";
 
-export function canonicalLeave(household: string, host: string): string {
-  return JSON.stringify([LEAVE_DOMAIN, household, host]);
+export function canonicalLeave(household: string, host: string, at: number): string {
+  return JSON.stringify([LEAVE_DOMAIN, household, host, at]);
+}
+
+/** Clause 43. What a household signs to read its own export through this hub; the moment keeps a seen signature from being used later. */
+export const EXPORT_DOMAIN = "valence.export.1";
+
+export function canonicalExport(household: string, host: string, at: number): string {
+  return JSON.stringify([EXPORT_DOMAIN, household, host, at]);
 }
 
 /**
