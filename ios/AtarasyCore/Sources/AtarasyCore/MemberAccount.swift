@@ -80,8 +80,11 @@ public enum MemberLeavePhase: String, Sendable { case idle, checkingStatus, bloc
     private let privateNode: MemberPrivateNode?
     private let service: any MemberAccountService
     private let passkeys: any MemberPasskeyAuthorising
+    /// §14.3. The device's own journal, cleared when the account is deleted.
+    private let operations: (any MemberOperationStore)?
     private var generation: UInt64 = 0
-    public init(service: any MemberAccountService, passkeys: any MemberPasskeyAuthorising, statements: MemberStatementFlow? = nil, decisions: MemberDigitalFlow? = nil, withdrawals: MemberWithdrawalFlow? = nil, permissions: MemberPermissions? = nil, permissionRequests: MemberPermissionRequests? = nil, privateNode: MemberPrivateNode? = nil, recovery: MemberRecoveryFlow? = nil, hostMove: MemberHostMoveFlow? = nil) {
+    public init(service: any MemberAccountService, passkeys: any MemberPasskeyAuthorising, statements: MemberStatementFlow? = nil, decisions: MemberDigitalFlow? = nil, withdrawals: MemberWithdrawalFlow? = nil, permissions: MemberPermissions? = nil, permissionRequests: MemberPermissionRequests? = nil, privateNode: MemberPrivateNode? = nil, recovery: MemberRecoveryFlow? = nil, hostMove: MemberHostMoveFlow? = nil, operations: (any MemberOperationStore)? = nil) {
+        self.operations = operations
         self.service = service; self.passkeys = passkeys; self.statements = statements; self.decisions = decisions; self.withdrawals = withdrawals; self.permissions = permissions; self.permissionRequests = permissionRequests; self.privateNode = privateNode; self.recovery = recovery; self.hostMove = hostMove
         proposals = MemberProposals(service: service)
         proposals.onSessionUnavailable = { [weak self] in
@@ -345,6 +348,9 @@ public enum MemberLeavePhase: String, Sendable { case idle, checkingStatus, bloc
                 generation &+= 1
                 session = nil
                 proposals.setSession(nil)
+                // §14.3. The host deleted its side; this device's own journal of the
+                // household's operations goes with it, and its key with the journal.
+                try? operations?.removeAll(household: result.household)
                 leavePhase = .done
                 leaveResult = result
                 leaveNotice = "Your account and everything this host holds for it have been deleted. This device is now signed out."

@@ -135,7 +135,7 @@ private struct ConfiguredMemberAccount: View {
                     let targetPasskeys = NativePasskeyAuthoriser(environment: targetEnvironment, anchor: { [weak reference] in reference?.window }), targetNode = MemberPrivateNode(environment: targetEnvironment, service: targetService, vault: keys)
                     hostMove = MemberHostMoveFlow(sourceEnvironment: environment, targetEnvironment: targetEnvironment, source: service, target: targetService, sourceNode: privateNode, targetNode: targetNode, sourcePasskeys: passkeys, targetPasskeys: targetPasskeys)
                 }
-                holder.account = MemberAccount(service: service, passkeys: passkeys, statements: statements, decisions: decisions, withdrawals: withdrawals, permissions: MemberPermissions(service: service), permissionRequests: MemberPermissionRequests(service: service), privateNode: privateNode, recovery: recovery, hostMove: hostMove)
+                holder.account = MemberAccount(service: service, passkeys: passkeys, statements: statements, decisions: decisions, withdrawals: withdrawals, permissions: MemberPermissions(service: service), permissionRequests: MemberPermissionRequests(service: service), privateNode: privateNode, recovery: recovery, hostMove: hostMove, operations: store)
             } catch { dismiss() }
         }
         .task(id: refreshRegistrationID) {

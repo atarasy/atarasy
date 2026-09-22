@@ -7,6 +7,7 @@ private final class MemoryOperationKeys: MemberOperationKeyVault, @unchecked Sen
     private var values: [String: Data] = [:]
     func key(scope: String, create: Bool) throws -> Data? { lock.withLock { if let value = values[scope] { return value }; guard create else { return nil }; let value = Data(repeating: UInt8(values.count + 1), count: 32); values[scope] = value; return value } }
     func install(key: Data, scope: String) throws { try lock.withLock { if let old = values[scope], old != key { throw MemberFailure.storage }; values[scope] = key } }
+    func forget(scope: String) throws { lock.withLock { values[scope] = nil } }
     func removeAll() { lock.withLock { values = [:] } }
     var count: Int { lock.withLock { values.count } }
 }
@@ -60,8 +61,8 @@ final class PrivateStorageTests: XCTestCase {
         addTeardownBlock { try? FileManager.default.removeItem(at: value) }
         return value
     }
-    private func handle(environment: MemberEnvironment, household: String = "key:private-household") -> MemberOperationHandle {
-        MemberOperationHandle(id: "11111111-1111-4111-8111-111111111111", environment: environment.name, origin: environment.origin, sessionID: "private-session", household: household, presenter: "private-presenter", offer: "private-offer", canonical: "PRIVATE-CANONICAL-CONTENT", expiresAt: 1_900_000_000_000, requestDigest: String(repeating: "a", count: 64), reviewedRevision: String(repeating: "b", count: 64), challenge: String(repeating: "C", count: 43), credentialID: "private-credential", attempted: false)
+    private func handle(environment: MemberEnvironment, household: String = "key:private-household", id: String = "11111111-1111-4111-8111-111111111111") -> MemberOperationHandle {
+        MemberOperationHandle(id: id, environment: environment.name, origin: environment.origin, sessionID: "private-session", household: household, presenter: "private-presenter", offer: "private-offer", canonical: "PRIVATE-CANONICAL-CONTENT", expiresAt: 1_900_000_000_000, requestDigest: String(repeating: "a", count: 64), reviewedRevision: String(repeating: "b", count: 64), challenge: String(repeating: "C", count: 43), credentialID: "private-credential", attempted: false)
     }
     func testProtectedOperationJournalContainsNoPlaintextAndReopensWithSameInstallationKey() async throws {
         let env = try MemberEnvironment(name: "test", origin: URL(string: "https://unit.example")!), keys = MemoryOperationKeys(), dir = try directory(), value = handle(environment: env)
@@ -176,8 +177,27 @@ final class PrivateStorageTests: XCTestCase {
         flow.setSession(session); await flow.finish(request)
         let state = await replacement.state; XCTAssertEqual(state, .ready); XCTAssertEqual(replacementKeys.count, 1); XCTAssertNil(try materials.requesterKey(scope: scope, create: false)); XCTAssertTrue(flow.notice.contains("completed"))
     }
+    func testRemoveAllClearsOneHouseholdsJournalAndItsKeyAndLeavesAnother() throws {
+        let env = try MemberEnvironment(name: "test", origin: URL(string: "https://unit.example")!), keys = MemoryOperationKeys(), dir = try directory()
+        let store = try ProtectedFileMemberOperationStore(directory: dir, environment: env, vault: keys)
+        let mine = handle(environment: env, household: "key:mine", id: "22222222-2222-4222-8222-222222222222")
+        let theirs = handle(environment: env, household: "key:theirs", id: "33333333-3333-4333-8333-333333333333")
+        try store.save(mine); try store.save(theirs)
+        XCTAssertEqual(keys.count, 2)
+
+        try store.removeAll(household: "key:mine")
+
+        XCTAssertNil(try store.load(id: mine.id))
+        XCTAssertEqual(try store.load(id: theirs.id)?.household, "key:theirs")
+        // The key that decrypted the deleted journal is gone with it.
+        XCTAssertEqual(keys.count, 1)
+        // Removing again changes nothing, and the other household is untouched.
+        try store.removeAll(household: "key:mine")
+        XCTAssertEqual(try store.load(id: theirs.id)?.household, "key:theirs")
+    }
 }
 
 private func XCTAssertThrowsErrorAsync(_ expression: () async throws -> Void, file: StaticString = #filePath, line: UInt = #line) async {
     do { try await expression(); XCTFail("Expected error", file: file, line: line) } catch {}
+
 }
