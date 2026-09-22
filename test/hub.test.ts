@@ -12,7 +12,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createHash, generateKeyPairSync, sign, type KeyPairKeyObjectResult } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { canonicalDecisions, canonicalWithdrawal, challengeFor, type Decision } from "../src/shared/canonical.js";
+import { canonicalDecisions, canonicalLeave, canonicalWithdrawal, challengeFor, type Decision } from "../src/shared/canonical.js";
 import { canonicalMandate } from "../src/shared/mandate.js";
 import { spkiToPem, toBase64 } from "../src/shared/encoding.js";
 
@@ -437,7 +437,6 @@ describe("the hub in front of an engine", () => {
     // surface behind a page anyone can open. The reference engine
     // authenticates nobody by design, so the narrowing is the hub's.
     const refused: [string, string][] = [
-      ["GET", `/api/households/${HOUSEHOLD}/export`],
       ["POST", "/api/_presenter/configs"],
       ["POST", "/api/offers"],
       ["GET", `/api/offers/${offerId}`],
@@ -445,6 +444,10 @@ describe("the hub in front of an engine", () => {
       // §6.6. Appending a correction is the merchant's own route, never the
       // member's: only the read of one, `GET .../corrections`, is carried.
       ["POST", `/api/offers/${offerId}/corrections`],
+      // Clause 52. A move's receiving side, never the member's own: unlike
+      // `GET .../export` and `GET`/`POST .../leave` below, nothing here signs
+      // for the household this would write over.
+      ["POST", `/api/households/${HOUSEHOLD}/import`],
     ];
     for (const [method, path] of refused) {
       const r = await fetch(`${HUB}${path}`, { method, headers: { "content-type": "application/json" }, body: method === "GET" ? undefined : "{}" });
@@ -600,6 +603,89 @@ describe("the hub in front of an engine", () => {
     } finally {
       dead.kill();
     }
+  });
+});
+
+describe("a member leaving this host (§14.3)", () => {
+  /** A household of its own, registered directly against the engine the way `ownHousehold` below does for the statement suite: leaving it must not disturb HOUSEHOLD, which every other test in this file still reads. */
+  async function freshHousehold() {
+    const pair = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+    const der = pair.publicKey.export({ type: "spki", format: "der" });
+    const household = "key:" + createHash("sha256").update(der).digest("base64url");
+    expect((await post(ENGINE, "/_identities", { key: household, public_key: spkiToPem(der), attested: false })).status).toBe(201);
+    return { household, pair };
+  }
+
+  test("the hub carries a clean household's own read, export and deletion", async () => {
+    const { household, pair } = await freshHousehold();
+    const read = (await (await fetch(`${HUB}/api/households/${encodeURIComponent(household)}/leave`)).json()) as {
+      household: string;
+      blockers: unknown[];
+    };
+    expect(read).toEqual({ household, blockers: [] });
+
+    // Clause 43. Offered before deleting, and the hub is a plain proxy for it.
+    const exported = await fetch(`${HUB}/api/households/${encodeURIComponent(household)}/export`);
+    expect(exported.status).toBe(200);
+    const node = (await exported.json()) as { format?: string };
+    expect(typeof node.format).toBe("string");
+
+    const done = await post(HUB, `/api/households/${encodeURIComponent(household)}/leave`, {
+      assertion: assertOver(canonicalLeave(household, RP), pair.privateKey),
+    });
+    expect(done.status).toBe(200);
+    expect(typeof (done.body as { deleted?: unknown }).deleted).toBe("object");
+  });
+
+  test("an offer still in progress blocks the deletion, and a second signature over it is still refused", async () => {
+    const { household, pair } = await freshHousehold();
+    const created = await post(ENGINE, "/offers", {
+      binding: "digital",
+      household,
+      purpose: "replenish",
+      config_version: "cfg-hub-test",
+      expires_at: Date.now() + 3_600_000,
+      mandate: `${household}.leave-test`,
+      price_band: null,
+      giver: null,
+      candidates: [{ product: "tea-a", quantity: 1, predicted_conversion: 0.5, is_exploration: true, given_by: null }],
+    });
+    expect(created.status).toBe(201);
+    const offer = created.body as unknown as { id: string; candidates: { id: string }[] };
+    const per: Record<string, unknown> = {};
+    for (const c of offer.candidates) per[c.id] = { alternatives: ["a smaller tin"], argument_against: "you have some already" };
+    expect((await post(ENGINE, `/offers/${offer.id}/deliberation`, {
+      per_candidate: per,
+      excluded: [],
+      mandate: { kind: "individual", scope: "this offer", lapses_at: null },
+    })).status).toBe(201);
+    expect((await post(ENGINE, `/offers/${offer.id}/present`, {})).status).toBe(200);
+
+    const read = (await (await fetch(`${HUB}/api/households/${encodeURIComponent(household)}/leave`)).json()) as {
+      blockers: { kind: string; id: string }[];
+    };
+    expect(read.blockers.length).toBeGreaterThan(0);
+    expect(read.blockers.some((b) => b.kind === "offer_in_progress" && b.id === offer.id)).toBe(true);
+
+    const refused = await post(HUB, `/api/households/${encodeURIComponent(household)}/leave`, {
+      assertion: assertOver(canonicalLeave(household, RP), pair.privateKey),
+    });
+    expect(refused.status).toBe(409);
+    expect((refused.body as { error?: string }).error).toBe("leave_blocked");
+  });
+
+  test("a signature over the wrong bytes is refused, and nothing about the household changes", async () => {
+    const { household, pair } = await freshHousehold();
+    // Signed for a different household than the one named in the path: the
+    // canonical bytes carry the household, so this is a `bad_signature` and
+    // not the household's own act, however it arrived.
+    const bad = await post(HUB, `/api/households/${encodeURIComponent(household)}/leave`, {
+      assertion: assertOver(canonicalLeave("key:someone-else", RP), pair.privateKey),
+    });
+    expect(bad.status).toBe(422);
+    expect((bad.body as { error?: string }).error).toBe("bad_signature");
+    const read = (await (await fetch(`${HUB}/api/households/${encodeURIComponent(household)}/leave`)).json()) as { blockers: unknown[] };
+    expect(read.blockers).toEqual([]);
   });
 });
 

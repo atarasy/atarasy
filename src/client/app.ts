@@ -12,7 +12,7 @@
  * key the passkey releases after they verify (`signOver`). This page holds
  * that key for the length of one signature; the hub's server never sees it.
  */
-import { canonicalDecisions, canonicalStatement, canonicalWithdrawal, type Decision, type StatementLine } from "../shared/canonical.js";
+import { canonicalDecisions, canonicalLeave, canonicalStatement, canonicalWithdrawal, type Decision, type StatementLine } from "../shared/canonical.js";
 import { canonicalMandate, type Mandate } from "../shared/mandate.js";
 import { fromBase64, memberKeyFromHandle, newMemberKey, toBase64, toBase64Url } from "../shared/encoding.js";
 // The rule that sorts a member's own list, in a module the suite can reach:
@@ -212,7 +212,7 @@ const yen = (n: number) => `¥${n.toLocaleString()}`;
 
 // ---- setup: a passkey, registered as the mandate's key ----------------------
 
-async function setup() {
+async function setup(notice?: Node) {
   const input = el("input", { placeholder: "a name for this household", value: `household-${Math.random().toString(36).slice(2, 8)}` }) as HTMLInputElement;
   const button = el("button", { class: "primary" }, "Create a passkey") as HTMLButtonElement;
   // Not "stays on this device": a platform authenticator may sync the key
@@ -342,6 +342,7 @@ async function setup() {
 
   show(
     el("h1", {}, "Atarasy"),
+    ...(notice ? [notice] : []),
     el("p", {}, "Nothing is offered to you until you have a key to answer with."),
     el("div", { class: "card" }, el("div", { class: "row" }, input, button), note, status),
     el("div", { class: "card" },
@@ -520,6 +521,11 @@ async function offers(member: Member) {
   });
   const settings = el("button", {}, "What you have set") as HTMLButtonElement;
   settings.onclick = () => protections(member);
+  // §14.3. Near the protections a person sets for themselves, because it is
+  // the same kind of decision: what this host holds of the household's, and
+  // what to do about it.
+  const leaveHost = el("button", {}, "Leave this host") as HTMLButtonElement;
+  leaveHost.onclick = () => leave(member);
   const forget = el("button", {}, "Forget this device") as HTMLButtonElement;
   // §16.1. It forgets the browser's copy and not the household, which lives in
   // the passkey. The setup screen takes that passkey back, and this used to
@@ -553,7 +559,7 @@ async function offers(member: Member) {
           : "Nothing is waiting for you.")]
       : []),
     ...(decidedCards.length ? [el("h2", {}, "Decided, and not yet settled"), ...decidedCards] : []),
-    el("div", { class: "row" }, settings, forget)
+    el("div", { class: "row" }, settings, leaveHost, forget)
   );
 }
 
@@ -1328,6 +1334,148 @@ async function protections(member: Member) {
     back(member)
   );
 }
+// ---- leaving this host (§14.3) -----------------------------------------------
+
+type LeaveBlocker = { kind: string; id: string };
+
+/**
+ * §14.3. What each blocker kind reads as, in words a person can act on. A kind
+ * this screen does not recognise is still shown, by its own name, rather than
+ * dropped: a household is never told nothing is holding it here when the
+ * engine said otherwise.
+ */
+const BLOCKERS: Record<string, string> = {
+  offer_in_progress: "A box or order is still open. Finish or decline it first.",
+  statement_unsigned: "A box is waiting for your signature on what it cost.",
+  reservation_held: "Money is still held for an order.",
+  gift_in_flight: "A gift you are paying for has not finished.",
+  co_signer: "You co-sign another household's mandate. Step down first.",
+  recoverer: "You help another household recover its account. Step down first.",
+};
+
+/** §14.3. Reads what would block a departure, and draws the screen for it. */
+async function leave(member: Member) {
+  const got = await api<{ blockers?: LeaveBlocker[]; error?: string; message?: string }>(
+    "GET",
+    `/households/${encodeURIComponent(member.household)}/leave`
+  );
+  if (got.status !== 200 || !Array.isArray(got.body.blockers)) {
+    show(el("h1", {}, "Atarasy"), failure(
+      got.status === 200
+        ? "What is holding you here came back in a form this screen could not read. Nothing was deleted."
+        : refusal(got.body, got.status)), back(member));
+    return;
+  }
+  renderLeave(member, got.body.blockers);
+}
+
+/**
+ * §14.3. **A household with a blocker is offered no deletion at all**, not a
+ * disabled button beside one: a set this screen cannot make is not something
+ * to dangle in front of a person as a choice. A clean household is told what
+ * leaves and what does not, may save the export first, and signs a deliberate
+ * confirmation before the deletion itself is signed.
+ */
+function renderLeave(member: Member, blockers: LeaveBlocker[], notice?: string) {
+  const status = el("p", {}, notice ?? "");
+  if (blockers.length > 0) {
+    show(
+      el("h1", {}, "Atarasy"),
+      el("h2", {}, "Leave this host"),
+      el("p", {}, "This host cannot delete your account yet."),
+      el("ul", {}, ...blockers.map((b) => el("li", {}, BLOCKERS[b.kind] ?? `${b.kind} (${b.id})`))),
+      status,
+      back(member)
+    );
+    return;
+  }
+
+  const save = el("button", {}, "Save a copy of my records") as HTMLButtonElement;
+  save.onclick = async () => {
+    save.disabled = true;
+    status.textContent = "";
+    try {
+      // Clause 43. The export as this host holds it, saved to the person's own
+      // device before anything is deleted. `api()` is not used here: it parses
+      // a body as JSON, and this file is handed to the browser to save as it
+      // came, not re-encoded.
+      let response: Response;
+      try {
+        response = await fetch(`/api/households/${encodeURIComponent(member.household)}/export`);
+      } catch {
+        throw new Error("This page could not reach the service that serves it. Nothing was saved.");
+      }
+      if (response.status !== 200) throw new Error(`this answered ${response.status}`);
+      const text = await response.text();
+      const url = URL.createObjectURL(new Blob([text], { type: "application/json" }));
+      const link = el("a", { href: url, download: `atarasy-export-${new Date().toISOString().slice(0, 10)}.json` }) as HTMLAnchorElement;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      status.textContent = (e as Error).message;
+    }
+    save.disabled = false;
+  };
+
+  const understood = el("input", { type: "checkbox", id: "leave-confirm" }) as HTMLInputElement;
+  const del = el("button", {}, "Delete my account") as HTMLButtonElement;
+  del.disabled = true;
+  understood.onchange = () => { del.disabled = !understood.checked; };
+
+  del.onclick = async () => {
+    del.disabled = true;
+    status.textContent = "";
+    try {
+      // §14.3, §16.1. Signed for this host, the way a mandate is: the relying
+      // party the engine behind it asserts for, so the signature records
+      // nowhere else.
+      const signature = await signOver(member, new TextEncoder().encode(canonicalLeave(member.household, location.hostname)));
+      const done = await api<{ deleted?: Record<string, number>; blockers?: LeaveBlocker[]; error?: string; message?: string }>(
+        "POST",
+        `/households/${encodeURIComponent(member.household)}/leave`,
+        { signature }
+      );
+      if (done.status === 409) {
+        // **Something opened between the read above and this signature.** The
+        // engine's refusal carries its blockers as words in one sentence and
+        // not as a list this screen can draw, so what is holding the
+        // household here is read again rather than parsed out of a message.
+        const blockers = Array.isArray(done.body.blockers)
+          ? done.body.blockers
+          : (await api<{ blockers?: LeaveBlocker[] }>("GET", `/households/${encodeURIComponent(member.household)}/leave`)).body.blockers ?? [];
+        renderLeave(member, blockers, "Something changed since this screen opened. What is holding you here now:");
+        return;
+      }
+      if (done.status !== 200) throw new Error(refusal(done.body, done.status));
+      const deleted = done.body.deleted ?? {};
+      const count = Object.values(deleted).reduce((a, b) => a + b, 0);
+      // §14.3. The deletion is the household's alone and needs no co-signer
+      // (clause 47 governs a mandate, not the account it protects), so nothing
+      // here waits on anyone else. What this browser keeps for the household
+      // is cleared the same way "Forget this device" clears it; the passkey
+      // itself is the authenticator's to discard, which this screen cannot do.
+      localStorage.removeItem(STORAGE);
+      await setup(el("div", { class: "card" },
+        el("p", {}, "Deleted. This host no longer holds anything for your household."),
+        el("p", { class: "muted" }, `${count} record${count === 1 ? "" : "s"} removed.`)));
+    } catch (e) {
+      status.textContent = (e as Error).message;
+      del.disabled = false;
+    }
+  };
+
+  show(
+    el("h1", {}, "Atarasy"),
+    el("h2", {}, "Leave this host"),
+    el("p", {}, "Deleting your account removes everything this host holds for your household: every offer, decision, statement, mandate and protection."),
+    el("p", { class: "muted" }, "A shop keeps its own record of what it sold you. A gift you gave stays in the other household's records, with you shown as a member who has left."),
+    el("div", { class: "row" }, save),
+    el("div", { class: "row" }, understood, el("label", { for: "leave-confirm" }, "I understand this deletes my account from this host and cannot be undone.")),
+    el("div", { class: "row" }, del, back(member)),
+    status
+  );
+}
+
 /** A longer window, or one where there was none, is a tightening. */
 const longer = (before: number | null, after: number | null) =>
   after !== null && (before === null || after > before);

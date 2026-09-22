@@ -163,6 +163,18 @@ function carries(method: string, path: string): boolean {
   // §16. The protections a person sets for themselves, and reads back.
   if (method === "POST" && parts.length === 2 && parts[0] === "_node" && parts[1] === "mandates") return true;
   if (method === "GET" && parts.length === 3 && parts[0] === "_node" && parts[1] === "mandates") return true;
+  // §14.3. A member's own "Leave this host": what would block it, and the
+  // deletion itself. Safe to carry unauthenticated for the same reason the
+  // rest of this list is: the engine verifies the household's own signature
+  // over the deletion (`hub/leave.ts`), and reading what blocks it names
+  // nothing the household's own export beside it does not already carry.
+  if (method === "GET" && parts.length === 3 && parts[0] === "households" && parts[2] === "leave") return true;
+  if (method === "POST" && parts.length === 3 && parts[0] === "households" && parts[2] === "leave") return true;
+  // Clause 43. Offered before deleting, so a member can keep a copy of what
+  // this host held. The same read the engine already answers to anyone who
+  // asks (`08` §3 of the concept documents records this as the open half of
+  // clause 53): carrying it adds no exposure this list does not already have.
+  if (method === "GET" && parts.length === 3 && parts[0] === "households" && parts[2] === "export") return true;
   return false;
 }
 
