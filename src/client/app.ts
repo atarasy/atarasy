@@ -79,7 +79,14 @@ type Approval = {
     disclosure: { merchant: string; product: string | null };
   }[];
   /** §10a. Each merchant's own text, as it composed and signed it. */
-  disclosures: { merchant: string; product: string | null; version: string; items: { label: string; value: string }[] }[];
+  disclosures: {
+    merchant: string;
+    product: string | null;
+    version: string;
+    items: { label: string; value: string }[];
+    /** §10a.7, question 72. Absent where the merchant gave none. */
+    contact?: { kind: "email" | "tel" | "url"; value: string };
+  }[];
   /** §10a.5, §7.5b. What carriage costs, from the hub's delivery record. */
   carriage: number | null;
   excluded: { product: string; reason: string }[];
@@ -117,7 +124,14 @@ type Statement = {
     note?: string | null;
     disclosure: { merchant: string; product: string | null };
   }[];
-  disclosures: { merchant: string; product: string | null; version: string; items: { label: string; value: string }[] }[];
+  disclosures: {
+    merchant: string;
+    product: string | null;
+    version: string;
+    items: { label: string; value: string }[];
+    /** §10a.7, question 72. Absent where the merchant gave none. */
+    contact?: { kind: "email" | "tel" | "url"; value: string };
+  }[];
   carriage: number | null;
 };
 
@@ -562,7 +576,7 @@ function retry(member: Member) {
  * line (`disclosure`), so this looks the block up rather than guessing.
  */
 function blockFor(
-  blocks: { merchant: string; product: string | null; items: { label: string; value: string }[] }[],
+  blocks: { merchant: string; product: string | null; items: { label: string; value: string }[]; contact?: { kind: "email" | "tel" | "url"; value: string } }[],
   which: { merchant: string; product: string | null }
 ): Node[] {
   const governing = blocksFor(blocks, which);
@@ -580,8 +594,20 @@ function blockFor(
         : governing.length > 1 ? `${which.merchant}, in general:` : `${which.merchant}:`));
     nodes.push(el("dl", { class: "terms" },
       ...block.items.flatMap((i) => [el("dt", {}, i.label), el("dd", {}, i.value)])));
+    // Question 72. Beside this block's own terms, and only where this
+    // merchant signed one. No message is composed and nothing is sent on
+    // the household's behalf; the tap, if there is one, is the household's.
+    if (block.contact) nodes.push(contactLink(block.contact));
   }
   return nodes;
+}
+
+function contactLink(contact: { kind: "email" | "tel" | "url"; value: string }): Node {
+  const href =
+    contact.kind === "email" ? `mailto:${contact.value}`
+    : contact.kind === "tel" ? `tel:${contact.value}`
+    : contact.value;
+  return el("p", { class: "muted" }, "Contact: ", el("a", { href, rel: "noopener noreferrer" }, contact.value));
 }
 
 // ---- the approval screen (§10 step 3 and 4) ---------------------------------

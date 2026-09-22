@@ -274,7 +274,8 @@ describe("the list, as a member sees it", () => {
 });
 
 describe("the approval, as a member sees it", () => {
-  const withApproval = (candidates: Record<string, unknown>[]) => (url: string) => {
+  const DEFAULT_DISCLOSURES = [STANDING, { ...STANDING, product: "tea-a", items: [{ label: "returns", value: "eight days for this one" }] }];
+  const withApproval = (candidates: Record<string, unknown>[], disclosures: Record<string, unknown>[] = DEFAULT_DISCLOSURES) => (url: string) => {
     if (url === "/config") return { status: 200, body: CONFIG };
     if (url.startsWith("/api/offers?")) return { status: 200, body: { offers: [offerRow()] } };
     if (url.includes("/approval")) {
@@ -288,7 +289,7 @@ describe("the approval, as a member sees it", () => {
           price_band: null,
           mandate: { kind: "individual", scope: "this offer", lapses_at: null },
           candidates,
-          disclosures: [STANDING, { ...STANDING, product: "tea-a", items: [{ label: "returns", value: "eight days for this one" }] }],
+          disclosures,
           carriage: 500,
           excluded: [],
         },
@@ -297,8 +298,8 @@ describe("the approval, as a member sees it", () => {
     return { status: 404, body: {} };
   };
 
-  async function open(candidates: Record<string, unknown>[]) {
-    const app = await render(withApproval(candidates));
+  async function open(candidates: Record<string, unknown>[], disclosures: Record<string, unknown>[] = DEFAULT_DISCLOSURES) {
+    const app = await render(withApproval(candidates, disclosures));
     const openButton = [...app.querySelectorAll("button")].find((b) => text(b) === "Open")!;
     openButton.click();
     return settled();
@@ -372,6 +373,37 @@ describe("the approval, as a member sees it", () => {
     expect(body).toContain("on confirmation");
     expect(body).toContain("shop-x, for this product:");
     expect(body).toContain("shop-x, in general:");
+    // Question 72. Neither block here signed a contact, so nothing is drawn
+    // that a household could mistake for one.
+    expect(app.querySelector("a")).toBeNull();
+  });
+
+  test("a merchant's signed contact is drawn beside its own block, as a plain link, and nowhere it did not sign one", async () => {
+    // Question 72. Two blocks govern this line (§10a.5) and only the product
+    // block carries a contact, so exactly one link is drawn, next to that
+    // block's own terms.
+    const withContact = { ...STANDING, product: "tea-a", items: [{ label: "returns", value: "eight days for this one" }], contact: { kind: "email" as const, value: "help@shop-x.example" } };
+    const app = await open([candidate({ disclosure: { merchant: "shop-x", product: "tea-a" } })], [STANDING, withContact]);
+    const link = app.querySelector('a[href="mailto:help@shop-x.example"]');
+    expect(link).not.toBeNull();
+    // The value is drawn verbatim, exactly as the merchant signed it: no
+    // shortening, no folding behind a tap.
+    expect(text(link!)).toBe("help@shop-x.example");
+    expect(app.querySelectorAll("a")).toHaveLength(1);
+  });
+
+  test("a tel and a url contact become a tel: and the url itself, text unchanged either way", async () => {
+    const tel = { ...STANDING, contact: { kind: "tel" as const, value: "+81 3 1234 5678" } };
+    const withTel = await open([candidate()], [tel]);
+    const telLink = withTel.querySelector("a")!;
+    expect(telLink.getAttribute("href")).toBe("tel:+81 3 1234 5678");
+    expect(text(telLink)).toBe("+81 3 1234 5678");
+
+    const url = { ...STANDING, contact: { kind: "url" as const, value: "https://shop-x.example/returns" } };
+    const withUrl = await open([candidate()], [url]);
+    const urlLink = withUrl.querySelector("a")!;
+    expect(urlLink.getAttribute("href")).toBe("https://shop-x.example/returns");
+    expect(text(urlLink)).toBe("https://shop-x.example/returns");
   });
 
   test("an offer that comes back unreadable is said so, not drawn as a dead button", async () => {
@@ -394,7 +426,7 @@ describe("the statement, as a member sees it", () => {
     { candidate: "c-1", product: "tea-a", merchant: "shop-x", maker: "made-by-tea", ships: "carrier-a", given_by: null, valence: "consumed", quantity: 1, unit_price: 1200, amount: 1200, disclosure: { merchant: "shop-x", product: null } },
     { candidate: "c-2", product: "miso-a", merchant: "shop-x", maker: "made-by-miso", ships: "carrier-a", given_by: "made-by-miso", valence: "consumed", quantity: 1, unit_price: 700, amount: 0, disclosure: { merchant: "shop-x", product: null } },
   ];
-  const routes = (url: string) => {
+  const routes = (disclosures: Record<string, unknown>[] = [STANDING]) => (url: string) => {
     if (url === "/config") return { status: 200, body: CONFIG };
     if (url.startsWith("/api/offers?")) {
       return { status: 200, body: { offers: [offerRow({ binding: "physical", state: "decided", candidates: [{ id: "c-1", valence: "consumed" }] })] } };
@@ -402,14 +434,14 @@ describe("the statement, as a member sees it", () => {
     if (url.includes("/statement")) {
       return {
         status: 200,
-        body: { offer: "o-1", household: MEMBER.household, expires_at: 9_999_999_999_999, lines: LINES, disclosures: [STANDING], carriage: 500 },
+        body: { offer: "o-1", household: MEMBER.household, expires_at: 9_999_999_999_999, lines: LINES, disclosures, carriage: 500 },
       };
     }
     return { status: 404, body: {} };
   };
 
-  async function openStatement() {
-    const app = await render(routes);
+  async function openStatement(disclosures?: Record<string, unknown>[]) {
+    const app = await render(routes(disclosures));
     [...app.querySelectorAll("button")].find((b) => text(b) === "See what came back")!.click();
     return settled();
   }
@@ -428,6 +460,16 @@ describe("the statement, as a member sees it", () => {
     const app = await openStatement();
     [...app.querySelectorAll("button")].find((b) => text(b) === "I did not use this")!.click();
     expect(text(document.getElementById("app")!)).toContain("To be charged for the goods: ¥0");
+  });
+
+  test("a merchant's signed contact is drawn beside its block on the statement too, once per line it governs", async () => {
+    // Question 72. Both lines are governed by the one standing block, so the
+    // link is drawn twice, exactly where the block itself is drawn twice.
+    const withContact = { ...STANDING, contact: { kind: "email" as const, value: "help@shop-x.example" } };
+    const app = await openStatement([withContact]);
+    const links = [...app.querySelectorAll('a[href="mailto:help@shop-x.example"]')];
+    expect(links).toHaveLength(2);
+    for (const link of links) expect(text(link)).toBe("help@shop-x.example");
   });
 });
 

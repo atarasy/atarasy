@@ -39,6 +39,12 @@ export type Block = {
   merchant: string;
   product: string | null;
   items: { label: string; value: string }[];
+  /**
+   * Question 72, decided 2026-09-22. The merchant's own contact, absent
+   * where it gave none. Rendered exactly as signed, beside this block's own
+   * terms; `blocksFor` passes it through unread, the same as `items`.
+   */
+  contact?: { kind: "email" | "tel" | "url"; value: string };
 };
 
 /**

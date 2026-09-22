@@ -113,17 +113,27 @@ function canonicalConfig(c: { version: string; presenter: string; products: Reco
  * agreed with the engine by importing its code would agree by accident. The
  * product is the third part, empty for the merchant's standing text, so a
  * block signed for one product cannot be re-filed under another.
+ *
+ * Question 72. Where a contact is given, one final line is appended,
+ * `contact:<kind>=<percent-encoded value>`; absent, the bytes are identical
+ * to a disclosure with no contact at all, so an older signature still
+ * verifies.
  */
-function canonicalDisclosure(d: { merchant: string; product: string | null; version: string; items: { label: string; value: string }[] }) {
-  return Buffer.from(
-    [
-      encodeURIComponent(d.merchant),
-      encodeURIComponent(d.version),
-      encodeURIComponent(d.product ?? ""),
-      ...d.items.map((i) => `${encodeURIComponent(i.label)}=${encodeURIComponent(i.value)}`),
-    ].join("\n"),
-    "utf8"
-  );
+function canonicalDisclosure(d: {
+  merchant: string;
+  product: string | null;
+  version: string;
+  items: { label: string; value: string }[];
+  contact?: { kind: "email" | "tel" | "url"; value: string };
+}) {
+  const parts = [
+    encodeURIComponent(d.merchant),
+    encodeURIComponent(d.version),
+    encodeURIComponent(d.product ?? ""),
+    ...d.items.map((i) => `${encodeURIComponent(i.label)}=${encodeURIComponent(i.value)}`),
+  ];
+  if (d.contact) parts.push(`contact:${d.contact.kind}=${encodeURIComponent(d.contact.value)}`);
+  return Buffer.from(parts.join("\n"), "utf8");
 }
 
 let offerId = "";
@@ -237,6 +247,9 @@ beforeAll(async () => {
       { label: "delivery", value: "already placed" },
       { label: "returns", value: "as this merchant published" },
     ],
+    // Question 72. Carried through both the approval and the statement, and
+    // asserted on both below, since the hub's own proxy touches neither.
+    contact: { kind: "email" as const, value: "returns@maker-a.example" },
   };
   expect((await post(ENGINE, "/_disclosures", {
     ...block,
@@ -326,9 +339,15 @@ describe("the hub in front of an engine", () => {
   test("the approval the screen renders carries what clause 59 and clause 36 require", async () => {
     const approval = (await (await fetch(`${HUB}/api/offers/${offerId}/approval`)).json()) as {
       candidates: { product: string; alternatives: string[]; argument_against: string; merchant: string; maker: string; ships: string; given_by: string | null; valence: string }[];
+      disclosures: { merchant: string; product: string | null; contact?: { kind: string; value: string } }[];
       excluded: { product: string; reason: string }[];
       reminded: boolean;
     };
+    // Question 72. The block the fixture registered above carries a contact,
+    // and the hub is a plain proxy for it: the screen a person signs from
+    // shows it exactly as the merchant signed it.
+    const standing = approval.disclosures.find((d) => d.merchant === "maker-a" && d.product === null);
+    expect(standing?.contact).toEqual({ kind: "email", value: "returns@maker-a.example" });
     expect(approval.candidates).toHaveLength(2);
     for (const c of approval.candidates) {
       expect(c.alternatives.length).toBeGreaterThan(0);
@@ -675,7 +694,7 @@ describe("the statement a household signs (§6.5)", () => {
       expires_at: number;
       carriage: number | null;
       lines: { candidate: string; valence: string; amount: number; merchant: string; disclosure: { merchant: string; product: string | null } }[];
-      disclosures: { merchant: string; product: string | null; items: { label: string; value: string }[] }[];
+      disclosures: { merchant: string; product: string | null; items: { label: string; value: string }[]; contact?: { kind: string; value: string } }[];
     };
     // What the screen draws: a line at its price, the carriage recorded as
     // zero rather than absent, and the block that governs each line.
@@ -686,7 +705,12 @@ describe("the statement a household signs (§6.5)", () => {
     expect(typeof st.expires_at).toBe("number");
     const which = st.lines[0]!.disclosure;
     expect(which.merchant).toBe(st.lines[0]!.merchant);
-    expect(st.disclosures.some((d) => d.merchant === which.merchant && d.product === which.product)).toBe(true);
+    const governing = st.disclosures.find((d) => d.merchant === which.merchant && d.product === which.product);
+    expect(governing).toBeDefined();
+    // Question 72. Carried onto the statement the same way, beside the same
+    // block: the settlement a household signs shows the merchant's contact
+    // too, not only the approval it signed earlier.
+    expect(governing?.contact).toEqual({ kind: "email", value: "returns@maker-a.example" });
 
     const lines = st.lines.map((l) => ({ candidate: l.candidate, valence: l.valence, amount: l.amount, disputed: false }));
     const settled = await fetch(`${HUB}/api/offers/${offer.id}/settle`, {
