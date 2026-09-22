@@ -129,6 +129,19 @@ private actor LeaveTransport: MemberHTTPTransport {
         do { _ = try await client.offers(presenter: "merchant"); XCTFail("Expected the session to be gone") }
         catch MemberFailure.expired {} catch MemberFailure.scopeMismatch {}
     }
+    func testSubmitFourOhNineIsATypedRefusalAndKeepsTheLocalSession() async throws {
+        let env = try environment(), session = MemberSessionInfo(id: "session", household: household, presenters: ["merchant"], expiresAt: 5000)
+        let ceremony = leaveCeremony(env.origin.absoluteString)
+        let refused: [String: Any] = ["error": "leave_blocked", "blockers": [["kind": "operation_pending", "id": "op-1"]]]
+        let vault = LeaveVault()
+        let transport = LeaveTransport([.init(status: 200, data: try JSONEncoder().encode(session)), .init(status: 200, data: try data(ceremony)), .init(status: 409, data: try data(refused))])
+        let client = try await client(transport, vault, env, session: session)
+        let prepared = try await client.prepareLeave()
+        let assertion = MemberPasskeyResponse.assertion(id: "YQ", clientDataJSON: "Yg", authenticatorData: "Yw", signature: "ZA", userHandle: "ZQ")
+        do { _ = try await client.leave(prepared, assertion: assertion); XCTFail("Expected a refusal") }
+        catch MemberLeaveError.blocked(let blockers) { XCTAssertEqual(blockers, [.init(kind: "operation_pending", id: "op-1")]) }
+        XCTAssertNotNil(try vault.load(environment: env, household: household))
+    }
     func testSubmitForAnotherHouseholdIsRefused() async throws {
         let env = try environment(), session = MemberSessionInfo(id: "session", household: household, presenters: [], expiresAt: 5000)
         let ceremony = leaveCeremony(env.origin.absoluteString)
@@ -188,6 +201,7 @@ private actor LeaveTransport: MemberHTTPTransport {
     var status = MemberLeaveStatus(profile: "atarasy.member-leave-status.1", household: "server-household", blockers: [])
     var prepared: PreparedMemberLeave?
     var leftResult: MemberLeft?
+    var refusedAtSubmit: [MemberLeaveBlocker]?
     var calls: [String] = []
     var disableRefreshCalled = false
     func registrationOptions(invitation: String) async throws -> MemberCeremony { throw MemberFailure.unavailable }
@@ -206,6 +220,7 @@ private actor LeaveTransport: MemberHTTPTransport {
     }
     func leave(_ prepared: PreparedMemberLeave, assertion: MemberPasskeyResponse) async throws -> MemberLeft {
         calls.append("leave")
+        if let refusedAtSubmit { throw MemberLeaveError.blocked(refusedAtSubmit) }
         guard let leftResult else { throw MemberFailure.unavailable }
         return leftResult
     }
@@ -232,7 +247,7 @@ private actor LeaveTransport: MemberHTTPTransport {
         XCTAssertEqual(service.calls, ["status"])
         XCTAssertNotNil(account.session)
     }
-    func testSuccessfulDeletionClearsTheSessionAndDisablesRefreshFirst() async {
+    func testSuccessfulDeletionClearsTheSessionWithoutAClientRefreshTeardown() async {
         let service = LeaveAccountService()
         service.prepared = .init(ceremony: .init(id: "leave-1", expiresAt: 9_000_000, publicKey: [:]), id: "leave-1", household: "server-household", origin: "https://unit.example", rpID: "unit.example", digest: "digest")
         service.leftResult = .init(profile: "atarasy.member-left.1", household: "server-household", leftAt: 4000, deleted: .object(["offers": .integer(1)]))
@@ -242,13 +257,28 @@ private actor LeaveTransport: MemberHTTPTransport {
         await account.refreshLeaveStatus()
         XCTAssertEqual(account.leavePhase, .ready)
         await account.deleteAccount()
-        XCTAssertTrue(service.disableRefreshCalled)
+        // The server deletes the refresh subscription with the account.
+        XCTAssertFalse(service.disableRefreshCalled)
         XCTAssertEqual(service.calls, ["status", "prepare", "leave"])
         XCTAssertEqual(passkeys.kinds, [.leave])
         XCTAssertNil(account.session)
         XCTAssertEqual(account.leavePhase, .done)
         XCTAssertEqual(account.leaveResult?.leftAt, 4000)
         XCTAssertTrue(account.leaveNotice.contains("deleted"))
+    }
+    func testARefusalAtSubmitShowsItsBlockersKeepsTheSessionAndLeavesRefreshOn() async {
+        let service = LeaveAccountService()
+        service.prepared = .init(ceremony: .init(id: "leave-1", expiresAt: 9_000_000, publicKey: [:]), id: "leave-1", household: "server-household", origin: "https://unit.example", rpID: "unit.example", digest: "digest")
+        service.refusedAtSubmit = [.init(kind: "operation_pending", id: "op-1")]
+        let account = MemberAccount(service: service, passkeys: LeavePasskeys())
+        await account.restore(household: "server-household")
+        await account.refreshLeaveStatus()
+        await account.deleteAccount()
+        XCTAssertEqual(account.leavePhase, .blocked)
+        XCTAssertEqual(account.leaveBlockers, [.init(kind: "operation_pending", id: "op-1")])
+        XCTAssertNotNil(account.session)
+        XCTAssertFalse(service.disableRefreshCalled)
+        XCTAssertFalse(account.leaveNotice.contains("Do not repeat"))
     }
     func testABlockerDiscoveredDuringPrepareReturnsToBlockedInsteadOfFailing() async {
         let service = LeaveAccountService()

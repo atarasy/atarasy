@@ -330,10 +330,9 @@ public enum MemberLeavePhase: String, Sendable { case idle, checkingStatus, bloc
         await run {
             let started = generation
             leavePhase = .signing; leaveNotice = ""
-            // Disable push refresh first, while the session that registered it is still
-            // active: `leave()` below invalidates that session as its last step.
-            _ = try? await service.disableRefresh()
-            guard started == generation, session != nil else { return }
+            // No client-side refresh teardown: the server deletes the household's refresh
+            // subscriptions with the account, and switching it off first left refresh off
+            // whenever the deletion was cancelled or refused (refutation pass, 2026-09-22).
             do {
                 let prepared = try await service.prepareLeave()
                 try Task.checkCancellation()
@@ -353,7 +352,7 @@ public enum MemberLeavePhase: String, Sendable { case idle, checkingStatus, bloc
                 guard started == generation, session != nil else { return }
                 if let leaveError = error as? MemberLeaveError, case .blocked(let blockers) = leaveError {
                     leaveBlockers = blockers; leavePhase = .blocked
-                    leaveNotice = "New blockers appeared since this was last checked. Resolve them before deleting."
+                    leaveNotice = "Something is still in progress, so your account was not deleted. Finish the items below, then try again."
                     return
                 }
                 switch error {

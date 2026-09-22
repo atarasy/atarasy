@@ -155,14 +155,16 @@ public extension MemberClient {
               value.blockers.allSatisfy({ !$0.kind.isEmpty && !$0.id.isEmpty }) else { throw MemberFailure.scopeMismatch }
         return value
     }
+    private func throwIfLeaveBlocked(_ reply: MemberHTTPReply) throws {
+        guard reply.status == 409 else { return }
+        struct Blocked: Decodable { let error: String; let blockers: [MemberLeaveBlocker] }
+        let value = try decode(Blocked.self, reply, status: 409, keys: ["error", "blockers"])
+        guard value.error == "leave_blocked", value.blockers.allSatisfy({ !$0.kind.isEmpty && !$0.id.isEmpty }) else { throw MemberFailure.malformed }
+        throw MemberLeaveError.blocked(value.blockers)
+    }
     func prepareLeave() async throws -> PreparedMemberLeave {
         let (reply, info) = try await read("/member/account/leave/prepare", body: Data("{}".utf8))
-        if reply.status == 409 {
-            struct Blocked: Decodable { let error: String; let blockers: [MemberLeaveBlocker] }
-            let value = try decode(Blocked.self, reply, status: 409, keys: ["error", "blockers"])
-            guard value.error == "leave_blocked", value.blockers.allSatisfy({ !$0.kind.isEmpty && !$0.id.isEmpty }) else { throw MemberFailure.malformed }
-            throw MemberLeaveError.blocked(value.blockers)
-        }
+        try throwIfLeaveBlocked(reply)
         guard reply.status == 200 else { throw MemberFailure.http(reply.status) }
         let object = try LeaveWire.object(reply.data, keys: ["profile", "id", "household", "origin", "rpID", "expiresAt", "digest", "publicKey"])
         guard object["profile"] as? String == "atarasy.member-leave.1", object["household"] as? String == info.household,
@@ -183,6 +185,9 @@ public extension MemberClient {
         // matching how `retireHost` submits without a second expiry check.
         struct Input: Encodable { let preparation: String; let assertion: MemberPasskeyResponse }
         let (reply, info) = try await read("/member/account/leave/submit", body: JSONEncoder().encode(Input(preparation: prepared.id, assertion: assertion)))
+        // A blocker found after the signature was verified: the server spent the review and
+        // deleted nothing, so this is a refusal to show, not an unconfirmed result.
+        try throwIfLeaveBlocked(reply)
         let value = try decode(MemberLeft.self, reply, keys: ["profile", "household", "leftAt", "deleted"])
         guard value.profile == "atarasy.member-left.1", value.household == prepared.household, value.household == info.household, value.leftAt >= 0, value.leftAt <= Canonical.maximumInteger else { throw MemberFailure.scopeMismatch }
         try removeRetiredLocalSession(info)
