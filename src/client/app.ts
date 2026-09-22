@@ -23,7 +23,7 @@ import { awaitsDecision, awaitsStatement, byArrival, holdsNextBox, type InboxOff
 import { REFUSALS, refusal } from "../shared/refusals.js";
 // The judgements the screens make, separated from the drawing of them: a
 // reviewer reverted five of them at once and the suite stayed green.
-import { blocksFor, decidable, disputable, disputeMovesMoney, lostOutcome, statementTotal } from "../shared/screen.js";
+import { blocksFor, decidable, disputable, disputeMovesMoney, lostOutcome, statementTotal, validateCorrections, type Corrections } from "../shared/screen.js";
 
 type Member = {
   /** What the person typed. This browser's own label, and nobody else's business. */
@@ -953,7 +953,7 @@ async function statement(member: Member, offerId: string) {
             `/offers/${encodeURIComponent(st.offer)}/settlement`
           );
           if (stood.status === 200) {
-            show(el("h1", {}, "Atarasy"), receipt(stood.body, "refused"), back(member));
+            await showReceipt(member, st.offer, stood.body, "refused");
             return;
           }
         }
@@ -978,7 +978,7 @@ async function statement(member: Member, offerId: string) {
             const mine = recorded === signature
               ? "unanswered-mine"
               : typeof recorded === "string" || recorded === null ? "unanswered-other" : "unanswered-unknown";
-            show(el("h1", {}, "Atarasy"), receipt(stood.body, mine), back(member));
+            await showReceipt(member, st.offer, stood.body, mine);
             return;
           }
         }
@@ -989,7 +989,7 @@ async function statement(member: Member, offerId: string) {
       if (typeof settled.body.charged !== "number") {
         throw new Error("The answer came back in a form this screen could not read, so it cannot say whether this settled. Open the list again before signing a second time.");
       }
-      show(el("h1", {}, "Atarasy"), receipt(settled.body, "signed"), back(member));
+      await showReceipt(member, st.offer, settled.body, "signed");
     } catch (e) {
       status.textContent = (e as Error).message;
       sign.disabled = false;
@@ -1094,6 +1094,41 @@ function receipt(r: Receipt, path: ReceiptPath): Node {
     ...(r.disputed_amount
       ? [el("p", { class: "muted" }, `${yen(r.disputed_amount)} was disputed and is not charged here. What is owed for it, if anything, is between you and the seller.`)]
       : []));
+}
+
+/**
+ * §6.6, question 70. Reads the settled offer's receipt beside its
+ * settlement and shows both. A correction only ever lowers what was signed
+ * and is appended beside it, never rewriting the settlement above: there is
+ * nothing to sign or dispute on this screen (clause 54).
+ *
+ * **A failed or absent corrections read is never a reason to hide the
+ * settlement.** A 404 (the offer has no settlement, which cannot arise once
+ * `r` itself was read), a malformed body or an offer mismatch all come back
+ * from `validateCorrections` as `null`, drawn as nothing rather than as a
+ * failure of the receipt the household is here to see.
+ */
+async function showReceipt(member: Member, offerId: string, r: Receipt, path: ReceiptPath) {
+  const got = await api<unknown>("GET", `/offers/${encodeURIComponent(offerId)}/corrections`);
+  const corrections = got.status === 200 ? validateCorrections(got.body, offerId) : null;
+  show(el("h1", {}, "Atarasy"), receipt(r, path), ...correctionsCard(corrections), back(member));
+}
+
+/**
+ * §6.6. The merchant's own words are shown as text, never as a link or
+ * markup (clause 54): `el()` appends every string child as a text node, so
+ * a note is never parsed as HTML here.
+ */
+function correctionsCard(c: Corrections | null): Node[] {
+  if (!c || c.corrections.length === 0) return [];
+  return [el("div", { class: "card" },
+    el("p", {}, "The merchant of record has appended the following to the settlement above. There is nothing here for you to sign or dispute."),
+    ...c.corrections.map((line) =>
+      el("div", {},
+        el("p", {}, `${line.kind === "refund" ? "Refund" : "Collection"} from ${line.merchant}: −${yen(line.amount)}, ${when(line.corrected_at)}.`),
+        el("p", { class: "muted" }, line.note))
+    ),
+    el("p", {}, `Net after corrections: ${yen(c.net)}.`))];
 }
 
 /**

@@ -32,6 +32,26 @@ private actor ReviewTransport: MemberHTTPTransport {
         return .init(url: request.url!, status: request.url!.path == "/auth/session" ? 200 : status, contentType: "application/json", cacheControl: "no-store", data: request.url!.path == "/auth/session" ? session : payload)
     }
 }
+/// A transport that answers the settlement and corrections routes with their own bodies,
+/// so a corrections test can assert on a receipt that actually decodes as one.
+private actor RoutedReviewTransport: MemberHTTPTransport {
+    var requests: [URLRequest] = []
+    let settlementPayload: Data; var correctionsPayload: Data?; var correctionsStatus = 200
+    init(settlement: Data, corrections: Data?) { settlementPayload = settlement; correctionsPayload = corrections }
+    func send(_ request: URLRequest) async throws -> MemberHTTPReply {
+        requests.append(request)
+        if request.url!.path == "/auth/session" {
+            return .init(url: request.url!, status: 200, contentType: "application/json", cacheControl: "no-store", data: Data(#"{"id":"session","household":"detail-house","presenters":["merchant-1"],"expiresAt":5000}"#.utf8))
+        }
+        if request.url!.path.hasSuffix("/corrections") {
+            guard let payload = correctionsPayload else {
+                return .init(url: request.url!, status: 404, contentType: "application/json", cacheControl: "no-store", data: Data(#"{"error":"not_found","message":"no such offer"}"#.utf8))
+            }
+            return .init(url: request.url!, status: correctionsStatus, contentType: "application/json", cacheControl: "no-store", data: payload)
+        }
+        return .init(url: request.url!, status: 200, contentType: "application/json", cacheControl: "no-store", data: settlementPayload)
+    }
+}
 private struct ReviewVault: MemberSessionVault {
     func load(environment: MemberEnvironment, household: String) throws -> StoredMemberSession? { .init(token: "amr1_" + String(repeating: "A", count: 43), info: .init(id: "session", household: "detail-house", presenters: ["merchant-1"], expiresAt: 5000)) }
     func save(_ session: StoredMemberSession, environment: MemberEnvironment) throws {}
@@ -200,14 +220,133 @@ private struct ReviewVault: MemberSessionVault {
         let transport = ReviewTransport(try JSONSerialization.data(withJSONObject: receipt))
         let client = MemberClient(environment: try .init(name: "test", origin: URL(string: "https://unit.example")!), transport: transport, vault: ReviewVault(), now: { 1000 })
         _ = try await client.restore(household: "detail-house")
-        guard case .settlement(let settled) = try await client.review(detail: detail) else { return XCTFail("A settled box was reviewed as something to sign") }
+        guard case .settlement(let settled, let corrections) = try await client.review(detail: detail) else { return XCTFail("A settled box was reviewed as something to sign") }
         XCTAssertEqual(settled.charged, 1200)
-        let requests = await transport.requests; XCTAssertEqual(requests.last?.url?.path, "/offers/" + detail.id + "/settlement")
+        // The transport answers every path with the settlement body, so the corrections
+        // read finds a body that does not fit the corrections schema and is swallowed:
+        // the settlement above must stand on its own regardless.
+        XCTAssertNil(corrections)
+        let requests = await transport.requests
+        XCTAssertTrue(requests.contains { $0.url?.path == "/offers/" + detail.id + "/settlement" })
+        XCTAssertTrue(requests.contains { $0.url?.path == "/offers/" + detail.id + "/corrections" })
         receipt["payer"] = "another-house"
         let foreign = ReviewTransport(try JSONSerialization.data(withJSONObject: receipt))
         let other = MemberClient(environment: try .init(name: "test", origin: URL(string: "https://unit.example")!), transport: foreign, vault: ReviewVault(), now: { 1000 })
         _ = try await other.restore(household: "detail-house")
         do { _ = try await other.review(detail: detail); XCTFail() } catch { XCTAssertEqual(error as? MemberFailure, .scopeMismatch) }
+    }
+    /// §6.6, question 70. A settled box's review carries the corrections beside it when the
+    /// engine has any: the original, each correction in order and the net that remains.
+    func testSettledPhysicalBoxReviewCarriesCorrectionsWhenTheEngineHasAny() async throws {
+        var detailValue = try reviewValue("physical-detail"); detailValue["state"] = "settled"
+        let detail = try MemberOfferDetail.decode(JSONSerialization.data(withJSONObject: detailValue), expectedID: detailValue["id"] as! String, household: "detail-house")
+        let url = Bundle.module.url(forResource: "member-operation-runtime", withExtension: "json", subdirectory: "Fixtures")!
+        let runtime = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: Any]
+        var receipt = (runtime["committed"] as! [String: Any])["receipt"] as! [String: Any]
+        receipt["offer"] = detail.id; receipt["payer"] = detail.household
+        let corrections: [String: Any] = [
+            "offer": detail.id,
+            "original": ["charged": 1200, "carriage": 300],
+            "corrections": [[
+                "id": "correction-1", "offer": detail.id, "merchant": "merchant-1", "amount": 400,
+                "kind": "refund", "note": "One bottle arrived broken.", "corrected_at": 2000, "signature": "sig-1",
+            ]],
+            "net": 1100,
+        ]
+        let transport = RoutedReviewTransport(settlement: try JSONSerialization.data(withJSONObject: receipt), corrections: try JSONSerialization.data(withJSONObject: corrections))
+        let client = MemberClient(environment: try .init(name: "test", origin: URL(string: "https://unit.example")!), transport: transport, vault: ReviewVault(), now: { 1000 })
+        _ = try await client.restore(household: "detail-house")
+        guard case .settlement(_, let read) = try await client.review(detail: detail) else { return XCTFail("A settled box was reviewed as something to sign") }
+        XCTAssertEqual(read?.net, 1100)
+        XCTAssertEqual(read?.corrections.count, 1)
+        XCTAssertEqual(read?.corrections.first?.kind, "refund")
+        XCTAssertEqual(read?.corrections.first?.note, "One bottle arrived broken.")
+        XCTAssertEqual(read?.original.charged, 1200)
+        XCTAssertEqual(read?.original.carriage, 300)
+    }
+    /// A 404 (nothing corrected) never hides the settlement it would have stood beside.
+    func testMissingCorrectionsLeavesTheSettlementReadable() async throws {
+        var detailValue = try reviewValue("physical-detail"); detailValue["state"] = "settled"
+        let detail = try MemberOfferDetail.decode(JSONSerialization.data(withJSONObject: detailValue), expectedID: detailValue["id"] as! String, household: "detail-house")
+        let url = Bundle.module.url(forResource: "member-operation-runtime", withExtension: "json", subdirectory: "Fixtures")!
+        let runtime = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: Any]
+        var receipt = (runtime["committed"] as! [String: Any])["receipt"] as! [String: Any]
+        receipt["offer"] = detail.id; receipt["payer"] = detail.household
+        let transport = RoutedReviewTransport(settlement: try JSONSerialization.data(withJSONObject: receipt), corrections: nil)
+        let client = MemberClient(environment: try .init(name: "test", origin: URL(string: "https://unit.example")!), transport: transport, vault: ReviewVault(), now: { 1000 })
+        _ = try await client.restore(household: "detail-house")
+        guard case .settlement(let settled, let read) = try await client.review(detail: detail) else { return XCTFail("A settled box was reviewed as something to sign") }
+        XCTAssertEqual(settled.charged, 1200)
+        XCTAssertNil(read)
+    }
+    /// A corrections body whose net does not match its own arithmetic is refused, and the
+    /// refusal is swallowed the same way any other corrections failure is: as "none to show".
+    func testCorrectionsWithMismatchedArithmeticIsTreatedAsNoneToShow() async throws {
+        var detailValue = try reviewValue("physical-detail"); detailValue["state"] = "settled"
+        let detail = try MemberOfferDetail.decode(JSONSerialization.data(withJSONObject: detailValue), expectedID: detailValue["id"] as! String, household: "detail-house")
+        let url = Bundle.module.url(forResource: "member-operation-runtime", withExtension: "json", subdirectory: "Fixtures")!
+        let runtime = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: Any]
+        var receipt = (runtime["committed"] as! [String: Any])["receipt"] as! [String: Any]
+        receipt["offer"] = detail.id; receipt["payer"] = detail.household
+        let corrections: [String: Any] = [
+            "offer": detail.id,
+            "original": ["charged": 1200, "carriage": NSNull()],
+            "corrections": [[
+                "id": "correction-1", "offer": detail.id, "merchant": "merchant-1", "amount": 400,
+                "kind": "refund", "note": "One bottle arrived broken.", "corrected_at": 2000, "signature": "sig-1",
+            ]],
+            "net": 999, // 1200 - 400 = 800, not 999
+        ]
+        let transport = RoutedReviewTransport(settlement: try JSONSerialization.data(withJSONObject: receipt), corrections: try JSONSerialization.data(withJSONObject: corrections))
+        let client = MemberClient(environment: try .init(name: "test", origin: URL(string: "https://unit.example")!), transport: transport, vault: ReviewVault(), now: { 1000 })
+        _ = try await client.restore(household: "detail-house")
+        guard case .settlement(_, let read) = try await client.review(detail: detail) else { return XCTFail("A settled box was reviewed as something to sign") }
+        XCTAssertNil(read)
+    }
+    /// An extra field this specification does not name is refused rather than silently kept.
+    func testCorrectionsWithAnExtraFieldIsTreatedAsNoneToShow() async throws {
+        var detailValue = try reviewValue("physical-detail"); detailValue["state"] = "settled"
+        let detail = try MemberOfferDetail.decode(JSONSerialization.data(withJSONObject: detailValue), expectedID: detailValue["id"] as! String, household: "detail-house")
+        let url = Bundle.module.url(forResource: "member-operation-runtime", withExtension: "json", subdirectory: "Fixtures")!
+        let runtime = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: Any]
+        var receipt = (runtime["committed"] as! [String: Any])["receipt"] as! [String: Any]
+        receipt["offer"] = detail.id; receipt["payer"] = detail.household
+        let corrections: [String: Any] = [
+            "offer": detail.id,
+            "original": ["charged": 1200, "carriage": 0],
+            "corrections": [[
+                "id": "correction-1", "offer": detail.id, "merchant": "merchant-1", "amount": 400,
+                "kind": "refund", "note": "One bottle arrived broken.", "corrected_at": 2000, "signature": "sig-1",
+                "extra": "not this specification's field",
+            ]],
+            "net": 800,
+        ]
+        let transport = RoutedReviewTransport(settlement: try JSONSerialization.data(withJSONObject: receipt), corrections: try JSONSerialization.data(withJSONObject: corrections))
+        let client = MemberClient(environment: try .init(name: "test", origin: URL(string: "https://unit.example")!), transport: transport, vault: ReviewVault(), now: { 1000 })
+        _ = try await client.restore(household: "detail-house")
+        guard case .settlement(_, let read) = try await client.review(detail: detail) else { return XCTFail("A settled box was reviewed as something to sign") }
+        XCTAssertNil(read)
+    }
+    /// A corrections body naming a different offer than the one requested is refused: this
+    /// is a second, worse failure mode than an extra field, and it is caught the same way.
+    func testCorrectionsNamingAnotherOfferIsTreatedAsNoneToShow() async throws {
+        var detailValue = try reviewValue("physical-detail"); detailValue["state"] = "settled"
+        let detail = try MemberOfferDetail.decode(JSONSerialization.data(withJSONObject: detailValue), expectedID: detailValue["id"] as! String, household: "detail-house")
+        let url = Bundle.module.url(forResource: "member-operation-runtime", withExtension: "json", subdirectory: "Fixtures")!
+        let runtime = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: Any]
+        var receipt = (runtime["committed"] as! [String: Any])["receipt"] as! [String: Any]
+        receipt["offer"] = detail.id; receipt["payer"] = detail.household
+        let corrections: [String: Any] = [
+            "offer": "another-offer",
+            "original": ["charged": 1200, "carriage": 0],
+            "corrections": [] as [[String: Any]],
+            "net": 1200,
+        ]
+        let transport = RoutedReviewTransport(settlement: try JSONSerialization.data(withJSONObject: receipt), corrections: try JSONSerialization.data(withJSONObject: corrections))
+        let client = MemberClient(environment: try .init(name: "test", origin: URL(string: "https://unit.example")!), transport: transport, vault: ReviewVault(), now: { 1000 })
+        _ = try await client.restore(household: "detail-house")
+        guard case .settlement(_, let read) = try await client.review(detail: detail) else { return XCTFail("A settled box was reviewed as something to sign") }
+        XCTAssertNil(read)
     }
     func testReviewDepartureAndReplacementDiscardLateReply() async throws {
         for replace in [false, true] {

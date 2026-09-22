@@ -1081,6 +1081,21 @@ private fun MemberOfferDetailCard(
                             Text("Settled", style = MaterialTheme.typography.titleMedium)
                             Text("Goods charged: ${review.value.charged}")
                             if (review.value.disputedAmount > 0) Text("Disputed: ${review.value.disputedAmount}")
+                            Text("This settlement is signed and is never rewritten.")
+                            // §6.6, question 70. A correction only ever lowers what was
+                            // signed, appended beside it. Nothing here is the household's
+                            // to sign or dispute (clause 54): no refund request, no
+                            // dispute control, no messaging.
+                            review.corrections?.corrections?.takeIf { it.isNotEmpty() }?.let { rows ->
+                                Text("Corrections", style = MaterialTheme.typography.titleMedium)
+                                Text("The merchant of record has appended these to the settlement above.")
+                                rows.forEach { correction ->
+                                    Text("${if (correction.kind == "refund") "Refund" else "Collection"} from ${correction.merchant}: -${correction.amount}")
+                                    // The merchant's own words, as plain text and never as markup.
+                                    Text(correction.note)
+                                }
+                                Text("Net after corrections: ${review.corrections.net}")
+                            }
                         }
                     }
                 }

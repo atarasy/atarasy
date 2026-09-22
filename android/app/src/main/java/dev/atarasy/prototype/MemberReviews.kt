@@ -14,7 +14,13 @@ import kotlinx.serialization.json.long
 sealed interface MemberReview {
     data class Approval(val value: MemberApproval) : MemberReview
     data class Statement(val value: MemberStatement) : MemberReview
-    data class Settlement(val value: ProtocolSettlement) : MemberReview
+    /**
+     * §6.6, question 70. `corrections` is whatever the merchant has appended
+     * beside this settlement, or null where the read found nothing to show
+     * (a 404, a malformed body, or a scope mismatch): never a reason to fail
+     * the settlement itself, which is why it is not part of decoding `value`.
+     */
+    data class Settlement(val value: ProtocolSettlement, val corrections: MemberCorrections? = null) : MemberReview
 }
 data class MemberDisclosureReference(val merchant: String, val product: String?)
 data class MemberMandateTerms(val kind: String, val scope: String, val lapsesAt: Long?)
@@ -46,6 +52,19 @@ data class ProtocolSettlement(
     val charged: Long, val disputedAmount: Long, val lines: List<ProtocolSettlementLine>, val payer: String,
     val signedBy: String, val signedAs: String, val receipt: String, val confirmation: String?,
 )
+
+/**
+ * §6.6, question 70. The household's receipt of what a merchant has appended
+ * beside a settlement it signed: the original as it was signed, each
+ * correction in the order it arrived, and what remains. The settlement
+ * itself is never rewritten.
+ */
+data class MemberCorrectionOriginal(val charged: Long, val carriage: Long?)
+data class MemberCorrection(
+    val id: String, val offer: String, val merchant: String, val amount: Long, val kind: String,
+    val note: String, val correctedAt: Long, val signature: String,
+)
+data class MemberCorrections(val offer: String, val original: MemberCorrectionOriginal, val corrections: List<MemberCorrection>, val net: Long)
 
 object MemberReviewCodec {
     private val json = Json { ignoreUnknownKeys = false; isLenient = false }
@@ -201,6 +220,50 @@ object MemberSettlementCodec {
     } catch (e: IllegalArgumentException) { if (e.message == "scope") throw MemberFailure.ScopeMismatch else throw MemberFailure.Malformed } catch (_: Exception) { throw MemberFailure.Malformed }
 }
 
+/**
+ * §6.6, question 70. Decodes an already received GET /offers/{id}/corrections
+ * response. Every failure here (a bad shape, an amount below 1, arithmetic
+ * that does not close, an offer that does not match) is the caller's signal
+ * to show nothing rather than to fail the settlement this reads beside.
+ */
+object MemberCorrectionsCodec {
+    private val json = Json { ignoreUnknownKeys = false; isLenient = false }
+    private val rootKeys = setOf("offer", "original", "corrections", "net")
+    private val originalKeys = setOf("charged", "carriage")
+    private val correctionKeys = setOf("id", "offer", "merchant", "amount", "kind", "note", "corrected_at", "signature")
+    private val kinds = setOf("refund", "collection")
+
+    fun decode(bytes: ByteArray, expectedOffer: String): MemberCorrections = try {
+        val root = json.parseToJsonElement(bytes.toString(StandardCharsets.UTF_8)).jsonObject; require(root.keys == rootKeys)
+        val originalRow = root.getValue("original").jsonObject; require(originalRow.keys == originalKeys)
+        val charged = originalRow.getValue("charged").jsonPrimitive.let { require(!it.isString); it.long }; require(charged in 0..Canonical.MAXIMUM_INTEGER)
+        val carriage = originalRow.getValue("carriage").takeUnless { it === JsonNull }?.jsonPrimitive?.let { require(!it.isString); it.long }
+        require(carriage == null || carriage in 0..Canonical.MAXIMUM_INTEGER)
+        val rows = root.getValue("corrections").jsonArray.map { it.jsonObject }
+        var sum = 0L
+        val ids = mutableSetOf<String>()
+        val corrections = rows.map { row ->
+            require(row.keys == correctionKeys)
+            fun s(key: String) = row.getValue(key).jsonPrimitive.let { require(it.isString); it.content }
+            val id = s("id"); require(id.isNotEmpty() && ids.add(id))
+            val offer = s("offer"); require(offer == expectedOffer)
+            val merchant = s("merchant"); require(merchant.isNotEmpty())
+            val amount = row.getValue("amount").jsonPrimitive.let { require(!it.isString); it.long }; require(amount in 1..Canonical.MAXIMUM_INTEGER)
+            val kind = s("kind"); require(kind in kinds)
+            val note = s("note"); require(note.length <= 500)
+            val correctedAt = row.getValue("corrected_at").jsonPrimitive.let { require(!it.isString); it.long }; require(correctedAt in 0..Canonical.MAXIMUM_INTEGER)
+            val signature = s("signature"); require(signature.isNotEmpty())
+            sum = Math.addExact(sum, amount)
+            MemberCorrection(id, offer, merchant, amount, kind, note, correctedAt, signature)
+        }
+        val offer = root.getValue("offer").jsonPrimitive.let { require(it.isString); it.content }; require(offer == expectedOffer)
+        val net = root.getValue("net").jsonPrimitive.let { require(!it.isString); it.long }
+        val base = Math.addExact(charged, carriage ?: 0L)
+        require(base in 0..Canonical.MAXIMUM_INTEGER && sum <= base && base - sum == net)
+        MemberCorrections(offer, MemberCorrectionOriginal(charged, carriage), corrections, net)
+    } catch (_: Exception) { throw MemberFailure.Malformed }
+}
+
 class MemberReviews(private val sessions: MemberSessionClient) {
     suspend fun load(detail: MemberOfferDetail): MemberReview {
         val session = sessions.activeInfo()
@@ -212,8 +275,25 @@ class MemberReviews(private val sessions: MemberSessionClient) {
         if (reply.contentType?.substringBefore(';')?.trim()?.lowercase() != "application/json") throw MemberFailure.Malformed
         return when {
             detail.binding == "digital" -> MemberReview.Approval(MemberReviewCodec.approval(reply.body, detail))
-            detail.state == "settled" -> MemberReview.Settlement(MemberSettlementCodec.decode(reply.body, detail.id).also { if (it.payer != detail.household || it.signedBy != detail.presenter) throw MemberFailure.ScopeMismatch })
+            detail.state == "settled" -> MemberReview.Settlement(
+                MemberSettlementCodec.decode(reply.body, detail.id).also { if (it.payer != detail.household || it.signedBy != detail.presenter) throw MemberFailure.ScopeMismatch },
+                corrections(detail.id, detail.household, detail.presenter),
+            )
             else -> MemberReview.Statement(MemberReviewCodec.statement(reply.body, detail))
         }
     }
+
+    /**
+     * §6.6, question 70. Read beside a settlement, never in its place: every
+     * failure here (a 404, a malformed body, a scope mismatch, a superseded
+     * or expired session) is swallowed to null, so a corrections read can
+     * never make an otherwise readable settlement unreadable.
+     */
+    private suspend fun corrections(offerId: String, household: String, presenter: String): MemberCorrections? = try {
+        val (reply, session) = sessions.readWithSession("/offers/$offerId/corrections")
+        if (household != session.household || presenter !in session.presenters) null
+        else if (reply.status != 200) null
+        else if (reply.contentType?.substringBefore(';')?.trim()?.lowercase() != "application/json") null
+        else MemberCorrectionsCodec.decode(reply.body, offerId)
+    } catch (_: Exception) { null }
 }

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { blocksFor, decidable, disputable, disputeMovesMoney, statementTotal } from "../src/shared/screen.js";
+import { blocksFor, decidable, disputable, disputeMovesMoney, statementTotal, validateCorrections } from "../src/shared/screen.js";
 import { REFUSALS, refusal } from "../src/shared/refusals.js";
 
 /**
@@ -116,6 +116,82 @@ describe("§6.5: what the statement says will be charged", () => {
     expect(statementTotal(withMissing, new Set(["gone"]))).toBe(2400);
     expect(disputeMovesMoney({ valence: "lost" })).toBe(false);
     expect(disputeMovesMoney({ valence: "consumed" })).toBe(true);
+  });
+});
+
+describe("§6.6, question 70: the household's receipt of a settlement's corrections", () => {
+  const body = () => ({
+    offer: "offer-1",
+    original: { charged: 1200, carriage: 0 },
+    corrections: [
+      { id: "correction-1", offer: "offer-1", merchant: "maker-a", amount: 400, kind: "refund", note: "One tin arrived damaged.", corrected_at: 2000, signature: "sig-1" },
+    ],
+    net: 800,
+  });
+
+  test("decodes the original, each correction and the net", () => {
+    const got = validateCorrections(body(), "offer-1");
+    expect(got).not.toBeNull();
+    expect(got!.original).toEqual({ charged: 1200, carriage: 0 });
+    expect(got!.net).toBe(800);
+    expect(got!.corrections).toHaveLength(1);
+    expect(got!.corrections[0]!.kind).toBe("refund");
+    expect(got!.corrections[0]!.note).toBe("One tin arrived damaged.");
+  });
+
+  test("a null carriage is kept apart from a recorded zero", () => {
+    const b = body(); b.original = { charged: 1200, carriage: null as unknown as number }; b.net = 800;
+    const got = validateCorrections(b, "offer-1");
+    expect(got!.original.carriage).toBeNull();
+  });
+
+  test("mismatched arithmetic is refused", () => {
+    // 1200 + 0 − 400 = 800, not 799 and not 801.
+    expect(validateCorrections({ ...body(), net: 799 }, "offer-1")).toBeNull();
+    expect(validateCorrections({ ...body(), net: 801 }, "offer-1")).toBeNull();
+  });
+
+  test("a correction of 0, or the sum exceeding what was charged, is refused", () => {
+    const zero = body(); zero.corrections = [{ ...zero.corrections[0]!, amount: 0 }]; zero.net = 1200;
+    expect(validateCorrections(zero, "offer-1")).toBeNull();
+    const over = body(); over.corrections = [{ ...over.corrections[0]!, amount: 2000 }]; over.net = -800;
+    expect(validateCorrections(over, "offer-1")).toBeNull();
+  });
+
+  test("an extra field anywhere in the body is refused rather than silently kept", () => {
+    expect(validateCorrections({ ...body(), paid: true }, "offer-1")).toBeNull();
+    const extraRow = body(); extraRow.corrections = [{ ...extraRow.corrections[0]!, extra: "no" } as unknown as (typeof extraRow.corrections)[number]];
+    expect(validateCorrections(extraRow, "offer-1")).toBeNull();
+  });
+
+  test("a body or a row naming another offer is refused", () => {
+    expect(validateCorrections(body(), "another-offer")).toBeNull();
+    const wrongRow = body(); wrongRow.corrections = [{ ...wrongRow.corrections[0]!, offer: "another-offer" }];
+    expect(validateCorrections(wrongRow, "offer-1")).toBeNull();
+  });
+
+  test("a 404 (the offer has no settlement) or a malformed body reads as nothing to show, not as a failure", () => {
+    // The caller (`showReceipt` in the client) only calls this on a `200`;
+    // this is the shape check that stands in for that boundary here.
+    expect(validateCorrections(null, "offer-1")).toBeNull();
+    expect(validateCorrections("not an object", "offer-1")).toBeNull();
+    expect(validateCorrections({}, "offer-1")).toBeNull();
+  });
+
+  test("the merchant's own note passes through as plain text, whatever it contains", () => {
+    // Clause 54: shown as written, never as a link or markup. This is the
+    // decode; `el()` in the client is what keeps it a text node.
+    const withMarkup = body();
+    withMarkup.corrections = [{ ...withMarkup.corrections[0]!, note: "<script>alert(1)</script> and 100% honest" }];
+    const got = validateCorrections(withMarkup, "offer-1");
+    expect(got!.corrections[0]!.note).toBe("<script>alert(1)</script> and 100% honest");
+  });
+
+  test("an empty corrections list still decodes, at the settlement's own net", () => {
+    const none = { offer: "offer-1", original: { charged: 1200, carriage: 0 }, corrections: [] as unknown[], net: 1200 };
+    const got = validateCorrections(none, "offer-1");
+    expect(got!.corrections).toHaveLength(0);
+    expect(got!.net).toBe(1200);
   });
 });
 

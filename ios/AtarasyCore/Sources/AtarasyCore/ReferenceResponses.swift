@@ -34,6 +34,36 @@ public struct ProtocolSettlement: Decodable, Equatable, Sendable {
     }
 }
 
+/// §6.6, question 70. A signed settlement is never rewritten; a reduction is a second,
+/// appended record. This is the household's receipt of them: the settlement as it was
+/// signed, each correction in the order it arrived, and what remains.
+public struct MemberCorrections: Decodable, Equatable, Sendable {
+    public struct Original: Decodable, Equatable, Sendable {
+        public let charged: Int64
+        public let carriage: Int64?
+    }
+    public struct Correction: Decodable, Equatable, Sendable {
+        public let id: String
+        public let offer: String
+        public let merchant: String
+        /// Whole units by which what the household pays is lowered. A correction only lowers.
+        public let amount: Int64
+        public let kind: String
+        /// The merchant's own words, shown to the household as written and never as markup.
+        public let note: String
+        public let correctedAt: Int64
+        public let signature: String
+        private enum CodingKeys: String, CodingKey {
+            case id, offer, merchant, amount, kind, note, signature
+            case correctedAt = "corrected_at"
+        }
+    }
+    public let offer: String
+    public let original: Original
+    public let corrections: [Correction]
+    public let net: Int64
+}
+
 /// None of these failures proves that a preceding write had no effect.
 public enum ReferenceReadFailure: Error, Equatable, Sendable {
     case protocolRefusal(status: Int, code: String)
@@ -60,6 +90,26 @@ public enum ReferenceResponseReader {
         } catch { throw ReferenceReadFailure.malformedResponse }
         guard !expectedOffer.isEmpty, Data(value.offer.utf8) == Data(expectedOffer.utf8) else { throw ReferenceReadFailure.mismatchedResource }
         try validate(value)
+        return value
+    }
+
+    /// §6.6, question 70. Decodes an already received GET /offers/{id}/corrections response.
+    /// A caller that finds this route absent (a settlement with nothing corrected, or an
+    /// engine before question 70) reads that as "nothing to show", never as a reason to
+    /// hide the settlement it stands beside.
+    public static func corrections(status: Int, contentType: String?, data: Data, expectedOffer: String) throws -> MemberCorrections {
+        let body = try responseObject(status: status, contentType: contentType, data: data)
+        let value: MemberCorrections
+        do {
+            guard Set(body.keys) == Set(["offer", "original", "corrections", "net"]),
+                  let original = body["original"] as? [String: Any], Set(original.keys) == Set(["charged", "carriage"]),
+                  let rows = body["corrections"] as? [[String: Any]],
+                  rows.allSatisfy({ Set($0.keys) == Set(["id", "offer", "merchant", "amount", "kind", "note", "corrected_at", "signature"]) })
+            else { throw ReferenceReadFailure.malformedResponse }
+            value = try JSONDecoder().decode(MemberCorrections.self, from: data)
+        } catch { throw ReferenceReadFailure.malformedResponse }
+        guard !expectedOffer.isEmpty, Data(value.offer.utf8) == Data(expectedOffer.utf8) else { throw ReferenceReadFailure.mismatchedResource }
+        try validateCorrections(value)
         return value
     }
 
@@ -128,5 +178,28 @@ public enum ReferenceResponseReader {
         else { throw ReferenceReadFailure.inconsistentSettlement }
         // Carriage is absent from this projection. Do not add it to `charged` or
         // infer a complete payable total, currency, verified authority or provider state.
+    }
+    /// §6.6. `net` is `original.charged + (original.carriage ?? 0) - sum(amounts)`, checked
+    /// rather than trusted: a receipt whose arithmetic does not close is not one this screen
+    /// can show as the household's total.
+    private static func validateCorrections(_ value: MemberCorrections) throws {
+        var amounts = [value.original.charged, value.net] + value.corrections.map(\.amount)
+        if let carriage = value.original.carriage { amounts.append(carriage) }
+        guard amounts.allSatisfy({ (0...Canonical.maximumInteger).contains($0) }), !value.offer.isEmpty else {
+            throw ReferenceReadFailure.inconsistentSettlement
+        }
+        var ids = Set<Data>(), sum: Int64 = 0
+        for c in value.corrections {
+            guard c.amount >= 1, !c.id.isEmpty, !c.merchant.isEmpty, ["refund", "collection"].contains(c.kind),
+                  c.note.count <= 500, Data(c.offer.utf8) == Data(value.offer.utf8), c.correctedAt >= 0,
+                  ids.insert(Data(c.id.utf8)).inserted
+            else { throw ReferenceReadFailure.inconsistentSettlement }
+            guard sum <= Canonical.maximumInteger - c.amount else { throw ReferenceReadFailure.inconsistentSettlement }
+            sum += c.amount
+        }
+        let base = value.original.charged + (value.original.carriage ?? 0)
+        guard base >= 0, base <= Canonical.maximumInteger, sum <= base, base - sum == value.net else {
+            throw ReferenceReadFailure.inconsistentSettlement
+        }
     }
 }
