@@ -1109,7 +1109,8 @@ private fun ContactLink(contact: MemberDisclosureContact) {
 private fun contactHref(contact: MemberDisclosureContact): String? = when (contact.kind) {
     "email" -> "mailto:" + Uri.encode(contact.value, "@.+-_")
     "tel" -> "tel:" + Uri.encode(contact.value, "+-")
-    "url" -> contact.value
+    // Only https is a link, for the reason the iOS view gives.
+    "url" -> contact.value.takeIf { Uri.parse(it).scheme.equals("https", ignoreCase = true) }
     else -> null
 }
 

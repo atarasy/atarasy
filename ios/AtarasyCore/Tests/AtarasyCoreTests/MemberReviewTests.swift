@@ -123,6 +123,16 @@ private struct ReviewVault: MemberSessionVault {
     /// same way as the detail: absent by default (the captured fixtures predate the
     /// field), and where present it must match the detail's own copy of the block
     /// exactly, the same as every other field `sameDisclosures` compares.
+    func testOnlyAnHttpsContactBecomesALink() {
+        // §10a.7. The engine refuses any other scheme at registration; a host
+        // that did not must not hand the screen a script or file link.
+        typealias Contact = MemberOfferDetail.Disclosure.Contact
+        XCTAssertEqual(Contact(kind: "url", value: "https://shop.example/contact").url?.absoluteString, "https://shop.example/contact")
+        for value in ["javascript:alert(1)", "http://shop.example/contact", "file:///etc/passwd"] {
+            XCTAssertNil(Contact(kind: "url", value: value).url, value)
+        }
+    }
+
     func testDisclosureContactIsCarriedAndMustMatchTheDetail() throws {
         for binding in ["digital", "physical"] {
             var detailRaw = try reviewValue(binding + "-detail")

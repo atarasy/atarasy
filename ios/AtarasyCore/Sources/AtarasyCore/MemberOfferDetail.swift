@@ -99,7 +99,10 @@ extension MemberOfferDetail.Disclosure.Contact {
         switch kind {
         case "email": scheme = "mailto:"
         case "tel": scheme = "tel:"
-        default: return URL(string: value)
+        // Only https is a link: the engine refuses any other scheme at
+        // registration, and a host that did not would otherwise hand the
+        // screen a `javascript:` or `file:` link.
+        default: return URL(string: value).flatMap { $0.scheme?.lowercased() == "https" ? $0 : nil }
         }
         var allowed = CharacterSet.alphanumerics
         allowed.insert(charactersIn: "+-._@")

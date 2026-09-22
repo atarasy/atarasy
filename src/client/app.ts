@@ -603,10 +603,15 @@ function blockFor(
 }
 
 function contactLink(contact: { kind: "email" | "tel" | "url"; value: string }): Node {
+  // Only https is a link: the engine refuses any other scheme at
+  // registration, and a host that did not would otherwise hand this page a
+  // `javascript:` link. Anything else is shown as text.
+  const https = (() => { try { return new URL(contact.value).protocol === "https:"; } catch { return false; } })();
   const href =
     contact.kind === "email" ? `mailto:${contact.value}`
     : contact.kind === "tel" ? `tel:${contact.value}`
-    : contact.value;
+    : https ? contact.value : null;
+  if (href === null) return el("p", { class: "muted" }, "Contact: ", contact.value);
   return el("p", { class: "muted" }, "Contact: ", el("a", { href, rel: "noopener noreferrer" }, contact.value));
 }
 

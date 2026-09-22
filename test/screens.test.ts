@@ -392,6 +392,17 @@ describe("the approval, as a member sees it", () => {
     expect(app.querySelectorAll("a")).toHaveLength(1);
   });
 
+  test("a url contact that is not https is shown as text and never becomes a link", async () => {
+    // The engine refuses any other scheme at registration; a host that did
+    // not would otherwise hand this page a script link.
+    for (const value of ["javascript:alert(1)", "http://shop.example/contact", "file:///etc/passwd"]) {
+      const bad = { ...STANDING, contact: { kind: "url" as const, value } };
+      const screen = await open([candidate()], [bad]);
+      expect([...screen.querySelectorAll("a")].some((a) => a.getAttribute("href") === value)).toBe(false);
+      expect(screen.textContent).toContain(value);
+    }
+  });
+
   test("a tel and a url contact become a tel: and the url itself, text unchanged either way", async () => {
     const tel = { ...STANDING, contact: { kind: "tel" as const, value: "+81 3 1234 5678" } };
     const withTel = await open([candidate()], [tel]);
