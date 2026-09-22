@@ -134,4 +134,115 @@ class MemberReviewsTest {
         val changed = JsonObject(fixture.toMutableMap().also { it["charged"] = JsonPrimitive(1) })
         assertThrows(MemberFailure.Malformed::class.java) { MemberSettlementCodec.decode(changed.toString().toByteArray(), id) }
     }
+
+    // §6.6, question 70.
+    private fun correctionsBody(offer: String = "fixture-offer", net: Long = 800L, carriage: JsonElement = JsonPrimitive(0L)): JsonObject = buildJsonObject {
+        put("offer", JsonPrimitive(offer))
+        put("original", buildJsonObject { put("charged", JsonPrimitive(1200L)); put("carriage", carriage) })
+        put("corrections", JsonArray(listOf(buildJsonObject {
+            put("id", JsonPrimitive("correction-1")); put("offer", JsonPrimitive(offer)); put("merchant", JsonPrimitive("maker-a"))
+            put("amount", JsonPrimitive(400L)); put("kind", JsonPrimitive("refund")); put("note", JsonPrimitive("One bottle arrived broken."))
+            put("corrected_at", JsonPrimitive(2000L)); put("signature", JsonPrimitive("sig-1"))
+        })))
+        put("net", JsonPrimitive(net))
+    }
+    private fun settledDetail(offerId: String, household: String = "house"): MemberOfferDetail {
+        val base = value("physical-detail").toMutableMap()
+        base["id"] = JsonPrimitive(offerId); base["household"] = JsonPrimitive(household); base["state"] = JsonPrimitive("settled")
+        return MemberOfferCodec.detail(JsonObject(base).toString().toByteArray(), offerId, household)
+    }
+
+    @Test fun `corrections decode the original each correction and the net`() {
+        val decoded = MemberCorrectionsCodec.decode(correctionsBody().toString().toByteArray(), "fixture-offer")
+        assertEquals(1200L, decoded.original.charged); assertEquals(0L, decoded.original.carriage)
+        assertEquals(800L, decoded.net); assertEquals(1, decoded.corrections.size)
+        assertEquals("refund", decoded.corrections[0].kind); assertEquals("One bottle arrived broken.", decoded.corrections[0].note)
+        // A null carriage decodes as nil, distinct from a recorded zero.
+        val unknown = MemberCorrectionsCodec.decode(correctionsBody(carriage = kotlinx.serialization.json.JsonNull).toString().toByteArray(), "fixture-offer")
+        assertNull(unknown.original.carriage)
+    }
+
+    @Test fun `corrections with mismatched arithmetic are refused`() {
+        assertThrows(MemberFailure.Malformed::class.java) { MemberCorrectionsCodec.decode(correctionsBody(net = 799L).toString().toByteArray(), "fixture-offer") }
+        assertThrows(MemberFailure.Malformed::class.java) { MemberCorrectionsCodec.decode(correctionsBody(net = 801L).toString().toByteArray(), "fixture-offer") }
+    }
+
+    @Test fun `corrections with an extra field anywhere are refused`() {
+        val extraRoot = JsonObject(correctionsBody().toMutableMap().also { it["paid"] = JsonPrimitive(true) })
+        assertThrows(MemberFailure.Malformed::class.java) { MemberCorrectionsCodec.decode(extraRoot.toString().toByteArray(), "fixture-offer") }
+        val body = correctionsBody()
+        val rows = body["corrections"]!!.jsonArray.map { it.jsonObject.toMutableMap().also { r -> r["extra"] = JsonPrimitive("no") } }.map { JsonObject(it) as JsonElement }
+        val extraRow = JsonObject(body.toMutableMap().also { it["corrections"] = JsonArray(rows) })
+        assertThrows(MemberFailure.Malformed::class.java) { MemberCorrectionsCodec.decode(extraRow.toString().toByteArray(), "fixture-offer") }
+    }
+
+    @Test fun `a correction naming another offer, or a body naming another offer, is refused`() {
+        assertThrows(MemberFailure.Malformed::class.java) { MemberCorrectionsCodec.decode(correctionsBody().toString().toByteArray(), "another-offer") }
+        val body = correctionsBody()
+        val rows = body["corrections"]!!.jsonArray.map { it.jsonObject.toMutableMap().also { r -> r["offer"] = JsonPrimitive("another-offer") } }.map { JsonObject(it) as JsonElement }
+        val wrongRow = JsonObject(body.toMutableMap().also { it["corrections"] = JsonArray(rows) })
+        assertThrows(MemberFailure.Malformed::class.java) { MemberCorrectionsCodec.decode(wrongRow.toString().toByteArray(), "fixture-offer") }
+    }
+
+    @Test fun `a correction of zero, or a sum exceeding what was charged, is refused`() {
+        val body = correctionsBody()
+        val zeroRows = body["corrections"]!!.jsonArray.map { it.jsonObject.toMutableMap().also { r -> r["amount"] = JsonPrimitive(0L) } }.map { JsonObject(it) as JsonElement }
+        val zero = JsonObject(body.toMutableMap().also { it["corrections"] = JsonArray(zeroRows); it["net"] = JsonPrimitive(1200L) })
+        assertThrows(MemberFailure.Malformed::class.java) { MemberCorrectionsCodec.decode(zero.toString().toByteArray(), "fixture-offer") }
+        val overRows = body["corrections"]!!.jsonArray.map { it.jsonObject.toMutableMap().also { r -> r["amount"] = JsonPrimitive(2000L) } }.map { JsonObject(it) as JsonElement }
+        val over = JsonObject(body.toMutableMap().also { it["corrections"] = JsonArray(overRows); it["net"] = JsonPrimitive(-800L) })
+        assertThrows(MemberFailure.Malformed::class.java) { MemberCorrectionsCodec.decode(over.toString().toByteArray(), "fixture-offer") }
+    }
+
+    /**
+     * §6.6, question 70. `MemberReviews.load()` reads the corrections beside a
+     * settlement and never in its place.
+     */
+    @Test fun `client reads corrections beside a settled offer`() = runBlocking {
+        val environment = MemberEnvironment.create("test", "https://unit.example")
+        val fixture = json.parseToJsonElement(checkNotNull(javaClass.getResource("/member-operation-runtime.json")).readText()).jsonObject["committed"]!!.jsonObject["receipt"]!!.jsonObject
+        val offerId = fixture["offer"]!!.jsonPrimitive.content
+        val detail = settledDetail(offerId)
+        val session = MemberSessionInfo("session", detail.household, listOf(detail.presenter), 2_000_000_000_000)
+        fun response(path: String, body: String, status: Int = 200) = MemberHttpResponse(environment.origin + path, environment.origin + path, status, "application/json", "no-store", body.toByteArray())
+        val sessionBody = """{"id":"session","household":"${detail.household}","presenters":["${detail.presenter}"],"expiresAt":2000000000000}"""
+        val transport = ReviewTransport(ArrayDeque(listOf(
+            response("/auth/session", sessionBody),
+            response("/offers/$offerId/settlement", fixture.toString()),
+            response("/offers/$offerId/corrections", correctionsBody(offer = offerId).toString()),
+        )))
+        val sessions = MemberSessionClient(environment, transport, ReviewVault(StoredMemberSession("amr1_" + "A".repeat(43), session))) { 1_800_000_000_000 }
+        sessions.restore(detail.household)
+        val review = MemberReviews(sessions).load(detail) as MemberReview.Settlement
+        assertEquals(1200L, review.value.charged)
+        assertEquals("/offers/$offerId/corrections", transport.requests.last().path)
+        assertEquals(800L, review.corrections?.net)
+        assertEquals(1, review.corrections?.corrections?.size)
+        assertEquals("One bottle arrived broken.", review.corrections?.corrections?.get(0)?.note)
+    }
+
+    /**
+     * A 404 (the offer has no settlement, which cannot arise once the
+     * settlement itself was read) or a malformed corrections body is
+     * swallowed: the settlement it stands beside must remain readable.
+     */
+    @Test fun `a failed corrections read never hides the settlement`() = runBlocking {
+        val environment = MemberEnvironment.create("test", "https://unit.example")
+        val fixture = json.parseToJsonElement(checkNotNull(javaClass.getResource("/member-operation-runtime.json")).readText()).jsonObject["committed"]!!.jsonObject["receipt"]!!.jsonObject
+        val offerId = fixture["offer"]!!.jsonPrimitive.content
+        val detail = settledDetail(offerId)
+        val session = MemberSessionInfo("session", detail.household, listOf(detail.presenter), 2_000_000_000_000)
+        fun response(path: String, body: String, status: Int = 200) = MemberHttpResponse(environment.origin + path, environment.origin + path, status, "application/json", "no-store", body.toByteArray())
+        val sessionBody = """{"id":"session","household":"${detail.household}","presenters":["${detail.presenter}"],"expiresAt":2000000000000}"""
+        val transport = ReviewTransport(ArrayDeque(listOf(
+            response("/auth/session", sessionBody),
+            response("/offers/$offerId/settlement", fixture.toString()),
+            response("/offers/$offerId/corrections", """{"error":"not_found","message":"no such offer"}""", status = 404),
+        )))
+        val sessions = MemberSessionClient(environment, transport, ReviewVault(StoredMemberSession("amr1_" + "A".repeat(43), session))) { 1_800_000_000_000 }
+        sessions.restore(detail.household)
+        val review = MemberReviews(sessions).load(detail) as MemberReview.Settlement
+        assertEquals(1200L, review.value.charged)
+        assertNull(review.corrections)
+    }
 }
