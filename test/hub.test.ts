@@ -136,8 +136,30 @@ function canonicalDisclosure(d: {
   return Buffer.from(parts.join("\n"), "utf8");
 }
 
+/**
+ * §6.6, question 70. The bytes a merchant signs over a correction, as the
+ * engine signs them. Written out here for the same reason every shared form
+ * in this file is: a hub that agreed with the engine by importing its code
+ * would agree by accident.
+ */
+function canonicalCorrection(c: { id: string; offer: string; merchant: string; amount: number; kind: string; note: string; corrected_at: number }) {
+  const parts = [
+    "valence-correction/1",
+    encodeURIComponent(c.id),
+    encodeURIComponent(c.offer),
+    encodeURIComponent(c.merchant),
+    String(c.amount),
+    c.kind,
+    encodeURIComponent(c.note),
+    String(c.corrected_at),
+  ];
+  return Buffer.from(parts.join("\n"), "utf8");
+}
+
 let offerId = "";
 let candidateIds: string[] = [];
+/** §6.6. "maker-a"'s own key, registered in `beforeAll`, so a test can sign a correction. */
+let merchantKey: KeyPairKeyObjectResult;
 
 /**
  * What the browser's authenticator produces, in the shape §10.5 and §16.1 both
@@ -232,7 +254,7 @@ beforeAll(async () => {
   // rather than at the decision. **Nothing here is a statute's list**: the
   // engine reads no item, and a fixture that pretended otherwise would assert
   // something no code can check.
-  const merchantKey = generateKeyPairSync("ed25519");
+  merchantKey = generateKeyPairSync("ed25519");
   expect((await post(ENGINE, "/_identities", {
     key: "maker-a",
     public_key: merchantKey.publicKey.export({ type: "spki", format: "pem" }).toString(),
@@ -420,6 +442,9 @@ describe("the hub in front of an engine", () => {
       ["POST", "/api/offers"],
       ["GET", `/api/offers/${offerId}`],
       ["GET", "/api/registry"],
+      // §6.6. Appending a correction is the merchant's own route, never the
+      // member's: only the read of one, `GET .../corrections`, is carried.
+      ["POST", `/api/offers/${offerId}/corrections`],
     ];
     for (const [method, path] of refused) {
       const r = await fetch(`${HUB}${path}`, { method, headers: { "content-type": "application/json" }, body: method === "GET" ? undefined : "{}" });
@@ -783,6 +808,98 @@ describe("the statement a household signs (§6.5)", () => {
     const stood = await fetch(`${HUB}/api/offers/${offer.id}/settlement`);
     expect(stood.status).toBe(200);
     expect(((await stood.json()) as { charged: number }).charged).toBe(charged);
+  });
+
+  /**
+   * §6.6, question 70. The household's receipt of what "maker-a" appended to
+   * a settlement it signed: the original, the correction and the net. The
+   * append itself is the merchant's own route and is never carried by this
+   * hub (a member has no reason to reach it); only the read is, and it is
+   * read here exactly as the screen reads it.
+   */
+  test("the hub carries the household's read of a settlement's corrections, and never rewrites what was signed", async () => {
+    const offer = await collected("tea-a");
+    const st = (await (await fetch(`${HUB}/api/offers/${offer.id}/statement`)).json()) as {
+      lines: { candidate: string; valence: string; amount: number }[];
+    };
+    const lines = st.lines.map((l) => ({ candidate: l.candidate, valence: l.valence, amount: l.amount, disputed: false }));
+    const settled = await fetch(`${HUB}/api/offers/${offer.id}/settle`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ assertion: assertOver(canonicalStatement(offer.id, 0, lines), keyed.get(offer.household)!.privateKey), disputed: [] }),
+    });
+    expect(settled.status).toBe(200);
+    const charged = ((await settled.json()) as { charged: number }).charged;
+    expect(charged).toBe(1200);
+
+    // Before anything is appended: the household's receipt names the original
+    // and a settlement's worth of nothing corrected, never a 404 for that.
+    const before = await fetch(`${HUB}/api/offers/${offer.id}/corrections`);
+    expect(before.status).toBe(200);
+    const beforeBody = (await before.json()) as { offer: string; original: { charged: number; carriage: number | null }; corrections: unknown[]; net: number };
+    expect(beforeBody).toEqual({ offer: offer.id, original: { charged: 1200, carriage: 0 }, corrections: [], net: 1200 });
+
+    // The merchant's own route, appending a correction that lowers the bill.
+    // Never carried by this hub: a member has no reason to reach it, and
+    // nothing here asks the hub to.
+    const correction = {
+      id: `refund-${offer.id.slice(0, 8)}`,
+      offer: offer.id,
+      merchant: "maker-a",
+      amount: 400,
+      kind: "refund" as const,
+      note: "One tin arrived damaged.",
+      corrected_at: Date.now(),
+    };
+    const { offer: _offer, ...correctionBody } = correction;
+    const appended = await post(ENGINE, `/offers/${offer.id}/corrections`, {
+      ...correctionBody,
+      signature: sign(null, canonicalCorrection(correction), merchantKey.privateKey).toString("base64"),
+    });
+    expect(appended.status).toBe(201);
+
+    const read = await fetch(`${HUB}/api/offers/${offer.id}/corrections`);
+    expect(read.status).toBe(200);
+    const body = (await read.json()) as {
+      offer: string;
+      original: { charged: number; carriage: number | null };
+      corrections: { id: string; merchant: string; amount: number; kind: string; note: string; corrected_at: number; signature: string }[];
+      net: number;
+    };
+    expect(body.offer).toBe(offer.id);
+    expect(body.original).toEqual({ charged: 1200, carriage: 0 });
+    expect(body.corrections.length).toBe(1);
+    expect(body.corrections[0]!.amount).toBe(400);
+    expect(body.corrections[0]!.kind).toBe("refund");
+    // The merchant's own words, carried as text and never as markup.
+    expect(body.corrections[0]!.note).toBe("One tin arrived damaged.");
+    expect(body.net).toBe(800);
+
+    // The signed settlement itself is untouched: a correction is appended
+    // beside it, never folded into it.
+    const stillStood = await fetch(`${HUB}/api/offers/${offer.id}/settlement`);
+    expect(((await stillStood.json()) as { charged: number }).charged).toBe(1200);
+
+    // The retry a merchant's own client sends after a timeout is the same
+    // correction, not a second one, and the hub's read reflects that rather
+    // than doubling the reduction.
+    const retried = await post(ENGINE, `/offers/${offer.id}/corrections`, {
+      ...correctionBody,
+      signature: sign(null, canonicalCorrection(correction), merchantKey.privateKey).toString("base64"),
+    });
+    expect(retried.status).toBe(200);
+    const still = (await (await fetch(`${HUB}/api/offers/${offer.id}/corrections`)).json()) as { corrections: unknown[]; net: number };
+    expect(still.corrections.length).toBe(1);
+    expect(still.net).toBe(800);
+  });
+
+  // A box that has never settled has no corrections to read either: the
+  // engine's own reason (there is no settlement to correct), read through the
+  // same carried route.
+  test("an offer that has not settled has no corrections to read", async () => {
+    const offer = await collected("coffee-a");
+    const read = await fetch(`${HUB}/api/offers/${offer.id}/corrections`);
+    expect(read.status).toBe(404);
   });
 
   /**

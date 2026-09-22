@@ -155,6 +155,11 @@ function carries(method: string, path: string): boolean {
   // been charged: the member was charged and every sentence available to them
   // said otherwise or said nothing. Measured by a refutation pass that night.
   if (method === "GET" && parts.length === 3 && parts[0] === "offers" && parts[2] === "settlement") return true;
+  // §6.6, question 70. The household's receipt of what a merchant has appended to a
+  // signed settlement: the original, each correction and the net. It adds no exposure
+  // beyond `.../settlement` above, for the same reason: it is a read of what the
+  // settlement already carries, through a route that writes nothing.
+  if (method === "GET" && parts.length === 3 && parts[0] === "offers" && parts[2] === "corrections") return true;
   // §16. The protections a person sets for themselves, and reads back.
   if (method === "POST" && parts.length === 2 && parts[0] === "_node" && parts[1] === "mandates") return true;
   if (method === "GET" && parts.length === 3 && parts[0] === "_node" && parts[1] === "mandates") return true;

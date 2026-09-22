@@ -118,6 +118,71 @@ export const disputable = (line: { valence: string }): boolean =>
 export const disputeMovesMoney = (line: { valence: string }): boolean => line.valence === "consumed";
 
 /**
+ * §6.6, question 70. The household's receipt of what a merchant has appended
+ * to a settlement it signed: the original as it was signed, each correction
+ * in the order it arrived, and what remains. A correction only ever lowers
+ * what was charged; the settlement itself is never rewritten.
+ */
+export type Correction = {
+  id: string;
+  offer: string;
+  merchant: string;
+  amount: number;
+  kind: "refund" | "collection";
+  note: string;
+  corrected_at: number;
+  signature: string;
+};
+export type Corrections = {
+  offer: string;
+  original: { charged: number; carriage: number | null };
+  corrections: Correction[];
+  net: number;
+};
+
+const CORRECTION_KEYS = ["id", "offer", "merchant", "amount", "kind", "note", "corrected_at", "signature"];
+
+/**
+ * §6.6. Checked the same way every other response from the engine is checked
+ * here: exact keys, the arithmetic that binds them, and the offer this was
+ * asked for. `null` is "nothing to show", never "the settlement failed" — a
+ * caller that gets it back still has the settlement to show on its own.
+ */
+export function validateCorrections(body: unknown, offerId: string): Corrections | null {
+  if (typeof body !== "object" || body === null) return null;
+  const b = body as Record<string, unknown>;
+  if (Object.keys(b).sort().join(",") !== "corrections,net,offer,original") return null;
+  if (typeof b.offer !== "string" || b.offer !== offerId) return null;
+  if (typeof b.original !== "object" || b.original === null) return null;
+  const orig = b.original as Record<string, unknown>;
+  if (Object.keys(orig).sort().join(",") !== "carriage,charged") return null;
+  if (!Number.isInteger(orig.charged) || (orig.charged as number) < 0) return null;
+  if (orig.carriage !== null && !Number.isInteger(orig.carriage)) return null;
+  if ((orig.carriage as number | null) !== null && (orig.carriage as number) < 0) return null;
+  if (!Array.isArray(b.corrections)) return null;
+  const rows: Correction[] = [];
+  let sum = 0;
+  for (const row of b.corrections) {
+    if (typeof row !== "object" || row === null) return null;
+    const r = row as Record<string, unknown>;
+    if (Object.keys(r).sort().join(",") !== [...CORRECTION_KEYS].sort().join(",")) return null;
+    if (typeof r.id !== "string" || !r.id) return null;
+    if (typeof r.offer !== "string" || r.offer !== offerId) return null;
+    if (typeof r.merchant !== "string" || !r.merchant) return null;
+    if (!Number.isInteger(r.amount) || (r.amount as number) < 1) return null;
+    if (r.kind !== "refund" && r.kind !== "collection") return null;
+    if (typeof r.note !== "string" || r.note.length > 500) return null;
+    if (!Number.isInteger(r.corrected_at) || (r.corrected_at as number) < 0) return null;
+    if (typeof r.signature !== "string" || !r.signature) return null;
+    sum += r.amount as number;
+    rows.push(r as unknown as Correction);
+  }
+  const base = (orig.charged as number) + ((orig.carriage as number | null) ?? 0);
+  if (!Number.isInteger(b.net) || sum > base || base - sum !== b.net) return null;
+  return { offer: b.offer, original: orig as Corrections["original"], corrections: rows, net: b.net as number };
+}
+
+/**
  * §3, question 48, decided 2026-09-15. What a `lost` line says, told apart by
  * what the collection named it. Not in the box is a record about the
  * household's home that it sees on its statement and may dispute; a line the
