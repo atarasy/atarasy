@@ -23,7 +23,9 @@ class MemberStatementOperationTest {
         val disclosures = statementJson["disclosures"]!!.jsonArray.map { block ->
             val d = block.jsonObject
             MemberDisclosure(d["merchant"]!!.jsonPrimitive.content, d["product"]?.takeUnless { it is kotlinx.serialization.json.JsonNull }?.jsonPrimitive?.content, d["version"]!!.jsonPrimitive.content,
-                d["items"]!!.jsonArray.map { item -> MemberDisclosureItem(item.jsonObject["label"]!!.jsonPrimitive.content, item.jsonObject["value"]!!.jsonPrimitive.content) }, d["signature"]!!.jsonPrimitive.content)
+                d["items"]!!.jsonArray.map { item -> MemberDisclosureItem(item.jsonObject["label"]!!.jsonPrimitive.content, item.jsonObject["value"]!!.jsonPrimitive.content) }, d["signature"]!!.jsonPrimitive.content,
+                // The captured fixture predates question 72; the row carries none.
+                null)
         }
         MemberOfferDetail(
             statementJson["offer"]!!.jsonPrimitive.content, "physical", "house", "merchant-1", true, "replenish", null, null, "cfg", 1_800_000_000_000,

@@ -14,6 +14,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -139,6 +140,44 @@ class MemberOffersTest {
         assertThrows(MemberFailure.Malformed::class.java) { MemberOfferCodec.detail(body("missing", false), id, "detail-house") }
         assertThrows(MemberFailure.Malformed::class.java) { MemberOfferCodec.detail(body("invalid", true), id, "detail-house") }
         assertTrue(MemberOfferCodec.detail(body("missing", true), id, "detail-house").collectedAsSupplied)
+    }
+
+    /**
+     * Question 72, decided 2026-09-22. Absent (the captured fixture, from before this
+     * field) and explicitly null both decode to no contact; present must be exactly
+     * `kind` (one of three) and `value` (non-empty, at most 256 UTF-8 bytes), the same
+     * limit the engine enforces before it will sign one.
+     */
+    @Test fun `disclosure contact is optional and validated`() {
+        val id = fixture["id"]!!.jsonPrimitive.content
+        fun withContact(contact: kotlinx.serialization.json.JsonElement?): ByteArray {
+            val root = fixture.toMutableMap()
+            root["disclosures"] = buildJsonArray {
+                fixture["disclosures"]!!.jsonArray.forEachIndexed { index, element ->
+                    val row = element.jsonObject.toMutableMap()
+                    if (index == 0) { if (contact != null) row["contact"] = contact else row.remove("contact") }
+                    add(JsonObject(row))
+                }
+            }
+            return JsonObject(root).toString().toByteArray()
+        }
+        // The captured fixture predates the field: absent, and decodes to null.
+        assertNull(MemberOfferCodec.detail(withContact(null), id, "detail-house").disclosures.single().contact)
+        assertNull(MemberOfferCodec.detail(withContact(JsonNull), id, "detail-house").disclosures.single().contact)
+
+        val ok = buildJsonObject { put("kind", "email"); put("value", "returns@maker-a.example") }
+        assertEquals(MemberDisclosureContact("email", "returns@maker-a.example"), MemberOfferCodec.detail(withContact(ok), id, "detail-house").disclosures.single().contact)
+
+        for (bad in listOf(
+            buildJsonObject { put("kind", "email"); put("value", "x@example.com"); put("extra", "no") },
+            buildJsonObject { put("kind", "post"); put("value", "x@example.com") },
+            buildJsonObject { put("kind", "email"); put("value", "") },
+            buildJsonObject { put("kind", "email") },
+            JsonPrimitive("not an object"),
+            buildJsonObject { put("kind", "email"); put("value", "a".repeat(251) + "@a.com") },
+        )) {
+            assertThrows(MemberFailure::class.java) { MemberOfferCodec.detail(withContact(bad), id, "detail-house") }
+        }
     }
 
     @Test fun `locking private access fences a late offer response`() = runBlocking {

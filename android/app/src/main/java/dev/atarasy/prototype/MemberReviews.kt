@@ -54,6 +54,8 @@ object MemberReviewCodec {
     private val statementKeys = words("offer household expires_at lines disclosures carriage challenge")
     private val lineKeys = words("candidate product merchant maker ships given_by valence quantity unit_price amount disclosure")
     private val disclosureKeys = words("merchant product version items signature")
+    private val contactKeys = setOf("kind", "value")
+    private val contactKinds = setOf("email", "tel", "url")
 
     fun approval(bytes: ByteArray, detail: MemberOfferDetail): MemberApproval = malformed {
         val root = objectOf(bytes); require(root.keys == approvalKeys)
@@ -133,11 +135,22 @@ object MemberReviewCodec {
     }
 
     private fun disclosures(element: JsonElement): List<MemberDisclosure> = element.jsonArray.map { item ->
-        val row = item.jsonObject; require(row.keys == disclosureKeys)
+        val row = item.jsonObject; require(row.keys == disclosureKeys || row.keys == disclosureKeys + "contact")
         val items = row.required("items").jsonArray.map { child ->
             val value = child.jsonObject; require(value.keys == setOf("label", "value")); MemberDisclosureItem(value.string("label"), value.string("value"))
         }
-        MemberDisclosure(row.string("merchant"), row.nullableString("product"), row.string("version"), items, row.string("signature"))
+        MemberDisclosure(row.string("merchant"), row.nullableString("product"), row.string("version"), items, row.string("signature"), contact(row))
+    }
+    /** Question 72. Absent or explicitly null is no contact; present must be exactly
+     * `kind` (one of three) and `value` (non-empty, at most 256 UTF-8 bytes). */
+    private fun contact(row: JsonObject): MemberDisclosureContact? {
+        if (!row.containsKey("contact")) return null
+        val raw = row.required("contact")
+        if (raw === JsonNull) return null
+        val c = raw.jsonObject; require(c.keys == contactKeys)
+        val kind = c.string("kind"); require(kind in contactKinds)
+        val contactValue = c.string("value"); require(contactValue.isNotEmpty() && contactValue.toByteArray(StandardCharsets.UTF_8).size <= 256)
+        return MemberDisclosureContact(kind, contactValue)
     }
     private fun reference(value: JsonObject): MemberDisclosureReference { require(value.keys == setOf("merchant", "product")); return MemberDisclosureReference(value.string("merchant"), value.nullableString("product")) }
     private fun matches(source: MemberCandidate, product: String, merchant: String, maker: String, ships: String, giver: String?, quantity: Long, price: Long, valence: String) =
