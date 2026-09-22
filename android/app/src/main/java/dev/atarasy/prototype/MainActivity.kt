@@ -124,7 +124,7 @@ class MainActivity : ComponentActivity() {
         )
         androidRefresh = MemberAndroidRefresh(memberSessions, FirebaseRefreshRegistrationProvider(this))
         leaveService = MemberLeaveService(environment, memberSessions, acceptedOrigins = AndroidSigningOrigins.current(this))
-        leaveFlow = MemberLeaveFlow(leaveService, memberSessions, privateNode, passkeys)
+        leaveFlow = MemberLeaveFlow(leaveService, memberSessions, privateNode, passkeys, operationStore)
         val moveTarget = runCatching {
             val name = getString(R.string.atarasy_move_target_name).trim(); val origin = getString(R.string.atarasy_move_target_origin).trim()
             if (name.isEmpty() || origin.isEmpty()) null else MemberEnvironment.create(name, origin)

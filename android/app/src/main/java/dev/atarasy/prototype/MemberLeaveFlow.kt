@@ -21,6 +21,8 @@ class MemberLeaveFlow(
     private val sessions: MemberSessionClient,
     private val privateNode: MemberPrivateNode,
     private val passkeys: PasskeyAuthorizer,
+    /** §14.3. The device's own journal, cleared when the account is deleted. */
+    private val operations: MemberOperationStore? = null,
 ) {
     var state = MemberLeaveState(); private set
     private var session: MemberSessionInfo? = null
@@ -66,6 +68,9 @@ class MemberLeaveFlow(
             val response = authenticate(prepared.publicKeyJson)
             val result = service.submit(prepared, response)
             privateNode.lock()
+            // §14.3. The host deleted its side; this device's own journal of the
+            // household's operations goes with it.
+            runCatching { operations?.removeAll(result.household) }
             session = null
             MemberLeaveState(
                 MemberLeavePhase.DONE,

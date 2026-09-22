@@ -63,13 +63,23 @@ class MemberLeaveFlowTest {
         })
     }.toString()
 
-    private fun flow(replies: List<MemberHttpResponse>, passkeys: PasskeyAuthorizer): Pair<MemberLeaveFlow, MemberSessionClient> {
+    /** §14.3: the device's journal, so a test can see it cleared. */
+    private class RecordingOperations : MemberOperationStore {
+        val cleared = mutableListOf<String>()
+        override fun save(handle: MemberOperationHandle) {}
+        override fun load(id: String): MemberOperationHandle? = null
+        override fun handles(): List<MemberOperationHandle> = emptyList()
+        override fun claim(handle: MemberOperationHandle, signature: String) {}
+        override fun removeAll(household: String) { cleared.add(household) }
+    }
+
+    private fun flow(replies: List<MemberHttpResponse>, passkeys: PasskeyAuthorizer, operations: MemberOperationStore? = null): Pair<MemberLeaveFlow, MemberSessionClient> {
         val transport = DecisionTransport(ArrayDeque(listOf(response("/auth/session", sessionJson())) + replies))
         val sessions = MemberSessionClient(environment, transport, DecisionVault(StoredMemberSession(token, info))) { 1_800_000_000_000 }
         runBlocking { sessions.restore(household) }
         val service = MemberLeaveService(environment, sessions, now = { 1_800_000_000_000 })
         val privateNode = MemberPrivateNode(environment, MemberPrivateNodeRemote(sessions), InertPrivateNodeVault())
-        val flow = MemberLeaveFlow(service, sessions, privateNode, passkeys)
+        val flow = MemberLeaveFlow(service, sessions, privateNode, passkeys, operations)
         flow.setSession(info)
         return flow to sessions
     }
@@ -83,6 +93,14 @@ class MemberLeaveFlowTest {
         assertThrows(MemberFailure.Expired::class.java) { runBlocking { sessions.activeInfo() } }
         // A second call is inert: the flow's own session was cleared, and it is no longer READY.
         assertEquals(MemberLeavePhase.DONE, flow.deleteAccount().phase)
+    }
+
+    @Test fun `deleteAccount clears the device's own journal of that household`() = runBlocking {
+        val operations = RecordingOperations()
+        val (flow, _) = flow(listOf(response("/member/account/leave", statusReply(blocked = false)), response("/member/account/leave/prepare", prepareReply()), response("/member/account/leave/submit", leftReply())), ScriptedPasskeyAuthorizer(PasskeyResult.Completed(assertionJson())), operations)
+        assertEquals(MemberLeavePhase.READY, flow.refreshStatus().phase)
+        assertEquals(MemberLeavePhase.DONE, flow.deleteAccount().phase)
+        assertEquals(listOf(household), operations.cleared)
     }
 
     @Test fun `deleteAccount keeps the local session when submit reports a blocker`() = runBlocking {
