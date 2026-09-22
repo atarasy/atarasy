@@ -1223,6 +1223,24 @@ private fun MemberOfferDetailCard(
                                 }
                                 Text("Net after corrections: ${review.corrections.net}")
                             }
+                            // SPEC §6.6a. A refund the issuer returned, or the shop's own
+                            // repayment. This platform moved no money either time and
+                            // moves none now: the shop reaches the household by its own
+                            // signed contact, or, where it signed none, by the return
+                            // terms already beside its disclosure. Nothing here is sent
+                            // to the merchant, and there is no refund action (clause 54).
+                            review.corrections?.returns?.takeIf { it.isNotEmpty() }?.let { rows ->
+                                Text("Returns", style = MaterialTheme.typography.titleMedium)
+                                rows.forEach { ret ->
+                                    if (ret.state == "returned") {
+                                        Text("The refund from ${ret.merchant} did not reach you. The shop still owes it to you, off this platform.")
+                                    } else {
+                                        Text("${ret.merchant} reports it repaid this another way.")
+                                    }
+                                    Text(ret.note)
+                                    MerchantContactOrTerms(review.disclosures, ret.merchant)
+                                }
+                            }
                         }
                     }
                 }
@@ -1254,6 +1272,29 @@ private fun contactHref(contact: MemberDisclosureContact): String? = when (conta
     // Only https is a link, for the reason the iOS view gives.
     "url" -> contact.value.takeIf { Uri.parse(it).scheme.equals("https", ignoreCase = true) }
     else -> null
+}
+
+/**
+ * SPEC §6.6a. A correction_return has no product, so the merchant's standing
+ * disclosure (its `product`-less block) is what "its return terms" names. Where
+ * the merchant signed a contact there, that is shown; where it signed none, the
+ * block's own items stand in its place. Nothing is shown for a merchant with no
+ * standing block at all: this hub never invents terms.
+ */
+@Composable
+private fun MerchantContactOrTerms(blocks: List<MemberDisclosure>, merchant: String) {
+    val block = blocks.firstOrNull { it.merchant == merchant && it.product == null } ?: return
+    val contact = block.contact
+    if (contact != null) {
+        ContactLink(contact)
+    } else {
+        block.items.forEach { item ->
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(item.label, fontWeight = FontWeight.SemiBold)
+                Text(item.value)
+            }
+        }
+    }
 }
 
 @Composable

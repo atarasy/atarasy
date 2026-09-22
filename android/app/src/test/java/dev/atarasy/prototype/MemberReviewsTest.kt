@@ -245,4 +245,112 @@ class MemberReviewsTest {
         assertEquals(1200L, review.value.charged)
         assertNull(review.corrections)
     }
+
+    // SPEC §6.6a.
+    private fun returnRow(
+        state: String = "returned", correction: String = "correction-1", offer: String = "fixture-offer",
+        merchant: String = "maker-a", at: Long = 3000L, note: String = "The issuer bounced it.", signature: String = "sig-r1",
+    ): JsonObject = buildJsonObject {
+        put("correction", JsonPrimitive(correction)); put("offer", JsonPrimitive(offer)); put("merchant", JsonPrimitive(merchant))
+        put("state", JsonPrimitive(state)); put("note", JsonPrimitive(note)); put("at", JsonPrimitive(at)); put("signature", JsonPrimitive(signature))
+    }
+    private fun withReturns(offer: String = "fixture-offer", net: Long = 800L, returns: List<JsonObject>, owed: Long): JsonObject =
+        JsonObject(correctionsBody(offer, net).toMutableMap().also { it["returns"] = JsonArray(returns); it["owed"] = JsonPrimitive(owed) })
+
+    @Test fun `both keys are absent where nothing was returned`() {
+        val decoded = MemberCorrectionsCodec.decode(correctionsBody().toString().toByteArray(), "fixture-offer")
+        assertNull(decoded.returns); assertNull(decoded.owed)
+    }
+
+    @Test fun `a returned refund decodes and owed sums it`() {
+        val decoded = MemberCorrectionsCodec.decode(withReturns(returns = listOf(returnRow()), owed = 400L).toString().toByteArray(), "fixture-offer")
+        assertEquals(1, decoded.returns?.size); assertEquals("returned", decoded.returns?.get(0)?.state); assertEquals(400L, decoded.owed)
+    }
+
+    @Test fun `a repaid return leaves nothing owed`() {
+        val repaid = returnRow(state = "repaid", at = 4000L, note = "Sent by bank transfer.", signature = "sig-r2")
+        val decoded = MemberCorrectionsCodec.decode(withReturns(returns = listOf(returnRow(), repaid), owed = 0L).toString().toByteArray(), "fixture-offer")
+        assertEquals(2, decoded.returns?.size); assertEquals(0L, decoded.owed)
+    }
+
+    @Test fun `owed that does not match the sum of unpaid returns is refused`() {
+        assertThrows(MemberFailure.Malformed::class.java) { MemberCorrectionsCodec.decode(withReturns(returns = listOf(returnRow()), owed = 0L).toString().toByteArray(), "fixture-offer") }
+        assertThrows(MemberFailure.Malformed::class.java) { MemberCorrectionsCodec.decode(withReturns(returns = listOf(returnRow()), owed = 401L).toString().toByteArray(), "fixture-offer") }
+    }
+
+    @Test fun `returns present without owed, or owed without returns, is refused`() {
+        val returnsOnly = JsonObject(correctionsBody().toMutableMap().also { it["returns"] = JsonArray(listOf(returnRow())) })
+        assertThrows(MemberFailure.Malformed::class.java) { MemberCorrectionsCodec.decode(returnsOnly.toString().toByteArray(), "fixture-offer") }
+        val owedOnly = JsonObject(correctionsBody().toMutableMap().also { it["owed"] = JsonPrimitive(400L) })
+        assertThrows(MemberFailure.Malformed::class.java) { MemberCorrectionsCodec.decode(owedOnly.toString().toByteArray(), "fixture-offer") }
+    }
+
+    @Test fun `an empty returns array is refused rather than read as none`() {
+        assertThrows(MemberFailure.Malformed::class.java) { MemberCorrectionsCodec.decode(withReturns(returns = emptyList(), owed = 0L).toString().toByteArray(), "fixture-offer") }
+    }
+
+    @Test fun `a return naming a correction outside this receipt is refused`() {
+        val stray = returnRow(correction = "correction-2")
+        assertThrows(MemberFailure.Malformed::class.java) { MemberCorrectionsCodec.decode(withReturns(returns = listOf(stray), owed = 0L).toString().toByteArray(), "fixture-offer") }
+    }
+
+    @Test fun `a return on a collection correction is refused`() {
+        val body = correctionsBody()
+        val rows = body["corrections"]!!.jsonArray.map { it.jsonObject.toMutableMap().also { r -> r["kind"] = JsonPrimitive("collection") } }.map { JsonObject(it) as JsonElement }
+        val collectionBody = JsonObject(body.toMutableMap().also { it["corrections"] = JsonArray(rows); it["returns"] = JsonArray(listOf(returnRow())); it["owed"] = JsonPrimitive(400L) })
+        assertThrows(MemberFailure.Malformed::class.java) { MemberCorrectionsCodec.decode(collectionBody.toString().toByteArray(), "fixture-offer") }
+    }
+
+    @Test fun `a return whose merchant differs from the corrections is refused`() {
+        val wrongMerchant = returnRow(merchant = "maker-b")
+        assertThrows(MemberFailure.Malformed::class.java) { MemberCorrectionsCodec.decode(withReturns(returns = listOf(wrongMerchant), owed = 400L).toString().toByteArray(), "fixture-offer") }
+    }
+
+    @Test fun `more than one returned, or a repaid with no returned, is refused`() {
+        val twice = listOf(returnRow(), returnRow(at = 3500L, signature = "sig-r2"))
+        assertThrows(MemberFailure.Malformed::class.java) { MemberCorrectionsCodec.decode(withReturns(returns = twice, owed = 400L).toString().toByteArray(), "fixture-offer") }
+        val repaidAlone = listOf(returnRow(state = "repaid"))
+        assertThrows(MemberFailure.Malformed::class.java) { MemberCorrectionsCodec.decode(withReturns(returns = repaidAlone, owed = 0L).toString().toByteArray(), "fixture-offer") }
+    }
+
+    @Test fun `a repaid before its own returned, or a return before the correction, is refused`() {
+        val repaidEarly = listOf(returnRow(), returnRow(state = "repaid", at = 2500L, signature = "sig-r2"))
+        assertThrows(MemberFailure.Malformed::class.java) { MemberCorrectionsCodec.decode(withReturns(returns = repaidEarly, owed = 0L).toString().toByteArray(), "fixture-offer") }
+        val beforeCorrection = listOf(returnRow(at = 1000L))
+        assertThrows(MemberFailure.Malformed::class.java) { MemberCorrectionsCodec.decode(withReturns(returns = beforeCorrection, owed = 400L).toString().toByteArray(), "fixture-offer") }
+    }
+
+    @Test fun `an extra field on a return row is refused`() {
+        val extra = JsonObject(returnRow().toMutableMap().also { it["paid"] = JsonPrimitive(true) })
+        assertThrows(MemberFailure.Malformed::class.java) { MemberCorrectionsCodec.decode(withReturns(returns = listOf(extra), owed = 400L).toString().toByteArray(), "fixture-offer") }
+    }
+
+    @Test fun `the shop's own words on a return pass through as plain text`() {
+        val withMarkup = returnRow(note = "<b>sorry</b>, the bank bounced it")
+        val decoded = MemberCorrectionsCodec.decode(withReturns(returns = listOf(withMarkup), owed = 400L).toString().toByteArray(), "fixture-offer")
+        assertEquals("<b>sorry</b>, the bank bounced it", decoded.returns?.get(0)?.note)
+    }
+
+    /** SPEC §6.6a. A settled review carries a return beside its correction, and the offer's own disclosures. */
+    @Test fun `client reads a return beside a settled offer, and carries the offer's disclosures`() = runBlocking {
+        val environment = MemberEnvironment.create("test", "https://unit.example")
+        val fixture = json.parseToJsonElement(checkNotNull(javaClass.getResource("/member-operation-runtime.json")).readText()).jsonObject["committed"]!!.jsonObject["receipt"]!!.jsonObject
+        val offerId = fixture["offer"]!!.jsonPrimitive.content
+        val detail = settledDetail(offerId)
+        val session = MemberSessionInfo("session", detail.household, listOf(detail.presenter), 2_000_000_000_000)
+        fun response(path: String, body: String, status: Int = 200) = MemberHttpResponse(environment.origin + path, environment.origin + path, status, "application/json", "no-store", body.toByteArray())
+        val sessionBody = """{"id":"session","household":"${detail.household}","presenters":["${detail.presenter}"],"expiresAt":2000000000000}"""
+        val transport = ReviewTransport(ArrayDeque(listOf(
+            response("/auth/session", sessionBody),
+            response("/offers/$offerId/settlement", fixture.toString()),
+            response("/offers/$offerId/corrections", withReturns(offer = offerId, returns = listOf(returnRow(offer = offerId)), owed = 400L).toString()),
+        )))
+        val sessions = MemberSessionClient(environment, transport, ReviewVault(StoredMemberSession("amr1_" + "A".repeat(43), session))) { 1_800_000_000_000 }
+        sessions.restore(detail.household)
+        val review = MemberReviews(sessions).load(detail) as MemberReview.Settlement
+        assertEquals(1, review.corrections?.returns?.size)
+        assertEquals("returned", review.corrections?.returns?.get(0)?.state)
+        assertEquals(400L, review.corrections?.owed)
+        assertEquals(detail.disclosures, review.disclosures)
+    }
 }
