@@ -211,4 +211,25 @@ extension MemberDigitalTransportTests {
         var weak = prepared.publicKey; weak["userVerification"] = .string("preferred")
         XCTAssertThrowsError(try NativePasskeyOptions(ceremony: .init(id: prepared.operationID, expiresAt: prepared.expiresAt, publicKey: weak), environment: l.environment, kind: .decision, now: now))
     }
+
+    /// Found on a device, 2026-09-23. A Vox-presented offer carries `predicted_conversion`
+    /// as a fraction; the outcome read it through `MemberJSON`, which had no fractional
+    /// case, so a recorded decision always read back as unresolved. This is that outcome,
+    /// byte for byte as the development member API returned it.
+    func testOutcomeWithAFractionalPredictedConversionIsRecorded() async throws {
+        let env = try MemberEnvironment(name: "development", origin: URL(string: "https://api-dev.vox.delivery")!)
+        let session = MemberSessionInfo(id: "s", household: "key:W-ayxg0PDRdzZ_FmY3iOpuBtLgNtHReNJrYzzsh146E", presenters: ["vox_presenter_dev"], expiresAt: 1_900_000_000_000)
+        let transport = DigitalTransport(session: session, replies: [Data(#"{"operationID": "721faecd-2ed9-4f7f-b8c0-062f4f688543", "operationState": "committed", "decision": {"id": "e8e4b801-fa20-402b-8fef-420dd08dca79", "binding": "digital", "household": "key:W-ayxg0PDRdzZ_FmY3iOpuBtLgNtHReNJrYzzsh146E", "presenter": "vox_presenter_dev", "purpose": "replenish", "presenter_attested": false, "price_band": null, "giver": null, "config_version": "dev-digital-20260923-v1", "presented_at": 1790117885519, "expires_at": 1790204220000, "state": "settled", "exploration_floor_met": true, "mandate": "key:W-ayxg0PDRdzZ_FmY3iOpuBtLgNtHReNJrYzzsh146E.1", "candidates": [{"id": "b72dd886-93c6-4ab2-8899-dd9f70dd263b", "product": "dev_digital_goods_20260923", "quantity": 1, "unit_price": 800, "merchant": "vox_merchant_dev", "maker": "dev_workbench_maker", "ships": "dev_workbench_carrier", "category": null, "predicted_conversion": 0.5, "is_exploration": true, "given_by": null, "valence": "returned", "decided_at": 1790120534044, "kept_as": null, "lineage": null}], "disclosures": [{"merchant": "vox_merchant_dev", "product": null, "version": "dev-disclosure-20260923-v1", "items": [{"label": "Return terms", "value": "Unopened items within 7 days of arrival"}], "contact": {"kind": "email", "value": "support@example.com"}, "signature": "ba96CWyMcNN5scIDIg7rVgmeSPJfDiGprCq/Aj0TJfyLbrSWEO+a6y/AnfftOpvA1DKdlyC+t6BCwIDMwvQ9Ag=="}], "reminders_sent": 0, "decided_at": 1790120534044}}"#.utf8)])
+        let client = MemberClient(environment: env, transport: transport, vault: DigitalVault(session: session), now: { 1_790_120_600_000 })
+        _ = try await client.restore(household: session.household)
+        let handle = MemberOperationHandle(id: "721faecd-2ed9-4f7f-b8c0-062f4f688543", environment: "development", origin: env.origin, sessionID: "s", household: session.household, presenter: "vox_presenter_dev", offer: "e8e4b801-fa20-402b-8fef-420dd08dca79", canonical: "e8e4b801-fa20-402b-8fef-420dd08dca79\nb72dd886-93c6-4ab2-8899-dd9f70dd263b:returned::", expiresAt: 1790120794247, requestDigest: String(repeating: "a", count: 64), reviewedRevision: String(repeating: "b", count: 64), challenge: "c", credentialID: "x", attempted: true, profile: memberDecisionProfile, digitalTermsDigest: "9c29e8dfad0194f044acb4c3e618af6dab6e26c52e6a6803cf9fe77f2b0222ed")
+        guard case .recorded(let result) = await client.decisionOutcome(handle) else { return XCTFail("a recorded outcome with a fractional conversion must be readable") }
+        XCTAssertEqual(result.candidates[0].valence, "returned")
+        XCTAssertEqual(result.candidates[0].predictedConversion, 0.5)
+    }
+    func testMemberJSONRoundTripsAFraction() throws {
+        let value = try JSONDecoder().decode(MemberJSON.self, from: Data(#"{"a":0.5,"b":2,"c":-1.25}"#.utf8))
+        XCTAssertEqual(value, .object(["a": .fraction(0.5), "b": .integer(2), "c": .fraction(-1.25)]))
+        XCTAssertEqual(try JSONDecoder().decode(MemberJSON.self, from: JSONEncoder().encode(value)), value)
+    }
 }

@@ -62,12 +62,17 @@ public final class URLSessionMemberTransport: MemberHTTPTransport, @unchecked Se
 }
 
 public enum MemberJSON: Codable, Equatable, Sendable {
-    case string(String), integer(Int64), bool(Bool), array([MemberJSON]), object([String: MemberJSON]), null
+    // `fraction` exists because an engine offer carries `predicted_conversion`, a
+    // number in [0, 1]. Without it the raw offer inside a digital decision's outcome
+    // could not be decoded, so every Vox-presented decision read back as unresolved
+    // after it had been recorded (found on a device, 2026-09-23).
+    case string(String), integer(Int64), fraction(Double), bool(Bool), array([MemberJSON]), object([String: MemberJSON]), null
     public init(from decoder: Decoder) throws {
         let c = try decoder.singleValueContainer()
         if c.decodeNil() { self = .null }
         else if let v = try? c.decode(Bool.self) { self = .bool(v) }
         else if let v = try? c.decode(Int64.self) { self = .integer(v) }
+        else if let v = try? c.decode(Double.self), v.isFinite { self = .fraction(v) }
         else if let v = try? c.decode(String.self) { self = .string(v) }
         else if let v = try? c.decode([MemberJSON].self) { self = .array(v) }
         else { self = .object(try c.decode([String: MemberJSON].self)) }
@@ -77,6 +82,7 @@ public enum MemberJSON: Codable, Equatable, Sendable {
         switch self {
         case .string(let v): try c.encode(v)
         case .integer(let v): try c.encode(v)
+        case .fraction(let v): try c.encode(v)
         case .bool(let v): try c.encode(v)
         case .array(let v): try c.encode(v)
         case .object(let v): try c.encode(v)
