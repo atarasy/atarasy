@@ -755,3 +755,111 @@ describe("what a member is shown after signing a statement", () => {
     expect(shown).not.toContain("This box has settled");
   });
 });
+
+describe("leaving this host (§14.3), as a member sees it", () => {
+  /** Opens the list and presses "Leave this host". */
+  async function openLeave(routes: Route) {
+    const app = await render((url, method, body) => {
+      if (url === "/config") return { status: 200, body: CONFIG };
+      if (url.startsWith("/api/offers?")) return { status: 200, body: { offers: [] } };
+      return routes(url, method, body);
+    });
+    [...app.querySelectorAll("button")].find((b) => text(b) === "Leave this host")!.click();
+    return settled();
+  }
+
+  test("a blocker is drawn in plain English, an unrecognised kind is shown by its own name, and no deletion is offered", async () => {
+    const app = await openLeave((url) => {
+      if (url.endsWith("/leave") || url.includes("/leave")) {
+        return {
+          status: 200,
+          body: {
+            household: MEMBER.household,
+            blockers: [
+              { kind: "offer_in_progress", id: "o-9" },
+              { kind: "co_signer", id: "mandate-other" },
+              // A kind this screen has never been told about. Named rather
+              // than dropped, since it is what tells the member something is
+              // still holding them here.
+              { kind: "a_future_kind_this_build_does_not_know", id: "x-1" },
+            ],
+          },
+        };
+      }
+      return { status: 404, body: {} };
+    });
+    const shown = text(app);
+    expect(shown).toContain("A box or order is still open. Finish or decline it first.");
+    expect(shown).toContain("You co-sign another household's mandate. Step down first.");
+    expect(shown).toContain("a_future_kind_this_build_does_not_know");
+    expect(shown).toContain("x-1");
+    expect(buttons(app)).not.toContain("Delete my account");
+  });
+
+  test("a clean household signs and deletes, and the page returns to its signed-out state", async () => {
+    stubAuthenticator();
+    const posted: { url: string; body: unknown }[] = [];
+    const app = await openLeave((url, method, body) => {
+      if (method === "POST") posted.push({ url, body });
+      if (url.includes("/leave") && method === "GET") {
+        return { status: 200, body: { household: MEMBER.household, blockers: [] } };
+      }
+      if (url.includes("/leave") && method === "POST") {
+        return { status: 200, body: { deleted: { offers: 2, mandates: 1, identities: 1 } } };
+      }
+      return { status: 404, body: {} };
+    });
+    const checkbox = app.querySelector('input[type="checkbox"]') as HTMLInputElement;
+    expect(checkbox).not.toBeNull();
+    checkbox.click();
+    const del = [...app.querySelectorAll("button")].find((b) => text(b) === "Delete my account") as HTMLButtonElement;
+    expect(del.disabled).toBe(false);
+    del.click();
+    const after = await settled();
+    const sent = posted.find((p) => p.url.includes("/leave"));
+    expect(sent).toBeDefined();
+    expect(typeof (sent!.body as { signature?: string }).signature).toBe("string");
+    const shown = text(after);
+    expect(shown).toContain("Deleted.");
+    expect(shown).toContain("4 records removed");
+    // §16.1's setup screen, the page's signed-out state.
+    expect(buttons(after)).toContain("Create a passkey");
+    expect(localStorage.getItem("atarasy.member")).toBeNull();
+  });
+
+  test("a 409 at the post shows the blockers again and keeps the session", async () => {
+    stubAuthenticator();
+    let getLeaveCalls = 0;
+    const app = await openLeave((url, method) => {
+      if (url.includes("/leave") && method === "GET") {
+        getLeaveCalls++;
+        return {
+          status: 200,
+          body: {
+            household: MEMBER.household,
+            blockers: getLeaveCalls === 1 ? [] : [{ kind: "reservation_held", id: "o-late" }],
+          },
+        };
+      }
+      if (url.includes("/leave") && method === "POST") {
+        // The shape the real engine answers with: a message, and no
+        // structured `blockers` field, so the screen has to read them again.
+        return { status: 409, body: { error: "leave_blocked", message: "o-late is unresolved" } };
+      }
+      return { status: 404, body: {} };
+    });
+    const checkbox = app.querySelector('input[type="checkbox"]') as HTMLInputElement;
+    checkbox.click();
+    const del = [...app.querySelectorAll("button")].find((b) => text(b) === "Delete my account") as HTMLButtonElement;
+    del.click();
+    const after = await settled();
+    expect(getLeaveCalls).toBe(2);
+    const shown = text(after);
+    expect(shown).toContain("Something changed since this screen opened");
+    expect(shown).toContain("Money is still held for an order.");
+    expect(buttons(after)).not.toContain("Delete my account");
+    // The session is kept: the member is still signed in, not returned to setup.
+    expect(localStorage.getItem("atarasy.member")).not.toBeNull();
+    expect(buttons(after)).not.toContain("Create a passkey");
+  });
+});

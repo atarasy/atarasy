@@ -43,6 +43,26 @@ export function canonicalWithdrawal(offerId: string, decidedAt: number): string 
 }
 
 /**
+ * §14.3. What a household signs to leave a host: its own identifier and the
+ * host it is leaving, which is the relying party the engine behind it
+ * asserts for. `hub/leave.ts` builds the same bytes from a JSON array rather
+ * than the four-field shape above, and this file matches it rather than
+ * importing it, for the reason every canonical form here does.
+ */
+export const LEAVE_DOMAIN = "valence.leave.1";
+
+export function canonicalLeave(household: string, host: string, at: number): string {
+  return JSON.stringify([LEAVE_DOMAIN, household, host, at]);
+}
+
+/** Clause 43. What a household signs to read its own export through this hub; the moment keeps a seen signature from being used later. */
+export const EXPORT_DOMAIN = "valence.export.1";
+
+export function canonicalExport(household: string, host: string, at: number): string {
+  return JSON.stringify([EXPORT_DOMAIN, household, host, at]);
+}
+
+/**
  * Specification §6.5. The settlement statement a household signs before a
  * physical box with goods used is charged, in the shape that is signed:
  *
