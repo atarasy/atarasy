@@ -1,5 +1,6 @@
 package dev.atarasy.prototype
 
+import android.net.Uri
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
@@ -7,6 +8,7 @@ import androidx.activity.compose.setContent
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.compose.foundation.clickable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.layout.Arrangement
@@ -38,7 +40,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -1042,11 +1046,17 @@ private fun MemberOfferDetailCard(
                             Text("Made by ${candidate.maker}")
                         }
                     }
-                    detail.disclosures.flatMap { it.items }.forEach { item ->
-                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Text(item.label, fontWeight = FontWeight.SemiBold)
-                            Text(item.value)
+                    detail.disclosures.forEach { block ->
+                        block.items.forEach { item ->
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text(item.label, fontWeight = FontWeight.SemiBold)
+                                Text(item.value)
+                            }
                         }
+                        // Question 72. Beside this block's own terms, and only where
+                        // this merchant signed one. Tapping is the household's own
+                        // act; nothing here sends anything on its behalf.
+                        block.contact?.let { ContactLink(it) }
                     }
                     when {
                         reviewFailed -> Text("The decision review is unavailable.")
@@ -1077,6 +1087,31 @@ private fun MemberOfferDetailCard(
             }
         }
     }
+}
+
+/**
+ * Question 72. The plain link a tap opens: `mailto:`, `tel:` or the url itself. The
+ * displayed text is the value verbatim, exactly as the merchant signed it. Nothing
+ * here composes a message or sends anything on the household's behalf; the tap, if
+ * there is one, is the household's own.
+ */
+@Composable
+private fun ContactLink(contact: MemberDisclosureContact) {
+    val uriHandler = LocalUriHandler.current
+    Text(
+        contact.value,
+        color = MaterialTheme.colorScheme.primary,
+        textDecoration = TextDecoration.Underline,
+        modifier = Modifier.clickable { contactHref(contact)?.let(uriHandler::openUri) },
+    )
+}
+
+private fun contactHref(contact: MemberDisclosureContact): String? = when (contact.kind) {
+    "email" -> "mailto:" + Uri.encode(contact.value, "@.+-_")
+    "tel" -> "tel:" + Uri.encode(contact.value, "+-")
+    // Only https is a link, for the reason the iOS view gives.
+    "url" -> contact.value.takeIf { Uri.parse(it).scheme.equals("https", ignoreCase = true) }
+    else -> null
 }
 
 @Composable

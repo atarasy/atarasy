@@ -126,6 +126,8 @@ private func checkedAdd(_ total: inout Int64, _ amount: Int64) throws {
 }
 private func disclosureBytes(_ blocks: [MemberOfferDetail.Disclosure]) -> Data {
     // Length-safe structured encoding avoids delimiter and Unicode-equality ambiguity.
-    let values: [[String?]] = blocks.map { [$0.merchant, $0.product, $0.version, $0.signature] + $0.items.flatMap { [$0.label, $0.value] } }
+    // The contact (question 72) sits at a fixed position, both fields nil where absent,
+    // so its presence or absence is part of what this compares.
+    let values: [[String?]] = blocks.map { [$0.merchant, $0.product, $0.version, $0.signature, $0.contact?.kind, $0.contact?.value] + $0.items.flatMap { [$0.label, $0.value] } }
     return (try? JSONEncoder().encode(values)) ?? Data()
 }

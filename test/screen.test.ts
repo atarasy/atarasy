@@ -71,6 +71,15 @@ describe("§10a.5: a product block sits beside the standing text and never in it
     const got = blocksFor([standing], { merchant: "maker-a", product: null });
     expect(got[0]!.block.items).toEqual(standing.items);
   });
+
+  test("a block's own contact passes through untouched, and a block with none carries none", () => {
+    // Question 72. `blocksFor` reads only `merchant` and `product`; contact
+    // is neither, so this is a passthrough and not a lookup.
+    const withContact = { ...forTea, contact: { kind: "email" as const, value: "returns@maker-a.example" } };
+    const got = blocksFor([standing, withContact], { merchant: "maker-a", product: "tea-a" });
+    expect(got[0]!.block.contact).toEqual({ kind: "email", value: "returns@maker-a.example" });
+    expect(got[1]!.block.contact).toBeUndefined();
+  });
 });
 
 describe("§6.5: what the statement says will be charged", () => {

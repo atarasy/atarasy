@@ -2,9 +2,11 @@ package dev.atarasy.prototype
 
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -33,6 +35,15 @@ class MemberReviewsTest {
         return MemberOfferCodec.detail(body.toString().toByteArray(), body["id"]!!.jsonPrimitive.content, "detail-house")
     }
     private fun changed(name: String, block: (MutableMap<String, JsonElement>) -> Unit): ByteArray = value(name).toMutableMap().also(block).let(::JsonObject).toString().toByteArray()
+    /** Question 72. Sets or clears the first disclosure block's `contact` in a captured case. */
+    private fun withContact(name: String, contact: JsonElement?): ByteArray = changed(name) { map ->
+        val blocks = map.getValue("disclosures").jsonArray.mapIndexed { i, el ->
+            val row = el.jsonObject.toMutableMap()
+            if (i == 0) { if (contact != null) row["contact"] = contact else row.remove("contact") }
+            JsonObject(row) as JsonElement
+        }
+        map["disclosures"] = JsonArray(blocks)
+    }
 
     @Test fun `actual approval preserves deliberation exclusions and nil versus zero`() {
         val detail = detail("digital")
@@ -68,6 +79,32 @@ class MemberReviewsTest {
         )
         bad.forEach { (bytes, source) ->
             assertThrows(MemberFailure::class.java) { if (source.binding == "digital") MemberReviewCodec.approval(bytes, source) else MemberReviewCodec.statement(bytes, source) }
+        }
+    }
+
+    /**
+     * Question 72, decided 2026-09-22. Carried on the approval and the statement the
+     * same way as the detail: absent by default (the captured fixtures predate the
+     * field), and where present it must match the detail's own copy of the block
+     * exactly, the same as any other changed field would be refused.
+     */
+    @Test fun `disclosure contact is carried and must match the detail`() {
+        val contact = buildJsonObject { put("kind", JsonPrimitive("email")); put("value", JsonPrimitive("returns@maker-a.example")) }
+        val mismatched = buildJsonObject { put("kind", JsonPrimitive("email")); put("value", JsonPrimitive("different@maker-a.example")) }
+        for (binding in listOf("digital", "physical")) {
+            val detailBytes = withContact("$binding-detail", contact)
+            val detail = MemberOfferCodec.detail(detailBytes, value("$binding-detail")["id"]!!.jsonPrimitive.content, "detail-house")
+            assertEquals(MemberDisclosureContact("email", "returns@maker-a.example"), detail.disclosures[0].contact)
+
+            val reviewBytes = withContact("$binding-known-carriage", contact)
+            val decodedContact = if (binding == "digital") MemberReviewCodec.approval(reviewBytes, detail).disclosures[0].contact
+                                  else MemberReviewCodec.statement(reviewBytes, detail).disclosures[0].contact
+            assertEquals(MemberDisclosureContact("email", "returns@maker-a.example"), decodedContact)
+
+            val mismatchBytes = withContact("$binding-known-carriage", mismatched)
+            assertThrows(MemberFailure::class.java) {
+                if (binding == "digital") MemberReviewCodec.approval(mismatchBytes, detail) else MemberReviewCodec.statement(mismatchBytes, detail)
+            }
         }
     }
 

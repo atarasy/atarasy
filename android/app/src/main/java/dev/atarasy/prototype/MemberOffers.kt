@@ -46,12 +46,16 @@ data class MemberCandidate(
     val collectedAs: String?,
 )
 data class MemberDisclosureItem(val label: String, val value: String)
+/** Question 72, decided 2026-09-22. The merchant's own contact, shown beside its
+ * return terms; null where it gave none. Rendered exactly as signed. */
+data class MemberDisclosureContact(val kind: String, val value: String)
 data class MemberDisclosure(
     val merchant: String,
     val product: String?,
     val version: String,
     val items: List<MemberDisclosureItem>,
     val signature: String,
+    val contact: MemberDisclosureContact?,
 )
 data class MemberOfferDetail(
     val id: String,
@@ -87,6 +91,8 @@ object MemberOfferCodec {
     )
     private val disclosureKeys = setOf("merchant", "product", "version", "items", "signature")
     private val itemKeys = setOf("label", "value")
+    private val contactKeys = setOf("kind", "value")
+    private val contactKinds = setOf("email", "tel", "url")
     private val bindings = setOf("digital", "physical")
     private val states = setOf("drafted", "presented", "decided", "expired", "withdrawn", "settled")
     private val purposes = setOf("gift", "replenish", "trial", "ceremonial", "assortment")
@@ -158,11 +164,23 @@ object MemberOfferCodec {
     }
 
     private fun disclosure(element: JsonElement): MemberDisclosure {
-        val value = element.jsonObject; require(value.keys == disclosureKeys)
+        val value = element.jsonObject; require(value.keys == disclosureKeys || value.keys == disclosureKeys + "contact")
         val items = value.required("items").jsonArray.map {
             val item = it.jsonObject; require(item.keys == itemKeys); MemberDisclosureItem(item.string("label"), item.string("value"))
         }
-        return MemberDisclosure(value.string("merchant"), value.nullableString("product"), value.string("version"), items, value.string("signature"))
+        return MemberDisclosure(value.string("merchant"), value.nullableString("product"), value.string("version"), items, value.string("signature"), contact(value))
+    }
+    /** Question 72. Absent or explicitly null is no contact; present must be exactly
+     * `kind` (one of three) and `value` (non-empty, at most 256 UTF-8 bytes), the same
+     * limit the engine enforces before it will sign one. */
+    private fun contact(value: JsonObject): MemberDisclosureContact? {
+        if (!value.containsKey("contact")) return null
+        val raw = value.required("contact")
+        if (raw === JsonNull) return null
+        val c = raw.jsonObject; require(c.keys == contactKeys)
+        val kind = c.string("kind"); require(kind in contactKinds)
+        val contactValue = c.string("value"); require(contactValue.isNotEmpty() && contactValue.toByteArray(StandardCharsets.UTF_8).size <= 256)
+        return MemberDisclosureContact(kind, contactValue)
     }
 
     private fun objectOf(bytes: ByteArray): JsonObject = json.parseToJsonElement(bytes.toString(StandardCharsets.UTF_8)).jsonObject

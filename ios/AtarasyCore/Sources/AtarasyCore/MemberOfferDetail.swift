@@ -12,8 +12,12 @@ public struct MemberOfferDetail: Codable, Equatable, Sendable {
     }
     public struct Disclosure: Codable, Equatable, Sendable {
         public struct Item: Codable, Equatable, Sendable { public let label: String; public let value: String }
+        /// Question 72, decided 2026-09-22. The merchant's own contact, shown beside its
+        /// return terms; nil where it gave none. Rendered exactly as signed.
+        public struct Contact: Codable, Equatable, Sendable { public let kind: String; public let value: String }
         public let merchant: String; public let product: String?; public let version: String
         public let items: [Item]; public let signature: String
+        public let contact: Contact?
     }
     public let id: String; public let binding: String; public let household: String; public let presenter: String
     public let presenterAttested: Bool; public let purpose: String; public let priceBand: PriceBand?; public let giver: String?
@@ -32,7 +36,9 @@ public struct MemberOfferDetail: Codable, Equatable, Sendable {
               candidates.allSatisfy({ Set($0.keys).subtracting(["collected_as"]) == Set("id product quantity unit_price merchant maker ships category predicted_conversion is_exploration given_by valence decided_at kept_as lineage".split(separator: " ").map(String.init)) }),
               let disclosures = object["disclosures"] as? [[String: Any]],
               disclosures.allSatisfy({ block in
-                  guard Set(block.keys) == Set(["merchant", "product", "version", "items", "signature"]), let items = block["items"] as? [[String: Any]] else { return false }
+                  guard Set(block.keys).subtracting(["contact"]) == Set(["merchant", "product", "version", "items", "signature"]),
+                        let items = block["items"] as? [[String: Any]],
+                        validDisclosureContact(block["contact"]) else { return false }
                   return items.allSatisfy { Set($0.keys) == Set(["label", "value"]) }
               }) else { throw MemberFailure.malformed }
         if let band = object["price_band"] as? [String: Any], Set(band.keys) != Set(["min", "max"]) { throw MemberFailure.malformed }
@@ -68,5 +74,39 @@ public struct MemberOfferDetail: Codable, Equatable, Sendable {
         }
         if supplied && collectedAs == nil { return "Not collected by the deadline. Never charged to you." }
         return "Not returned: the collection did not find it in the box, or it was not collected by the deadline. Never charged to you."
+    }
+}
+
+/// Question 72. Shape only, matching the engine's own check: absent or explicitly
+/// null is no contact at all; present must be exactly `kind` (one of three) and
+/// `value` (non-empty, at most 256 UTF-8 bytes), the same limit the engine enforces
+/// before it will sign one. Shared by `MemberOfferDetail.decode` and `ReviewValidation`.
+func validDisclosureContact(_ raw: Any?) -> Bool {
+    guard let raw, !(raw is NSNull) else { return true }
+    guard let c = raw as? [String: Any], Set(c.keys) == Set(["kind", "value"]),
+          let kind = c["kind"] as? String, ["email", "tel", "url"].contains(kind),
+          let value = c["value"] as? String, !value.isEmpty, value.utf8.count <= 256
+    else { return false }
+    return true
+}
+
+extension MemberOfferDetail.Disclosure.Contact {
+    /// The plain link a tap opens: `mailto:`, `tel:` or the url itself. Nothing here
+    /// composes a message or sends anything; the tap, if there is one, is the
+    /// household's own (§10a.7). `nil` only where the signed value cannot form a URL.
+    public var url: URL? {
+        let scheme: String
+        switch kind {
+        case "email": scheme = "mailto:"
+        case "tel": scheme = "tel:"
+        // Only https is a link: the engine refuses any other scheme at
+        // registration, and a host that did not would otherwise hand the
+        // screen a `javascript:` or `file:` link.
+        default: return URL(string: value).flatMap { $0.scheme?.lowercased() == "https" ? $0 : nil }
+        }
+        var allowed = CharacterSet.alphanumerics
+        allowed.insert(charactersIn: "+-._@")
+        let encoded = value.addingPercentEncoding(withAllowedCharacters: allowed) ?? value
+        return URL(string: scheme + encoded)
     }
 }

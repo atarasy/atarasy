@@ -138,12 +138,22 @@ enum ReviewValidation {
         return present > 0
     }
     static func disclosureShape(_ value: Any?) throws {
-        try rows(value, keys: "merchant product version items signature")
-        for row in value as! [[String: Any]] { try rows(row["items"], keys: "label value") }
+        try rows(value, keys: "merchant product version items signature", optional: "contact")
+        for row in value as! [[String: Any]] {
+            try rows(row["items"], keys: "label value")
+            guard validDisclosureContact(row["contact"]) else { throw MemberFailure.malformed }
+        }
+    }
+    static func sameContact(_ a: MemberOfferDetail.Disclosure.Contact?, _ b: MemberOfferDetail.Disclosure.Contact?) -> Bool {
+        switch (a, b) {
+        case (.none, .none): return true
+        case let (.some(a), .some(b)): return same(a.kind, b.kind) && same(a.value, b.value)
+        default: return false
+        }
     }
     static func sameDisclosures(_ a: [MemberOfferDetail.Disclosure], _ b: [MemberOfferDetail.Disclosure]) -> Bool {
         a.count == b.count && zip(a, b).allSatisfy { a, b in
-            same(a.merchant, b.merchant) && sameOptional(a.product, b.product) && same(a.version, b.version) && same(a.signature, b.signature) && a.items.count == b.items.count && zip(a.items, b.items).allSatisfy { same($0.label, $1.label) && same($0.value, $1.value) }
+            same(a.merchant, b.merchant) && sameOptional(a.product, b.product) && same(a.version, b.version) && same(a.signature, b.signature) && sameContact(a.contact, b.contact) && a.items.count == b.items.count && zip(a.items, b.items).allSatisfy { same($0.label, $1.label) && same($0.value, $1.value) }
         }
     }
     static func matches(_ c: MemberOfferDetail.Candidate, product: String, merchant: String, maker: String, ships: String, giver: String?, quantity: Int64, unitPrice: Int64, valence: String) -> Bool {
