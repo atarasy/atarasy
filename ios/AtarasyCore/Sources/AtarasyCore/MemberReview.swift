@@ -6,8 +6,10 @@ public enum MemberReview: Equatable, Sendable {
     /// A physical box that has already settled. There is nothing left to sign, so the
     /// settlement that stands is shown instead of a statement to prepare. §6.6: beside
     /// it, whatever corrections the merchant has appended, or nil where none were found,
-    /// which is never treated as a reason to hide the settlement itself.
-    case settlement(ProtocolSettlement, MemberCorrections?)
+    /// which is never treated as a reason to hide the settlement itself. The offer's own
+    /// disclosures ride along so a correction_return (§6.6a) can show the merchant's signed
+    /// contact or its return terms beside it; nothing here refetches them.
+    case settlement(ProtocolSettlement, MemberCorrections?, [MemberOfferDetail.Disclosure])
 }
 public struct MemberDisclosureReference: Codable, Equatable, Sendable {
     public let merchant: String; public let product: String?
