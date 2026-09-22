@@ -6,6 +6,7 @@ configs:
   Release: release
   UITesting: debug
   Development: debug
+  Production: release
 packages:
   AtarasyCore:
     path: AtarasyCore
@@ -38,6 +39,15 @@ targets:
           GENERATE_INFOPLIST_FILE: NO
           INFOPLIST_FILE: development/Info.plist
           CODE_SIGN_ENTITLEMENTS: development/AtarasyDevelopment.entitlements
+        # The release identity (vault `77`): members.vox.delivery is the RP ID,
+        # and changing it later re-registers every member.
+        Production:
+          DEVELOPMENT_TEAM: 83W4J65UE6
+          PRODUCT_BUNDLE_IDENTIFIER: com.vox.atarasy
+          GENERATE_INFOPLIST_FILE: NO
+          INFOPLIST_FILE: production/Info.plist
+          CODE_SIGN_ENTITLEMENTS: production/Atarasy.entitlements
+          TARGETED_DEVICE_FAMILY: '1'
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.atarasy.prototype
         GENERATE_INFOPLIST_FILE: YES
@@ -80,3 +90,15 @@ schemes:
       config: Development
     archive:
       config: Development
+  AtarasyProduction:
+    build:
+      targets:
+        AtarasyPrototype: all
+    run:
+      config: Production
+    profile:
+      config: Production
+    analyze:
+      config: Production
+    archive:
+      config: Production
