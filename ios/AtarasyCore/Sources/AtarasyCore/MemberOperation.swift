@@ -62,6 +62,8 @@ public enum MemberOperationOutcome: Equatable, Sendable {
     case unresolved
 }
 public protocol MemberOperationStore: Sendable {
+    /// §14.3. Every operation of a household this device holds goes when the account is deleted.
+    func removeAll(household: String) throws
     func save(_ handle: MemberOperationHandle) throws
     func load(id: String) throws -> MemberOperationHandle?
     func handles() throws -> [MemberOperationHandle]
@@ -69,12 +71,18 @@ public protocol MemberOperationStore: Sendable {
     /// or refuses an already attempted operation.
     func claim(_ handle: MemberOperationHandle, confirmation: String) throws
 }
-public extension MemberOperationStore { func handles() throws -> [MemberOperationHandle] { [] } }
+public extension MemberOperationStore {
+    func handles() throws -> [MemberOperationHandle] { [] }
+    func removeAll(household: String) throws {}
+}
 
 public protocol MemberOperationKeyVault: Sendable {
     func key(scope: String, create: Bool) throws -> Data?
     func install(key: Data, scope: String) throws
+    /// §14.3. Removes a scope's key, so the journal it decrypted cannot be read again.
+    func forget(scope: String) throws
 }
+public extension MemberOperationKeyVault { func forget(scope: String) throws {} }
 
 /// A per-installation identifier kept outside Keychain. Reinstalling creates a new value, so
 /// Keychain items that survive app deletion are not silently treated as this installation's keys.
@@ -117,6 +125,10 @@ public final class KeychainMemberOperationKeyVault: MemberOperationKeyVault, Sen
         guard randomStatus == errSecSuccess else { throw MemberFailure.storage }
         try install(key: key, scope: scope)
         return key
+    }
+    public func forget(scope: String) throws {
+        let status = SecItemDelete(try query(scope) as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else { throw MemberFailure.storage }
     }
     public func install(key: Data, scope: String) throws {
         guard key.count == 32 else { throw MemberFailure.invalidInput }
@@ -193,6 +205,20 @@ public final class ProtectedFileMemberOperationStore: MemberOperationStore, @unc
         let url = try path(handle.id); try data.write(to: url, options: [.atomic, .completeFileProtection]); try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
     }
     public func save(_ handle: MemberOperationHandle) throws { try lock.withLock { if let old = try read(handle.id) { guard old.sameOperation(handle) else { throw MemberFailure.storage } } else { try write(handle) } } }
+    public func removeAll(household: String) throws {
+        try lock.withLock {
+            let reference = scope(household)
+            for url in try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) where url.pathExtension == "private" {
+                // The envelope names the scope in clear, so a journal whose key is
+                // already gone is still removed with the household it belongs to.
+                guard let data = try? Data(contentsOf: url),
+                      let envelope = try? JSONDecoder().decode(ProtectedOperationEnvelope.self, from: data),
+                      envelope.scope == reference else { continue }
+                try FileManager.default.removeItem(at: url)
+            }
+            try vault.forget(scope: reference)
+        }
+    }
     public func load(id: String) throws -> MemberOperationHandle? { try lock.withLock { try read(id) } }
     public func handles() throws -> [MemberOperationHandle] { try lock.withLock { try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil).filter { $0.pathExtension == "private" }.sorted { $0.lastPathComponent < $1.lastPathComponent }.map { guard let value = try read($0.deletingPathExtension().lastPathComponent) else { throw MemberFailure.storage }; return value } } }
     public func claim(_ handle: MemberOperationHandle, confirmation: String) throws { try lock.withLock { guard let current = try read(handle.id), current == handle, !current.attempted else { throw MemberFailure.busy }; try write(current.markedAttempted(confirmation: confirmation)) } }
