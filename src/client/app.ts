@@ -959,7 +959,7 @@ async function statement(member: Member, offerId: string) {
             `/offers/${encodeURIComponent(st.offer)}/settlement`
           );
           if (stood.status === 200) {
-            await showReceipt(member, st.offer, stood.body, "refused");
+            await showReceipt(member, st.offer, stood.body, "refused", st.disclosures);
             return;
           }
         }
@@ -984,7 +984,7 @@ async function statement(member: Member, offerId: string) {
             const mine = recorded === signature
               ? "unanswered-mine"
               : typeof recorded === "string" || recorded === null ? "unanswered-other" : "unanswered-unknown";
-            await showReceipt(member, st.offer, stood.body, mine);
+            await showReceipt(member, st.offer, stood.body, mine, st.disclosures);
             return;
           }
         }
@@ -995,7 +995,7 @@ async function statement(member: Member, offerId: string) {
       if (typeof settled.body.charged !== "number") {
         throw new Error("The answer came back in a form this screen could not read, so it cannot say whether this settled. Open the list again before signing a second time.");
       }
-      await showReceipt(member, st.offer, settled.body, "signed");
+      await showReceipt(member, st.offer, settled.body, "signed", st.disclosures);
     } catch (e) {
       status.textContent = (e as Error).message;
       sign.disabled = false;
@@ -1114,10 +1114,10 @@ function receipt(r: Receipt, path: ReceiptPath): Node {
  * from `validateCorrections` as `null`, drawn as nothing rather than as a
  * failure of the receipt the household is here to see.
  */
-async function showReceipt(member: Member, offerId: string, r: Receipt, path: ReceiptPath) {
+async function showReceipt(member: Member, offerId: string, r: Receipt, path: ReceiptPath, disclosures: Statement["disclosures"]) {
   const got = await api<unknown>("GET", `/offers/${encodeURIComponent(offerId)}/corrections`);
   const corrections = got.status === 200 ? validateCorrections(got.body, offerId) : null;
-  show(el("h1", {}, "Atarasy"), receipt(r, path), ...correctionsCard(corrections), back(member));
+  show(el("h1", {}, "Atarasy"), receipt(r, path), ...correctionsCard(corrections, disclosures), back(member));
 }
 
 /**
@@ -1125,7 +1125,7 @@ async function showReceipt(member: Member, offerId: string, r: Receipt, path: Re
  * markup (clause 54): `el()` appends every string child as a text node, so
  * a note is never parsed as HTML here.
  */
-function correctionsCard(c: Corrections | null): Node[] {
+function correctionsCard(c: Corrections | null, disclosures: Statement["disclosures"]): Node[] {
   if (!c || c.corrections.length === 0) return [];
   return [el("div", { class: "card" },
     el("p", {}, "The merchant of record has appended the following to the settlement above. There is nothing here for you to sign or dispute."),
@@ -1134,7 +1134,31 @@ function correctionsCard(c: Corrections | null): Node[] {
         el("p", {}, `${line.kind === "refund" ? "Refund" : "Collection"} from ${line.merchant}: −${yen(line.amount)}, ${when(line.corrected_at)}.`),
         el("p", { class: "muted" }, line.note))
     ),
-    el("p", {}, `Net after corrections: ${yen(c.net)}.`))];
+    el("p", {}, `Net after corrections: ${yen(c.net)}.`),
+    ...correctionReturnRows(c, disclosures))];
+}
+
+/**
+ * SPEC §6.6a. A refund the issuer later returned, and the shop's own
+ * repayment once it reports one. This platform moved no money either time and
+ * never will: the shop reaches the household by whatever it signed as its own
+ * contact, or, where it signed none, by the return terms already beside its
+ * disclosure. Nothing here is sent to the merchant and there is no refund
+ * action to take (clause 54).
+ */
+function correctionReturnRows(c: Corrections, disclosures: Statement["disclosures"]): Node[] {
+  if (!c.returns || c.returns.length === 0) return [];
+  const byId = new Map(c.corrections.map((row) => [row.id, row]));
+  return c.returns.map((ret) => {
+    const original = byId.get(ret.correction);
+    const amount = original ? yen(original.amount) : "";
+    return el("div", { class: "card" },
+      ret.state === "returned"
+        ? el("p", {}, `The refund of ${amount} from ${ret.merchant} did not reach you. The shop still owes it to you, off this platform.`)
+        : el("p", {}, `${ret.merchant} reports it repaid this another way.`),
+      el("p", { class: "muted" }, ret.note),
+      ...blockFor(disclosures, { merchant: ret.merchant, product: null }));
+  });
 }
 
 /**

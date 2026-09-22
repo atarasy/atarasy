@@ -195,6 +195,94 @@ describe("§6.6, question 70: the household's receipt of a settlement's correcti
   });
 });
 
+describe("SPEC §6.6a: a returned refund, and the shop's own repayment", () => {
+  const base = () => ({
+    offer: "offer-1",
+    original: { charged: 1200, carriage: 0 },
+    corrections: [
+      { id: "correction-1", offer: "offer-1", merchant: "maker-a", amount: 400, kind: "refund", note: "One tin arrived damaged.", corrected_at: 2000, signature: "sig-1" },
+    ],
+    net: 800,
+  });
+  const returned = () => ({ correction: "correction-1", offer: "offer-1", merchant: "maker-a", state: "returned" as const, note: "The issuer bounced it.", at: 3000, signature: "sig-r1" });
+
+  test("both keys are absent where nothing was returned", () => {
+    const got = validateCorrections(base(), "offer-1");
+    expect(got!.returns).toBeUndefined();
+    expect(got!.owed).toBeUndefined();
+  });
+
+  test("a returned refund decodes, and owed sums it", () => {
+    const got = validateCorrections({ ...base(), returns: [returned()], owed: 400 }, "offer-1");
+    expect(got).not.toBeNull();
+    expect(got!.returns).toHaveLength(1);
+    expect(got!.returns![0]!.state).toBe("returned");
+    expect(got!.owed).toBe(400);
+  });
+
+  test("a repaid return leaves nothing owed", () => {
+    const repaid = { ...returned(), state: "repaid" as const, at: 4000, note: "Sent by bank transfer.", signature: "sig-r2" };
+    const got = validateCorrections({ ...base(), returns: [returned(), repaid], owed: 0 }, "offer-1");
+    expect(got!.returns).toHaveLength(2);
+    expect(got!.owed).toBe(0);
+  });
+
+  test("owed that does not match the sum of unpaid returns is refused", () => {
+    expect(validateCorrections({ ...base(), returns: [returned()], owed: 0 }, "offer-1")).toBeNull();
+    expect(validateCorrections({ ...base(), returns: [returned()], owed: 401 }, "offer-1")).toBeNull();
+  });
+
+  test("returns present without owed, or owed without returns, is refused", () => {
+    expect(validateCorrections({ ...base(), returns: [returned()] }, "offer-1")).toBeNull();
+    expect(validateCorrections({ ...base(), owed: 400 }, "offer-1")).toBeNull();
+  });
+
+  test("an empty returns array is refused rather than read as none", () => {
+    expect(validateCorrections({ ...base(), returns: [], owed: 0 }, "offer-1")).toBeNull();
+  });
+
+  test("a return naming a correction outside this receipt is refused", () => {
+    const stray = { ...returned(), correction: "correction-2" };
+    expect(validateCorrections({ ...base(), returns: [stray], owed: 0 }, "offer-1")).toBeNull();
+  });
+
+  test("a return on a collection (not a refund) correction is refused", () => {
+    const b = base();
+    b.corrections = [{ ...b.corrections[0]!, kind: "collection" }];
+    expect(validateCorrections({ ...b, returns: [returned()], owed: 400 }, "offer-1")).toBeNull();
+  });
+
+  test("a return whose merchant differs from the correction's is refused", () => {
+    const wrongMerchant = { ...returned(), merchant: "maker-b" };
+    expect(validateCorrections({ ...base(), returns: [wrongMerchant], owed: 400 }, "offer-1")).toBeNull();
+  });
+
+  test("more than one returned, or a repaid with no returned, is refused", () => {
+    const twice = [returned(), { ...returned(), at: 3500, signature: "sig-r2" }];
+    expect(validateCorrections({ ...base(), returns: twice, owed: 400 }, "offer-1")).toBeNull();
+    const repaidAlone = [{ ...returned(), state: "repaid" as const }];
+    expect(validateCorrections({ ...base(), returns: repaidAlone, owed: 0 }, "offer-1")).toBeNull();
+  });
+
+  test("a repaid before its own returned, or a return before the correction, is refused", () => {
+    const repaidEarly = [returned(), { ...returned(), state: "repaid" as const, at: 2500, signature: "sig-r2" }];
+    expect(validateCorrections({ ...base(), returns: repaidEarly, owed: 0 }, "offer-1")).toBeNull();
+    const beforeCorrection = { ...returned(), at: 1000 };
+    expect(validateCorrections({ ...base(), returns: [beforeCorrection], owed: 400 }, "offer-1")).toBeNull();
+  });
+
+  test("an extra field on a return row is refused", () => {
+    const extra = { ...returned(), paid: true } as unknown as ReturnType<typeof returned>;
+    expect(validateCorrections({ ...base(), returns: [extra], owed: 400 }, "offer-1")).toBeNull();
+  });
+
+  test("the shop's own words on a return pass through as plain text", () => {
+    const withMarkup = { ...returned(), note: "<b>sorry</b>, the bank bounced it" };
+    const got = validateCorrections({ ...base(), returns: [withMarkup], owed: 400 }, "offer-1");
+    expect(got!.returns![0]!.note).toBe("<b>sorry</b>, the bank bounced it");
+  });
+});
+
 describe("a refusal says what happened and what the member can do", () => {
   test("every code the screen can provoke has a sentence", () => {
     for (const code of [

@@ -133,14 +133,35 @@ export type Correction = {
   corrected_at: number;
   signature: string;
 };
+/**
+ * SPEC §6.6a, question 72's sibling for what a returned refund is: a merchant's
+ * signed record that a refund it had already posted (a `refund` correction) did
+ * not reach the household, or that it later repaid the household another way.
+ * Neither changes `net`; the money is between the household and the shop, off
+ * this platform.
+ */
+export type CorrectionReturn = {
+  correction: string;
+  offer: string;
+  merchant: string;
+  state: "returned" | "repaid";
+  note: string;
+  at: number;
+  signature: string;
+};
 export type Corrections = {
   offer: string;
   original: { charged: number; carriage: number | null };
   corrections: Correction[];
   net: number;
+  /** Present only when at least one return is held for the offer. */
+  returns?: CorrectionReturn[];
+  /** Present only alongside `returns`. The sum owed for refunds returned and not yet repaid. */
+  owed?: number;
 };
 
 const CORRECTION_KEYS = ["id", "offer", "merchant", "amount", "kind", "note", "corrected_at", "signature"];
+const RETURN_KEYS = ["correction", "offer", "merchant", "state", "note", "at", "signature"];
 
 /**
  * §6.6. Checked the same way every other response from the engine is checked
@@ -151,7 +172,9 @@ const CORRECTION_KEYS = ["id", "offer", "merchant", "amount", "kind", "note", "c
 export function validateCorrections(body: unknown, offerId: string): Corrections | null {
   if (typeof body !== "object" || body === null) return null;
   const b = body as Record<string, unknown>;
-  if (Object.keys(b).sort().join(",") !== "corrections,net,offer,original") return null;
+  const keys = Object.keys(b).sort().join(",");
+  const hasReturns = keys === "corrections,net,offer,original,owed,returns";
+  if (keys !== "corrections,net,offer,original" && !hasReturns) return null;
   if (typeof b.offer !== "string" || b.offer !== offerId) return null;
   if (typeof b.original !== "object" || b.original === null) return null;
   const orig = b.original as Record<string, unknown>;
@@ -161,6 +184,7 @@ export function validateCorrections(body: unknown, offerId: string): Corrections
   if ((orig.carriage as number | null) !== null && (orig.carriage as number) < 0) return null;
   if (!Array.isArray(b.corrections)) return null;
   const rows: Correction[] = [];
+  const byId = new Map<string, Correction>();
   let sum = 0;
   for (const row of b.corrections) {
     if (typeof row !== "object" || row === null) return null;
@@ -175,11 +199,63 @@ export function validateCorrections(body: unknown, offerId: string): Corrections
     if (!Number.isInteger(r.corrected_at) || (r.corrected_at as number) < 0) return null;
     if (typeof r.signature !== "string" || !r.signature) return null;
     sum += r.amount as number;
-    rows.push(r as unknown as Correction);
+    const correction = r as unknown as Correction;
+    rows.push(correction);
+    byId.set(correction.id, correction);
   }
   const base = (orig.charged as number) + ((orig.carriage as number | null) ?? 0);
   if (!Number.isInteger(b.net) || sum > base || base - sum !== b.net) return null;
-  return { offer: b.offer, original: orig as Corrections["original"], corrections: rows, net: b.net as number };
+  if (!hasReturns) return { offer: b.offer, original: orig as Corrections["original"], corrections: rows, net: b.net as number };
+  if (!Array.isArray(b.returns) || b.returns.length === 0) return null;
+  const returnRows: CorrectionReturn[] = [];
+  // At most one `returned` and one `repaid` per correction id.
+  const seen = new Map<string, { returned?: number; repaid?: number }>();
+  let lastAt = -Infinity;
+  for (const row of b.returns) {
+    if (typeof row !== "object" || row === null) return null;
+    const r = row as Record<string, unknown>;
+    if (Object.keys(r).sort().join(",") !== [...RETURN_KEYS].sort().join(",")) return null;
+    if (typeof r.correction !== "string" || !r.correction) return null;
+    const correction = byId.get(r.correction);
+    // Every returned correction must be one this same receipt carries, and it
+    // must be a refund: nothing else has money to return.
+    if (!correction || correction.kind !== "refund") return null;
+    if (typeof r.offer !== "string" || r.offer !== offerId) return null;
+    if (typeof r.merchant !== "string" || r.merchant !== correction.merchant) return null;
+    if (r.state !== "returned" && r.state !== "repaid") return null;
+    if (typeof r.note !== "string" || r.note.length > 500) return null;
+    if (!Number.isInteger(r.at) || (r.at as number) < 0) return null;
+    if ((r.at as number) < correction.corrected_at) return null;
+    if (typeof r.signature !== "string" || !r.signature) return null;
+    // `returns` arrives oldest first; a body out of that order is not one this
+    // reader can trust as complete.
+    if ((r.at as number) < lastAt) return null;
+    lastAt = r.at as number;
+    const slot = seen.get(r.correction) ?? {};
+    if (r.state === "returned") {
+      if (slot.returned !== undefined) return null;
+      slot.returned = r.at as number;
+    } else {
+      if (slot.repaid !== undefined || slot.returned === undefined) return null;
+      if ((r.at as number) < slot.returned) return null;
+      slot.repaid = r.at as number;
+    }
+    seen.set(r.correction, slot);
+    returnRows.push(r as unknown as CorrectionReturn);
+  }
+  let owed = 0;
+  for (const [id, slot] of seen) {
+    if (slot.returned !== undefined && slot.repaid === undefined) owed += byId.get(id)!.amount;
+  }
+  if (!Number.isInteger(b.owed) || (b.owed as number) < 0 || b.owed !== owed) return null;
+  return {
+    offer: b.offer,
+    original: orig as Corrections["original"],
+    corrections: rows,
+    net: b.net as number,
+    returns: returnRows,
+    owed,
+  };
 }
 
 /**
