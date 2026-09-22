@@ -19,8 +19,11 @@ sealed interface MemberReview {
      * beside this settlement, or null where the read found nothing to show
      * (a 404, a malformed body, or a scope mismatch): never a reason to fail
      * the settlement itself, which is why it is not part of decoding `value`.
+     * SPEC §6.6a: `disclosures` is the offer's own, carried alongside so a
+     * correction_return can be shown beside the merchant's signed contact or
+     * its return terms without a second fetch.
      */
-    data class Settlement(val value: ProtocolSettlement, val corrections: MemberCorrections? = null) : MemberReview
+    data class Settlement(val value: ProtocolSettlement, val corrections: MemberCorrections? = null, val disclosures: List<MemberDisclosure> = emptyList()) : MemberReview
 }
 data class MemberDisclosureReference(val merchant: String, val product: String?)
 data class MemberMandateTerms(val kind: String, val scope: String, val lapsesAt: Long?)
@@ -64,7 +67,24 @@ data class MemberCorrection(
     val id: String, val offer: String, val merchant: String, val amount: Long, val kind: String,
     val note: String, val correctedAt: Long, val signature: String,
 )
-data class MemberCorrections(val offer: String, val original: MemberCorrectionOriginal, val corrections: List<MemberCorrection>, val net: Long)
+/**
+ * SPEC §6.6a. A merchant's signed record that a `refund` correction it already
+ * posted did not reach the household (the issuer returned it), or that it
+ * later repaid the household another way. Neither moves money through this
+ * platform; the shop and the household settle directly, and this is a record
+ * of that, not a channel for it.
+ */
+data class MemberCorrectionReturn(
+    val correction: String, val offer: String, val merchant: String, val state: String,
+    val note: String, val at: Long, val signature: String,
+)
+data class MemberCorrections(
+    val offer: String, val original: MemberCorrectionOriginal, val corrections: List<MemberCorrection>, val net: Long,
+    /** Present only when at least one return is held for this offer. */
+    val returns: List<MemberCorrectionReturn>? = null,
+    /** Present only alongside `returns`: the sum owed for refunds returned and not yet repaid. */
+    val owed: Long? = null,
+)
 
 object MemberReviewCodec {
     private val json = Json { ignoreUnknownKeys = false; isLenient = false }
@@ -229,12 +249,17 @@ object MemberSettlementCodec {
 object MemberCorrectionsCodec {
     private val json = Json { ignoreUnknownKeys = false; isLenient = false }
     private val rootKeys = setOf("offer", "original", "corrections", "net")
+    private val rootKeysWithReturns = rootKeys + setOf("returns", "owed")
     private val originalKeys = setOf("charged", "carriage")
     private val correctionKeys = setOf("id", "offer", "merchant", "amount", "kind", "note", "corrected_at", "signature")
+    private val returnKeys = setOf("correction", "offer", "merchant", "state", "note", "at", "signature")
     private val kinds = setOf("refund", "collection")
+    private val states = setOf("returned", "repaid")
 
     fun decode(bytes: ByteArray, expectedOffer: String): MemberCorrections = try {
-        val root = json.parseToJsonElement(bytes.toString(StandardCharsets.UTF_8)).jsonObject; require(root.keys == rootKeys)
+        val root = json.parseToJsonElement(bytes.toString(StandardCharsets.UTF_8)).jsonObject
+        val hasReturns = root.keys == rootKeysWithReturns
+        require(hasReturns || root.keys == rootKeys)
         val originalRow = root.getValue("original").jsonObject; require(originalRow.keys == originalKeys)
         val charged = originalRow.getValue("charged").jsonPrimitive.let { require(!it.isString); it.long }; require(charged in 0..Canonical.MAXIMUM_INTEGER)
         val carriage = originalRow.getValue("carriage").takeUnless { it === JsonNull }?.jsonPrimitive?.let { require(!it.isString); it.long }
@@ -242,6 +267,7 @@ object MemberCorrectionsCodec {
         val rows = root.getValue("corrections").jsonArray.map { it.jsonObject }
         var sum = 0L
         val ids = mutableSetOf<String>()
+        val byId = mutableMapOf<String, MemberCorrection>()
         val corrections = rows.map { row ->
             require(row.keys == correctionKeys)
             fun s(key: String) = row.getValue(key).jsonPrimitive.let { require(it.isString); it.content }
@@ -254,13 +280,43 @@ object MemberCorrectionsCodec {
             val correctedAt = row.getValue("corrected_at").jsonPrimitive.let { require(!it.isString); it.long }; require(correctedAt in 0..Canonical.MAXIMUM_INTEGER)
             val signature = s("signature"); require(signature.isNotEmpty())
             sum = Math.addExact(sum, amount)
-            MemberCorrection(id, offer, merchant, amount, kind, note, correctedAt, signature)
+            MemberCorrection(id, offer, merchant, amount, kind, note, correctedAt, signature).also { byId[id] = it }
         }
         val offer = root.getValue("offer").jsonPrimitive.let { require(it.isString); it.content }; require(offer == expectedOffer)
         val net = root.getValue("net").jsonPrimitive.let { require(!it.isString); it.long }
         val base = Math.addExact(charged, carriage ?: 0L)
         require(base in 0..Canonical.MAXIMUM_INTEGER && sum <= base && base - sum == net)
-        MemberCorrections(offer, MemberCorrectionOriginal(charged, carriage), corrections, net)
+        val returnsAndOwed: Pair<List<MemberCorrectionReturn>, Long>? = if (!hasReturns) null else {
+            val returnRows = root.getValue("returns").jsonArray.map { it.jsonObject }; require(returnRows.isNotEmpty())
+            // At most one `returned` and one `repaid` per correction id.
+            data class Slot(var returned: Long? = null, var repaid: Long? = null)
+            val slots = mutableMapOf<String, Slot>()
+            var lastAt = Long.MIN_VALUE
+            val returns = returnRows.map { row ->
+                require(row.keys == returnKeys)
+                fun s(key: String) = row.getValue(key).jsonPrimitive.let { require(it.isString); it.content }
+                val correctionId = s("correction")
+                val correction = byId[correctionId]; require(correction != null && correction.kind == "refund")
+                val returnOffer = s("offer"); require(returnOffer == expectedOffer)
+                val merchant = s("merchant"); require(merchant == correction.merchant)
+                val state = s("state"); require(state in states)
+                val note = s("note"); require(note.length <= 500)
+                val at = row.getValue("at").jsonPrimitive.let { require(!it.isString); it.long }
+                require(at in 0..Canonical.MAXIMUM_INTEGER && at >= correction.correctedAt && at >= lastAt)
+                lastAt = at
+                val signature = s("signature"); require(signature.isNotEmpty())
+                val slot = slots.getOrPut(correctionId) { Slot() }
+                if (state == "returned") { require(slot.returned == null); slot.returned = at }
+                else { require(slot.repaid == null && slot.returned != null && at >= slot.returned!!); slot.repaid = at }
+                MemberCorrectionReturn(correctionId, returnOffer, merchant, state, note, at, signature)
+            }
+            var computed = 0L
+            for ((id, slot) in slots) if (slot.returned != null && slot.repaid == null) computed = Math.addExact(computed, byId.getValue(id).amount)
+            val owed = root.getValue("owed").jsonPrimitive.let { require(!it.isString); it.long }
+            require(owed in 0..Canonical.MAXIMUM_INTEGER && owed == computed)
+            returns to owed
+        }
+        MemberCorrections(offer, MemberCorrectionOriginal(charged, carriage), corrections, net, returnsAndOwed?.first, returnsAndOwed?.second)
     } catch (_: Exception) { throw MemberFailure.Malformed }
 }
 
@@ -278,6 +334,7 @@ class MemberReviews(private val sessions: MemberSessionClient) {
             detail.state == "settled" -> MemberReview.Settlement(
                 MemberSettlementCodec.decode(reply.body, detail.id).also { if (it.payer != detail.household || it.signedBy != detail.presenter) throw MemberFailure.ScopeMismatch },
                 corrections(detail.id, detail.household, detail.presenter),
+                detail.disclosures,
             )
             else -> MemberReview.Statement(MemberReviewCodec.statement(reply.body, detail))
         }

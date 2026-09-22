@@ -58,10 +58,27 @@ public struct MemberCorrections: Decodable, Equatable, Sendable {
             case correctedAt = "corrected_at"
         }
     }
+    /// SPEC §6.6a. A merchant's signed record that a `refund` correction it already posted
+    /// did not reach the household (the issuer returned it), or that it later repaid the
+    /// household another way. Neither moves money through this platform; the shop and the
+    /// household settle directly, and this is a record of that, not a channel for it.
+    public struct Return: Decodable, Equatable, Sendable {
+        public let correction: String
+        public let offer: String
+        public let merchant: String
+        public let state: String
+        public let note: String
+        public let at: Int64
+        public let signature: String
+    }
     public let offer: String
     public let original: Original
     public let corrections: [Correction]
     public let net: Int64
+    /// Present only when at least one return is held for this offer.
+    public let returns: [Return]?
+    /// Present only alongside `returns`: the sum owed for refunds returned and not yet repaid.
+    public let owed: Int64?
 }
 
 /// None of these failures proves that a preceding write had no effect.
@@ -101,11 +118,17 @@ public enum ReferenceResponseReader {
         let body = try responseObject(status: status, contentType: contentType, data: data)
         let value: MemberCorrections
         do {
-            guard Set(body.keys) == Set(["offer", "original", "corrections", "net"]),
+            let baseKeys = Set(["offer", "original", "corrections", "net"])
+            guard Set(body.keys) == baseKeys || Set(body.keys) == baseKeys.union(["returns", "owed"]),
                   let original = body["original"] as? [String: Any], Set(original.keys) == Set(["charged", "carriage"]),
                   let rows = body["corrections"] as? [[String: Any]],
                   rows.allSatisfy({ Set($0.keys) == Set(["id", "offer", "merchant", "amount", "kind", "note", "corrected_at", "signature"]) })
             else { throw ReferenceReadFailure.malformedResponse }
+            if let returns = body["returns"] {
+                guard let returnRows = returns as? [[String: Any]], !returnRows.isEmpty,
+                      returnRows.allSatisfy({ Set($0.keys) == Set(["correction", "offer", "merchant", "state", "note", "at", "signature"]) })
+                else { throw ReferenceReadFailure.malformedResponse }
+            }
             value = try JSONDecoder().decode(MemberCorrections.self, from: data)
         } catch { throw ReferenceReadFailure.malformedResponse }
         guard !expectedOffer.isEmpty, Data(value.offer.utf8) == Data(expectedOffer.utf8) else { throw ReferenceReadFailure.mismatchedResource }
@@ -189,6 +212,7 @@ public enum ReferenceResponseReader {
             throw ReferenceReadFailure.inconsistentSettlement
         }
         var ids = Set<Data>(), sum: Int64 = 0
+        var byID: [String: MemberCorrections.Correction] = [:]
         for c in value.corrections {
             guard c.amount >= 1, !c.id.isEmpty, !c.merchant.isEmpty, ["refund", "collection"].contains(c.kind),
                   c.note.count <= 500, Data(c.offer.utf8) == Data(value.offer.utf8), c.correctedAt >= 0,
@@ -196,10 +220,46 @@ public enum ReferenceResponseReader {
             else { throw ReferenceReadFailure.inconsistentSettlement }
             guard sum <= Canonical.maximumInteger - c.amount else { throw ReferenceReadFailure.inconsistentSettlement }
             sum += c.amount
+            byID[c.id] = c
         }
         let base = value.original.charged + (value.original.carriage ?? 0)
         guard base >= 0, base <= Canonical.maximumInteger, sum <= base, base - sum == value.net else {
             throw ReferenceReadFailure.inconsistentSettlement
         }
+        try validateReturns(value.returns, owed: value.owed, byID: byID)
+    }
+
+    /// SPEC §6.6a. `returns` and `owed` arrive together or not at all, and `owed` is checked
+    /// against the returns rather than trusted, the same as `net` above: the sum, for every
+    /// refund correction in this same receipt, that holds a `returned` with no `repaid`.
+    private static func validateReturns(_ returns: [MemberCorrections.Return]?, owed: Int64?, byID: [String: MemberCorrections.Correction]) throws {
+        guard (returns == nil) == (owed == nil) else { throw ReferenceReadFailure.inconsistentSettlement }
+        guard let returns, let owed else { return }
+        guard !returns.isEmpty, (0...Canonical.maximumInteger).contains(owed) else { throw ReferenceReadFailure.inconsistentSettlement }
+        var slots: [String: (returned: Int64?, repaid: Int64?)] = [:]
+        var lastAt: Int64 = 0
+        for r in returns {
+            guard let correction = byID[r.correction], correction.kind == "refund",
+                  Data(r.merchant.utf8) == Data(correction.merchant.utf8),
+                  r.note.count <= 500, r.at >= 0, r.at <= Canonical.maximumInteger, !r.signature.isEmpty,
+                  ["returned", "repaid"].contains(r.state), r.at >= correction.correctedAt, r.at >= lastAt
+            else { throw ReferenceReadFailure.inconsistentSettlement }
+            lastAt = r.at
+            var slot = slots[r.correction] ?? (nil, nil)
+            if r.state == "returned" {
+                guard slot.returned == nil else { throw ReferenceReadFailure.inconsistentSettlement }
+                slot.returned = r.at
+            } else {
+                guard slot.repaid == nil, let returnedAt = slot.returned, r.at >= returnedAt else { throw ReferenceReadFailure.inconsistentSettlement }
+                slot.repaid = r.at
+            }
+            slots[r.correction] = slot
+        }
+        var computed: Int64 = 0
+        for (id, slot) in slots where slot.returned != nil && slot.repaid == nil {
+            guard computed <= Canonical.maximumInteger - byID[id]!.amount else { throw ReferenceReadFailure.inconsistentSettlement }
+            computed += byID[id]!.amount
+        }
+        guard computed == owed else { throw ReferenceReadFailure.inconsistentSettlement }
     }
 }

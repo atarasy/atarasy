@@ -444,6 +444,10 @@ describe("the hub in front of an engine", () => {
       // §6.6. Appending a correction is the merchant's own route, never the
       // member's: only the read of one, `GET .../corrections`, is carried.
       ["POST", `/api/offers/${offerId}/corrections`],
+      // §6.6a. Recording that a refund was returned, or later repaid, is the
+      // merchant's own route too. The household reads it back through the
+      // corrections read above, which is carried; this write is not.
+      ["POST", `/api/offers/${offerId}/returns`],
       // Clause 52. A move's receiving side, never the member's own: unlike
       // `POST .../export` and `GET`/`POST .../leave` below, nothing here signs
       // for the household this would write over.

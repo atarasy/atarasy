@@ -185,4 +185,85 @@ final class ReferenceResponseTests: XCTestCase {
         XCTAssertThrowsError(try readCorrections(correctionsBody(), type: "text/html"))
         XCTAssertThrowsError(try ReferenceResponseReader.corrections(status: 200, contentType: "application/json", data: Data("broken".utf8), expectedOffer: "fixture-offer"))
     }
+
+    // SPEC §6.6a.
+    private func returnRow(state: String = "returned", correction: String = "correction-1", merchant: String = "merchant-1", at: Int64 = 3000, note: String = "The issuer bounced it.", signature: String = "sig-r1") -> [String: Any] {
+        ["correction": correction, "offer": "fixture-offer", "merchant": merchant, "state": state, "note": note, "at": at, "signature": signature]
+    }
+    func testReturnsAndOwedAreAbsentWhereNothingWasReturned() throws {
+        let value = try readCorrections(correctionsBody())
+        XCTAssertNil(value.returns)
+        XCTAssertNil(value.owed)
+    }
+    func testAReturnedRefundDecodesAndOwedSumsIt() throws {
+        var body = correctionsBody(); body["returns"] = [returnRow()]; body["owed"] = 400
+        let value = try readCorrections(body)
+        XCTAssertEqual(value.returns?.count, 1)
+        XCTAssertEqual(value.returns?.first?.state, "returned")
+        XCTAssertEqual(value.owed, 400)
+    }
+    func testARepaidReturnLeavesNothingOwed() throws {
+        var body = correctionsBody()
+        body["returns"] = [returnRow(), returnRow(state: "repaid", at: 4000, note: "Sent by bank transfer.", signature: "sig-r2")]
+        body["owed"] = 0
+        let value = try readCorrections(body)
+        XCTAssertEqual(value.returns?.count, 2)
+        XCTAssertEqual(value.owed, 0)
+    }
+    func testOwedNotMatchingTheSumOfUnpaidReturnsIsRefused() throws {
+        var zero = correctionsBody(); zero["returns"] = [returnRow()]; zero["owed"] = 0
+        XCTAssertThrowsError(try readCorrections(zero))
+        var over = correctionsBody(); over["returns"] = [returnRow()]; over["owed"] = 401
+        XCTAssertThrowsError(try readCorrections(over))
+    }
+    func testReturnsWithoutOwedOrOwedWithoutReturnsIsRefused() throws {
+        var returnsOnly = correctionsBody(); returnsOnly["returns"] = [returnRow()]
+        XCTAssertThrowsError(try readCorrections(returnsOnly))
+        var owedOnly = correctionsBody(); owedOnly["owed"] = 400
+        XCTAssertThrowsError(try readCorrections(owedOnly))
+    }
+    func testAnEmptyReturnsArrayIsRefusedRatherThanReadAsNone() throws {
+        var body = correctionsBody(); body["returns"] = [] as [[String: Any]]; body["owed"] = 0
+        XCTAssertThrowsError(try readCorrections(body))
+    }
+    func testAReturnNamingACorrectionOutsideThisReceiptIsRefused() throws {
+        var body = correctionsBody(); body["returns"] = [returnRow(correction: "correction-2")]; body["owed"] = 0
+        XCTAssertThrowsError(try readCorrections(body))
+    }
+    func testAReturnOnACollectionCorrectionIsRefused() throws {
+        var rows = correctionsBody()["corrections"] as! [[String: Any]]
+        rows[0]["kind"] = "collection"
+        var body = correctionsBody(); body["corrections"] = rows; body["returns"] = [returnRow()]; body["owed"] = 400
+        XCTAssertThrowsError(try readCorrections(body))
+    }
+    func testAReturnWhoseMerchantDiffersFromTheCorrectionsIsRefused() throws {
+        var body = correctionsBody(); body["returns"] = [returnRow(merchant: "merchant-2")]; body["owed"] = 400
+        XCTAssertThrowsError(try readCorrections(body))
+    }
+    func testMoreThanOneReturnedOrARepaidWithNoReturnedIsRefused() throws {
+        var twice = correctionsBody(); twice["returns"] = [returnRow(), returnRow(at: 3500, signature: "sig-r2")]; twice["owed"] = 400
+        XCTAssertThrowsError(try readCorrections(twice))
+        var repaidAlone = correctionsBody(); repaidAlone["returns"] = [returnRow(state: "repaid")]; repaidAlone["owed"] = 0
+        XCTAssertThrowsError(try readCorrections(repaidAlone))
+    }
+    func testARepaidBeforeItsOwnReturnedOrAReturnBeforeTheCorrectionIsRefused() throws {
+        var repaidEarly = correctionsBody()
+        repaidEarly["returns"] = [returnRow(), returnRow(state: "repaid", at: 2500, signature: "sig-r2")]
+        repaidEarly["owed"] = 0
+        XCTAssertThrowsError(try readCorrections(repaidEarly))
+        var beforeCorrection = correctionsBody(); beforeCorrection["returns"] = [returnRow(at: 1000)]; beforeCorrection["owed"] = 400
+        XCTAssertThrowsError(try readCorrections(beforeCorrection))
+    }
+    func testAnExtraFieldOnAReturnRowIsRefused() throws {
+        var row = returnRow(); row["paid"] = true
+        var body = correctionsBody(); body["returns"] = [row]; body["owed"] = 400
+        XCTAssertThrowsError(try readCorrections(body))
+    }
+    func testTheShopsOwnWordsOnAReturnPassThroughAsPlainText() throws {
+        var body = correctionsBody()
+        body["returns"] = [returnRow(note: "<b>sorry</b>, the bank bounced it")]
+        body["owed"] = 400
+        let value = try readCorrections(body)
+        XCTAssertEqual(value.returns?.first?.note, "<b>sorry</b>, the bank bounced it")
+    }
 }

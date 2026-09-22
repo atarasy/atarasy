@@ -192,7 +192,7 @@ public actor MemberClient {
             let receipt = try ReferenceResponseReader.settlement(status: reply.status, contentType: reply.contentType, data: reply.data, expectedOffer: detail.id)
             guard same(receipt.payer, detail.household), same(receipt.signedBy, detail.presenter) else { throw MemberFailure.scopeMismatch }
             let corrections = await readCorrections(offerID: detail.id, household: detail.household, presenter: detail.presenter)
-            return .settlement(receipt, corrections)
+            return .settlement(receipt, corrections, detail.disclosures)
         }
         let (reply, session) = try await read("/offers/" + detail.id + (detail.binding == "physical" ? "/statement" : "/approval"))
         guard Data(session.household.utf8) == Data(detail.household.utf8), session.presenters.contains(where: { Data($0.utf8) == Data(detail.presenter.utf8) }) else { throw MemberFailure.scopeMismatch }

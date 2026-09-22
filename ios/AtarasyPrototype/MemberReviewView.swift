@@ -56,7 +56,7 @@ struct MemberReviewSections: View {
                 if approval.excluded.isEmpty { Text("No excluded products were reported.") }
                 ForEach(Array(approval.excluded.enumerated()), id: \.offset) { _, item in Text("\(item.product): \(item.reason)").accessibilityIdentifier("reviewExclusion") }
             }
-        case .settlement(let settlement, let corrections):
+        case .settlement(let settlement, let corrections, let settlementDisclosures):
             Section("Settlement") {
                 Text("This box has settled. There is nothing left to sign.").accessibilityIdentifier("settledBox")
                 Text("Settled: \(date(settlement.settledAt))")
@@ -87,6 +87,26 @@ struct MemberReviewSections: View {
                         Text("Corrected: \(date(correction.correctedAt))").font(.footnote)
                     }
                     Text("Net after corrections: \(corrections.net)").accessibilityIdentifier("settlementNet")
+                }
+                // SPEC §6.6a. A refund the issuer returned, or the shop's own repayment.
+                // This platform moved no money either time and moves none now: the shop
+                // reaches the household by its own signed contact, or, where it signed
+                // none, by the return terms already beside its disclosure. Nothing here
+                // is sent to the merchant, and there is no refund action (clause 54).
+                if let returns = corrections.returns, !returns.isEmpty {
+                    Section("Returns") {
+                        ForEach(Array(returns.enumerated()), id: \.offset) { _, ret in
+                            if ret.state == "returned" {
+                                Text("The refund from \(ret.merchant) did not reach you. The shop still owes it to you, off this platform.")
+                                    .accessibilityIdentifier("correctionReturnedLine")
+                            } else {
+                                Text("\(ret.merchant) reports it repaid this another way.")
+                                    .accessibilityIdentifier("correctionRepaidLine")
+                            }
+                            Text(verbatim: ret.note)
+                            merchantContactOrTerms(settlementDisclosures, merchant: ret.merchant)
+                        }
+                    }
                 }
             }
         case .statement(let statement):
@@ -135,6 +155,23 @@ struct MemberReviewSections: View {
             // merchant signed one.
             if let contact = block.contact {
                 if let url = contact.url { Link(contact.value, destination: url) } else { Text(verbatim: contact.value) }
+            }
+        }
+    }
+    /// SPEC §6.6a. A correction_return has no product, so the merchant's standing
+    /// disclosure (its `product`-less block) is what "its return terms" names.
+    /// Where the merchant signed a contact there, that is shown; where it signed none,
+    /// the block's own items stand in its place. Nothing is shown for a merchant with
+    /// no standing block at all: this hub never invents terms.
+    @ViewBuilder private func merchantContactOrTerms(_ blocks: [MemberOfferDetail.Disclosure], merchant: String) -> some View {
+        if let block = blocks.first(where: { Data($0.merchant.utf8) == Data(merchant.utf8) && $0.product == nil }) {
+            if let contact = block.contact {
+                if let url = contact.url { Link(contact.value, destination: url) } else { Text(verbatim: contact.value) }
+            } else {
+                ForEach(Array(block.items.enumerated()), id: \.offset) { _, item in
+                    Text(verbatim: item.label).font(.subheadline)
+                    Text(verbatim: item.value)
+                }
             }
         }
     }
