@@ -8,8 +8,9 @@
  * the presenter's agent sent, which is the one thing on this screen a
  * presenter chooses; it is a list of text either way. A candidate is kept or
  * returned by the person's own tap, the set is confirmed once, and the
- * confirmation is the passkey's assertion over the set (§10.5), made by the
- * browser's own authenticator. This page never sees a private key.
+ * confirmation is the person's signature over the set (§10.5), made with the
+ * key the passkey releases after they verify (`signOver`). This page holds
+ * that key for the length of one signature; the hub's server never sees it.
  */
 import { canonicalDecisions, canonicalStatement, canonicalWithdrawal, type Decision, type StatementLine } from "../shared/canonical.js";
 import { canonicalMandate, type Mandate } from "../shared/mandate.js";
