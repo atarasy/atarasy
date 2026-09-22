@@ -106,6 +106,11 @@ struct FrozenMemberStatementSections: View {
                 ForEach(Array(block.items.enumerated()), id: \.offset) { _, item in
                     Text(verbatim: item.label).font(.headline); Text(verbatim: item.value)
                 }
+                // Question 72. Beside this block's own terms, and only where this
+                // merchant signed one.
+                if let contact = block.contact {
+                    if let url = contact.url { Link(contact.value, destination: url) } else { Text(verbatim: contact.value) }
+                }
             }
         }
         Section("Mandate") {

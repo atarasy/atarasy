@@ -119,6 +119,44 @@ private struct ReviewVault: MemberSessionVault {
         value = try reviewValue("digital-known-carriage"); value["excluded"] = [["product": "other", "reason": "commercial_preference"]]
         XCTAssertThrowsError(try decode(value, detail: detail))
     }
+    /// Question 72, decided 2026-09-22. Carried on the approval and the statement the
+    /// same way as the detail: absent by default (the captured fixtures predate the
+    /// field), and where present it must match the detail's own copy of the block
+    /// exactly, the same as every other field `sameDisclosures` compares.
+    func testDisclosureContactIsCarriedAndMustMatchTheDetail() throws {
+        for binding in ["digital", "physical"] {
+            var detailRaw = try reviewValue(binding + "-detail")
+            var detailBlocks = detailRaw["disclosures"] as! [[String: Any]]
+            detailBlocks[0]["contact"] = ["kind": "email", "value": "returns@maker-a.example"]
+            detailRaw["disclosures"] = detailBlocks
+            let detail = try MemberOfferDetail.decode(JSONSerialization.data(withJSONObject: detailRaw), expectedID: detailRaw["id"] as! String, household: "detail-house")
+            XCTAssertEqual(detail.disclosures[0].contact, .init(kind: "email", value: "returns@maker-a.example"))
+
+            var value = try reviewValue(binding + "-known-carriage")
+            var blocks = value["disclosures"] as! [[String: Any]]
+            blocks[0]["contact"] = ["kind": "email", "value": "returns@maker-a.example"]
+            value["disclosures"] = blocks
+            let data = try JSONSerialization.data(withJSONObject: value)
+            if binding == "digital" {
+                XCTAssertEqual(try MemberApproval.decode(data, detail: detail).disclosures[0].contact, .init(kind: "email", value: "returns@maker-a.example"))
+            } else {
+                XCTAssertEqual(try MemberStatement.decode(data, detail: detail).disclosures[0].contact, .init(kind: "email", value: "returns@maker-a.example"))
+            }
+
+            // A contact that does not match the detail's own copy is refused, the same
+            // as a changed merchant, version or item would be.
+            var mismatched = value, mismatchedBlocks = blocks
+            mismatchedBlocks[0]["contact"] = ["kind": "email", "value": "different@maker-a.example"]; mismatched["disclosures"] = mismatchedBlocks
+            XCTAssertThrowsError(try decode(mismatched, detail: detail))
+
+            // Malformed shape is refused before the comparison is even reached.
+            var badShape = value, badBlocks = blocks
+            badBlocks[0]["contact"] = ["kind": "post", "value": "x"]; badShape["disclosures"] = badBlocks
+            XCTAssertThrowsError(try decode(badShape, detail: detail))
+            badBlocks[0]["contact"] = ["kind": "email", "value": "x", "extra": "no"]; badShape["disclosures"] = badBlocks
+            XCTAssertThrowsError(try decode(badShape, detail: detail))
+        }
+    }
     func testDisclosureOmissionOrWrongGoverningBlockIsRejected() throws {
         for binding in ["digital", "physical"] {
             let detail = try reviewDetail(binding); var value = try reviewValue(binding + "-known-carriage")

@@ -119,6 +119,43 @@ private actor DetailTransport: MemberHTTPTransport {
         blocks[0]["product"] = "unrelated-product"; value["disclosures"] = blocks
         XCTAssertThrowsError(try MemberOfferDetail.decode(JSONSerialization.data(withJSONObject: value), expectedID: value["id"] as! String, household: "detail-house"))
     }
+    /// Question 72, decided 2026-09-22. Absent (the captured fixture, from before this
+    /// field) and explicitly null both decode to no contact; present must be exactly
+    /// `kind`/`value`, a listed kind, and a non-empty value of at most 256 UTF-8 bytes.
+    func testDisclosureContactIsOptionalAndValidated() throws {
+        func decode(_ value: [String: Any]) throws -> MemberOfferDetail {
+            try MemberOfferDetail.decode(JSONSerialization.data(withJSONObject: value), expectedID: value["id"] as! String, household: "detail-house")
+        }
+        // The captured fixture predates the field: absent, and decodes to nil.
+        XCTAssertNil(try decodedDetail().disclosures[0].contact)
+
+        var value = try detailValue(); var blocks = value["disclosures"] as! [[String: Any]]
+        blocks[0]["contact"] = ["kind": "email", "value": "returns@maker-a.example"]; value["disclosures"] = blocks
+        let withContact = try decode(value)
+        XCTAssertEqual(withContact.disclosures[0].contact, .init(kind: "email", value: "returns@maker-a.example"))
+        XCTAssertEqual(withContact.disclosures[0].contact?.url, URL(string: "mailto:returns@maker-a.example"))
+
+        blocks[0]["contact"] = NSNull(); value["disclosures"] = blocks
+        XCTAssertNil(try decode(value).disclosures[0].contact)
+
+        for bad: Any in [
+            ["kind": "email", "value": "x@example.com", "extra": "no"],
+            ["kind": "post", "value": "x@example.com"],
+            ["kind": "email", "value": ""],
+            ["kind": "email"],
+            "not an object",
+        ] {
+            blocks[0]["contact"] = bad; value["disclosures"] = blocks
+            XCTAssertThrowsError(try decode(value), "expected \(bad) to be refused")
+        }
+        blocks[0]["contact"] = ["kind": "email", "value": String(repeating: "a", count: 251) + "@a.com"]; value["disclosures"] = blocks
+        XCTAssertThrowsError(try decode(value))
+    }
+    func testContactURLByKind() {
+        XCTAssertEqual(MemberOfferDetail.Disclosure.Contact(kind: "email", value: "a@b.example").url, URL(string: "mailto:a@b.example"))
+        XCTAssertEqual(MemberOfferDetail.Disclosure.Contact(kind: "tel", value: "+81 3 1234 5678").url, URL(string: "tel:+81%203%201234%205678"))
+        XCTAssertEqual(MemberOfferDetail.Disclosure.Contact(kind: "url", value: "https://shop-x.example/returns").url, URL(string: "https://shop-x.example/returns"))
+    }
     func testClientFetchesActualProjectionWithBearerAndPreservesRefusal() async throws {
         let value = try decodedDetail(), transport = DetailTransport(info: info(), data: try JSONSerialization.data(withJSONObject: detailValue()))
         let vault = DetailVault(saved: .init(token: "amr1_" + String(repeating: "A", count: 43), info: info()))

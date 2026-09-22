@@ -86,6 +86,12 @@ struct MemberOfferDetailView: View {
                             ForEach(Array(disclosure.items.enumerated()), id: \.offset) { _, item in
                                 VStack(alignment: .leading) { Text(item.label).font(.headline); Text(item.value) }
                             }
+                            // Question 72. Rendered exactly as signed, beside this block's
+                            // own terms. Tapping is the household's own act; nothing here
+                            // sends anything or composes a message on its behalf.
+                            if let contact = disclosure.contact {
+                                if let url = contact.url { Link(contact.value, destination: url) } else { Text(verbatim: contact.value) }
+                            }
                         }
                     }
                 } else { Text("This proposal could not be loaded. Refresh to check again.").accessibilityIdentifier("detailUnavailable") }
