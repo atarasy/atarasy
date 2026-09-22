@@ -2,6 +2,7 @@ import SwiftUI
 import AtarasyCore
 import UIKit
 import Combine
+import UniformTypeIdentifiers
 
 // Configuration is bundled by the trusted build, never supplied by an invitation or deep link.
 private func configuredMemberEnvironment() -> MemberEnvironment? {
@@ -157,6 +158,7 @@ private struct MemberAccountForm: View {
     @State private var invitation = ""
     @State private var household = ""
     @State private var action: Task<Void, Never>?
+    @State private var showingLeaveSheet = false
     private let clock = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     private func perform(_ work: @escaping @MainActor () async -> Void) {
         guard action == nil else { return }
@@ -169,6 +171,7 @@ private struct MemberAccountForm: View {
                     Text(session.household).textSelection(.enabled)
                     Text("Expires \(Date(timeIntervalSince1970: Double(session.expiresAt) / 1000).formatted())")
                     Button("Sign out") { perform { await account.signOut() } }.accessibilityIdentifier("memberSignOut")
+                    Button("Delete account", role: .destructive) { showingLeaveSheet = true }.accessibilityIdentifier("memberDeleteAccount")
                 }
                 Section("Private node") {
                     Text(account.privateNodeNotice.isEmpty ? "Private records have not been opened." : account.privateNodeNotice).accessibilityIdentifier("privateNodeStatus")
@@ -211,6 +214,105 @@ private struct MemberAccountForm: View {
         .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() }.disabled(account.busy || action != nil) } }
         .onReceive(clock) { date in account.clearExpired(now: Int64(date.timeIntervalSince1970 * 1000)) }
         .onDisappear { invitation = ""; household = ""; action?.cancel() }
+        .sheet(isPresented: $showingLeaveSheet) { NavigationStack { MemberLeaveSheet(account: account) } }
+    }
+}
+
+private struct MemberExportDocument: FileDocument {
+    static var readableContentTypes: [UTType] { [.json] }
+    let data: Data
+    init(data: Data) { self.data = data }
+    init(configuration: ReadConfiguration) throws { data = configuration.file.regularFileContents ?? Data() }
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper { FileWrapper(regularFileWithContents: data) }
+}
+
+/// §14.3. Apple Guideline 5.1.1(v): account deletion, reachable from "Your session" beside
+/// "Sign out". Mirrors the host-move ceremony: load a status, review a blocker list or
+/// review-then-sign-then-submit, and show the result.
+private struct MemberLeaveSheet: View {
+    @ObservedObject var account: MemberAccount
+    @Environment(\.dismiss) private var dismiss
+    @State private var confirmingDelete = false
+    @State private var exportDocument: MemberExportDocument?
+    @State private var exportFilename = "atarasy-export.json"
+    @State private var showingExporter = false
+    var body: some View {
+        Form {
+            switch account.leavePhase {
+            case .idle, .checkingStatus:
+                Section { ProgressView("Checking your account") }
+            case .blocked:
+                Section("This account cannot be deleted yet") {
+                    if account.leaveBlockers.isEmpty { Text("Something is holding this account open.").accessibilityIdentifier("leaveBlockerRow") }
+                    ForEach(Array(account.leaveBlockers.enumerated()), id: \.offset) { _, blocker in
+                        Text(Self.blockerDescription(blocker)).accessibilityIdentifier("leaveBlockerRow")
+                    }
+                    Button("Check again") { Task { await account.refreshLeaveStatus() } }.accessibilityIdentifier("leaveRecheck")
+                }
+            case .ready, .signing:
+                Section("Before you delete") {
+                    Text("Deleting removes your account and everything this host holds for it. Shops keep their own records of sales. Gifts you shared with other households stay in their records, showing you as a member who has left.")
+                    Button("Save a copy of my records") { Task { await account.requestExport() } }
+                        .disabled(account.leavePhase == .signing)
+                        .accessibilityIdentifier("leaveExport")
+                    if !account.leaveExportNotice.isEmpty { Text(account.leaveExportNotice).font(.footnote).accessibilityIdentifier("leaveExportNotice") }
+                }
+                Section {
+                    Button("Delete account", role: .destructive) { confirmingDelete = true }
+                        .disabled(account.leavePhase == .signing)
+                        .accessibilityIdentifier("leaveDelete")
+                    if account.leavePhase == .signing { ProgressView() }
+                }
+                .confirmationDialog("Delete this account?", isPresented: $confirmingDelete, titleVisibility: .visible) {
+                    Button("Delete account", role: .destructive) { Task { await account.deleteAccount() } }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("This cannot be undone. You will be asked to confirm with your passkey.")
+                }
+            case .done:
+                Section("Account deleted") {
+                    Text(account.leaveNotice).accessibilityIdentifier("leaveDoneNotice")
+                    Button("Done") { dismiss() }.accessibilityIdentifier("leaveDone")
+                }
+            case .failed:
+                Section("Account deletion") {
+                    Text(account.leaveNotice).accessibilityIdentifier("leaveFailedNotice")
+                    Button("Refresh account status") { Task { await account.refreshLeaveStatus() } }.accessibilityIdentifier("leaveRecheck")
+                }
+            }
+        }
+        .navigationTitle("Delete account")
+        .interactiveDismissDisabled(account.leavePhase == .signing)
+        .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Close") { dismiss() }.disabled(account.leavePhase == .signing).accessibilityIdentifier("leaveClose") } }
+        .task { await account.refreshLeaveStatus() }
+        .onChange(of: account.leaveExport?.exportedAt) { _, exportedAt in
+            guard exportedAt != nil, let export = account.leaveExport, let data = try? export.fileContents() else { return }
+            exportFilename = "atarasy-export-\(Self.exportDateStamp()).json"
+            exportDocument = MemberExportDocument(data: data)
+            showingExporter = true
+        }
+        .fileExporter(isPresented: $showingExporter, document: exportDocument, contentType: .json, defaultFilename: exportFilename) { _ in }
+    }
+    private static func exportDateStamp() -> String {
+        let formatter = DateFormatter(); formatter.dateFormat = "yyyy-MM-dd"; formatter.timeZone = TimeZone(identifier: "UTC")
+        return formatter.string(from: Date())
+    }
+    private static func blockerDescription(_ blocker: MemberLeaveBlocker) -> String {
+        switch blocker.kind {
+        case "offer_in_progress": return "A box or order is still open. Finish or decline it first."
+        case "statement_unsigned": return "A settlement statement is waiting for your signature."
+        case "reservation_held": return "A reservation is still held against your account."
+        case "gift_in_flight": return "A gift to or from this household is still in flight."
+        case "permission_action_pending": return "A permission request is still pending a decision."
+        case "co_signer": return "You co-sign another household's shopping mandate. Step down first."
+        case "recoverer": return "You help another household recover its account. Step down first."
+        case "host_move_pending": return "A host move is in progress for this account."
+        case "operation_pending": return "An operation is still awaiting its outcome."
+        case "mandate_change_pending": return "A change to a mandate is still pending signatures."
+        case "recovery_request_pending": return "A recovery request involving this household is still pending."
+        case "permission_request_pending": return "A permission request involving this household is still pending."
+        default: return "Blocked: \(blocker.kind)."
+        }
     }
 }
 

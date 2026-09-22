@@ -20,6 +20,11 @@ public protocol MemberAccountService: MemberProposalService {
     func lockLocalAccess() async
     func registerRefresh(token: Data, apnsEnvironment: MemberAPNSEnvironment) async throws -> MemberRefreshSubscription
     func disableRefresh() async throws -> MemberRefreshSubscription
+    /// §14.3. Apple Guideline 5.1.1(v) account deletion.
+    func leaveStatus() async throws -> MemberLeaveStatus
+    func prepareLeave() async throws -> PreparedMemberLeave
+    func leave(_ prepared: PreparedMemberLeave, assertion: MemberPasskeyResponse) async throws -> MemberLeft
+    func exportAccount() async throws -> MemberExport
 }
 extension MemberClient: MemberAccountService {}
 public extension MemberAccountService {
@@ -35,10 +40,16 @@ public extension MemberAccountService {
     func lockLocalAccess() async {}
     func registerRefresh(token: Data, apnsEnvironment: MemberAPNSEnvironment) async throws -> MemberRefreshSubscription { throw MemberFailure.unavailable }
     func disableRefresh() async throws -> MemberRefreshSubscription { throw MemberFailure.unavailable }
+    func leaveStatus() async throws -> MemberLeaveStatus { throw MemberFailure.unavailable }
+    func prepareLeave() async throws -> PreparedMemberLeave { throw MemberFailure.unavailable }
+    func leave(_ prepared: PreparedMemberLeave, assertion: MemberPasskeyResponse) async throws -> MemberLeft { throw MemberFailure.unavailable }
+    func exportAccount() async throws -> MemberExport { throw MemberFailure.unavailable }
 }
 
+public enum MemberLeavePhase: String, Sendable { case idle, checkingStatus, blocked, ready, signing, done, failed }
+
 @MainActor public final class MemberAccount: ObservableObject {
-    @Published public private(set) var session: MemberSessionInfo? { didSet { statements?.setSession(session); decisions?.setSession(session); withdrawals?.setSession(session); permissions?.setSession(session); permissionRequests?.setSession(session); recovery?.setSession(session); hostMove?.setSession(session); mandates = []; mandateReview = nil; effectiveMandates = []; mandateChanges = []; preparedMandateChange = nil; dialsNotice = ""; if session == nil { privateNodeState = .locked; privateNodeNotice = ""; refreshSubscription = nil; refreshNotice = ""; if let privateNode { Task { await privateNode.lock() } } } } }
+    @Published public private(set) var session: MemberSessionInfo? { didSet { statements?.setSession(session); decisions?.setSession(session); withdrawals?.setSession(session); permissions?.setSession(session); permissionRequests?.setSession(session); recovery?.setSession(session); hostMove?.setSession(session); mandates = []; mandateReview = nil; effectiveMandates = []; mandateChanges = []; preparedMandateChange = nil; dialsNotice = ""; leavePhase = .idle; leaveBlockers = []; leaveResult = nil; leaveNotice = ""; leaveExport = nil; leaveExportNotice = ""; if session == nil { privateNodeState = .locked; privateNodeNotice = ""; refreshSubscription = nil; refreshNotice = ""; if let privateNode { Task { await privateNode.lock() } } } } }
     @Published public private(set) var busy = false
     @Published public private(set) var notice = ""
     @Published public private(set) var mandates: [MemberMandate] = []
@@ -52,6 +63,12 @@ public extension MemberAccountService {
     @Published public private(set) var privateNodeNotice = ""
     @Published public private(set) var refreshSubscription: MemberRefreshSubscription?
     @Published public private(set) var refreshNotice = ""
+    @Published public private(set) var leavePhase: MemberLeavePhase = .idle
+    @Published public private(set) var leaveBlockers: [MemberLeaveBlocker] = []
+    @Published public private(set) var leaveResult: MemberLeft?
+    @Published public private(set) var leaveNotice = ""
+    @Published public private(set) var leaveExport: MemberExport?
+    @Published public private(set) var leaveExportNotice = ""
     public let statements: MemberStatementFlow?
     public let permissionRequests: MemberPermissionRequests?
     public let permissions: MemberPermissions?
@@ -284,6 +301,82 @@ public extension MemberAccountService {
                 upsert(result); if preparedMandateChange?.change.id == id { preparedMandateChange = nil }
                 dialsNotice = "The pending mandate change was cancelled. The effective version was not changed."
             } catch { dialsNotice = dialsMessage(error); throw error }
+        }
+    }
+
+    /// §14.3. Loads what would block deletion right now. Called when the deletion sheet
+    /// opens, and again after a blocker is resolved elsewhere.
+    public func refreshLeaveStatus() async {
+        guard session != nil else { return }
+        await run {
+            let started = generation
+            leavePhase = .checkingStatus; leaveBlockers = []; leaveNotice = ""
+            let status = try await service.leaveStatus()
+            guard started == generation, session != nil else { return }
+            if status.blockers.isEmpty { leavePhase = .ready }
+            else { leavePhase = .blocked; leaveBlockers = status.blockers }
+        }
+    }
+    /// Prepares a fresh review, signs it with the passkey, and submits it. On success the
+    /// session and every piece of local session-bound state are cleared at least as
+    /// thoroughly as `signOut()` and `retireHost` clear them, since the household no longer
+    /// exists on this host: the remote refresh registration (as `signOut()` disables it),
+    /// the local session and private-node key material (as `retireHost` removes them via
+    /// `removeRetiredLocalSession`), and the decrypted in-memory state (as both do, through
+    /// the `session` `didSet`). A blocker that appeared since the last status check returns
+    /// the flow to `.blocked` instead of failing outright.
+    public func deleteAccount() async {
+        guard session != nil, leavePhase == .ready else { return }
+        await run {
+            let started = generation
+            leavePhase = .signing; leaveNotice = ""
+            // Disable push refresh first, while the session that registered it is still
+            // active: `leave()` below invalidates that session as its last step.
+            _ = try? await service.disableRefresh()
+            guard started == generation, session != nil else { return }
+            do {
+                let prepared = try await service.prepareLeave()
+                try Task.checkCancellation()
+                guard started == generation, session != nil else { return }
+                let assertion = try await passkeys.authorise(prepared.ceremony, kind: .leave)
+                try Task.checkCancellation()
+                guard started == generation, session != nil else { return }
+                let result = try await service.leave(prepared, assertion: assertion)
+                guard started == generation else { return }
+                generation &+= 1
+                session = nil
+                proposals.setSession(nil)
+                leavePhase = .done
+                leaveResult = result
+                leaveNotice = "Your account and everything this host holds for it have been deleted. This device is now signed out."
+            } catch {
+                guard started == generation, session != nil else { return }
+                if let leaveError = error as? MemberLeaveError, case .blocked(let blockers) = leaveError {
+                    leaveBlockers = blockers; leavePhase = .blocked
+                    leaveNotice = "New blockers appeared since this was last checked. Resolve them before deleting."
+                    return
+                }
+                switch error {
+                case is CancellationError, NativePasskeyFailure.cancelled:
+                    leavePhase = .ready
+                    leaveNotice = "Passkey confirmation was cancelled. Your account was not deleted."
+                default:
+                    leavePhase = .failed
+                    leaveNotice = "The deletion result is unconfirmed. Do not repeat this request. Refresh account status before trying again."
+                    notice = "Account deletion could not be confirmed. Check your account status before trying again."
+                }
+            }
+        }
+    }
+    /// A member's full export, offered before deletion so leaving costs nothing they cannot
+    /// keep. Read-only; never itself a step of deletion.
+    public func requestExport() async {
+        guard session != nil else { return }
+        await run {
+            let started = generation; leaveExportNotice = ""
+            let value = try await service.exportAccount()
+            guard started == generation, session != nil else { return }
+            leaveExport = value; leaveExportNotice = "Export ready to save."
         }
     }
 
