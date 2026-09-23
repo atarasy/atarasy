@@ -18,13 +18,38 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 
+/**
+ * What a list row can say without a second request per offer (`04b` §1b). Catalogue
+ * revision 3: `name` and `variant` travel here too so a row's title never needs the
+ * detail fetch. Every field but `product`/`merchant` is optional so a row from a host
+ * that sends less still draws; the authoritative checks are the detail's.
+ */
+data class MemberOfferSummaryLine(
+    val product: String,
+    val merchant: String,
+    val quantity: Long?,
+    val unitPrice: Long?,
+    val givenBy: String?,
+    val valence: String?,
+    val collectedAs: String?,
+    val name: String?,
+    val variant: String?,
+)
+
 data class MemberOfferSummary(
     val id: String,
     val household: String,
     val presenter: String,
     val binding: String,
     val state: String,
-)
+    val presentedAt: Long? = null,
+    val expiresAt: Long? = null,
+    val decidedAt: Long? = null,
+    val candidates: List<MemberOfferSummaryLine>? = null,
+) {
+    /** The date a row is ordered by: when it arrived, and its expiry for a row never presented. */
+    val arrivedAt: Long get() = presentedAt ?: expiresAt ?: 0L
+}
 
 data class MemberPriceBand(val min: Long, val max: Long)
 data class MemberCandidate(
@@ -44,6 +69,9 @@ data class MemberCandidate(
     val keptAs: String?,
     val lineage: String?,
     val collectedAs: String?,
+    /** Catalogue revision 3. Absent where the catalogue row predates it. */
+    val name: String? = null,
+    val variant: String? = null,
 )
 data class MemberDisclosureItem(val label: String, val value: String)
 /** Question 72, decided 2026-09-22. The merchant's own contact, shown beside its
@@ -81,6 +109,11 @@ data class MemberOfferDetail(
 object MemberOfferCodec {
     private val json = Json { ignoreUnknownKeys = false; isLenient = false }
     private val summaryKeys = setOf("id", "household", "presenter", "binding", "state")
+    /** A row a host does not yet send these for still lists (`04b` §1b): the row falls back
+     * to a generic title and no arrival ordering, rather than failing the whole list. */
+    private val summaryOptionalKeys = setOf("presented_at", "expires_at", "decided_at", "candidates")
+    private val summaryLineKeys = setOf("product", "merchant")
+    private val summaryLineOptionalKeys = setOf("quantity", "unit_price", "given_by", "valence", "collected_as", "name", "variant")
     private val detailKeys = setOf(
         "id", "binding", "household", "presenter", "presenter_attested", "purpose", "price_band", "giver",
         "config_version", "presented_at", "expires_at", "state", "exploration_floor_met", "mandate", "candidates", "disclosures",
@@ -89,6 +122,10 @@ object MemberOfferCodec {
         "id", "product", "quantity", "unit_price", "merchant", "maker", "ships", "category", "predicted_conversion",
         "is_exploration", "given_by", "valence", "decided_at", "kept_as", "lineage",
     )
+    /** Catalogue revision 3 rides alongside the always-present keys, independently of `collected_as`. */
+    private val candidateOptionalKeys = setOf("collected_as", "name", "variant")
+    private const val CATALOGUE_NAME_MAX = 120
+    private const val CATALOGUE_VARIANT_MAX = 60
     private val disclosureKeys = setOf("merchant", "product", "version", "items", "signature")
     private val itemKeys = setOf("label", "value")
     private val contactKeys = setOf("kind", "value")
@@ -97,6 +134,7 @@ object MemberOfferCodec {
     private val states = setOf("drafted", "presented", "decided", "expired", "withdrawn", "settled")
     private val purposes = setOf("gift", "replenish", "trial", "ceremonial", "assortment")
     private val valences = setOf("offered", "kept", "returned", "consumed", "defaulted", "lost")
+    private val collectedAsValues = setOf("returned", "consumed", "missing")
 
     fun summaries(bytes: ByteArray, household: String, presenter: String): List<MemberOfferSummary> = malformed {
         val root = objectOf(bytes)
@@ -137,29 +175,55 @@ object MemberOfferCodec {
     }
 
     private fun summary(value: JsonObject, household: String, presenter: String): MemberOfferSummary {
-        require(value.keys == summaryKeys)
-        val result = MemberOfferSummary(value.string("id"), value.string("household"), value.string("presenter"), value.string("binding"), value.string("state"))
+        requireKeys(value.keys, summaryKeys, summaryOptionalKeys)
+        val result = MemberOfferSummary(
+            id = value.string("id"), household = value.string("household"), presenter = value.string("presenter"),
+            binding = value.string("binding"), state = value.string("state"),
+            presentedAt = value.nullableSafeLong("presented_at", optionalKey = true),
+            expiresAt = value.nullableSafeLong("expires_at", optionalKey = true),
+            decidedAt = value.nullableSafeLong("decided_at", optionalKey = true),
+            candidates = if (value.containsKey("candidates")) value.required("candidates").jsonArray.map { summaryLine(it.jsonObject) } else null,
+        )
         require(result.id.isNotEmpty() && identifier(result.id))
         require(result.household == household && result.presenter == presenter) { "scope" }
         require(result.binding in bindings && result.state in states)
         return result
     }
 
+    private fun summaryLine(value: JsonObject): MemberOfferSummaryLine {
+        requireKeys(value.keys, summaryLineKeys, summaryLineOptionalKeys)
+        val quantity = value.nullableSafeLong("quantity", optionalKey = true)
+        val unitPrice = value.nullableSafeLong("unit_price", optionalKey = true)
+        val valence = value.nullableString("valence", optionalKey = true)
+        val collectedAs = value.nullableString("collected_as", optionalKey = true)
+        val result = MemberOfferSummaryLine(
+            product = value.string("product"), merchant = value.string("merchant"), quantity = quantity, unitPrice = unitPrice,
+            givenBy = value.nullableString("given_by", optionalKey = true), valence = valence, collectedAs = collectedAs,
+            name = value.optionalCatalogueText("name", CATALOGUE_NAME_MAX), variant = value.optionalCatalogueText("variant", CATALOGUE_VARIANT_MAX),
+        )
+        require(result.product.isNotEmpty() && result.merchant.isNotEmpty())
+        require(quantity == null || quantity > 0)
+        require(valence == null || valence in valences)
+        require(collectedAs == null || collectedAs in collectedAsValues)
+        return result
+    }
+
     private fun candidate(value: JsonObject): MemberCandidate {
-        require(value.keys == candidateKeys || value.keys == candidateKeys + "collected_as")
+        requireKeys(value.keys, candidateKeys, candidateOptionalKeys)
         val result = MemberCandidate(
             id = value.string("id"), product = value.string("product"), quantity = value.safeLong("quantity"), unitPrice = value.safeLong("unit_price"),
             merchant = value.string("merchant"), maker = value.string("maker"), ships = value.string("ships"), category = value.nullableString("category"),
             predictedConversion = value.nullableDouble("predicted_conversion"), isExploration = value.boolean("is_exploration"),
             givenBy = value.nullableString("given_by"), valence = value.string("valence"), decidedAt = value.nullableSafeLong("decided_at"),
             keptAs = value.nullableString("kept_as"), lineage = value.nullableString("lineage"), collectedAs = value.nullableString("collected_as", optionalKey = true),
+            name = value.optionalCatalogueText("name", CATALOGUE_NAME_MAX), variant = value.optionalCatalogueText("variant", CATALOGUE_VARIANT_MAX),
         )
         require(result.id.isNotEmpty() && result.product.isNotEmpty() && result.merchant.isNotEmpty() && result.maker.isNotEmpty() && result.ships.isNotEmpty())
         require(result.quantity > 0 && result.valence in valences)
         require(result.predictedConversion?.let { it.isFinite() && it in 0.0..1.0 } != false)
         require(result.keptAs == null || result.keptAs in setOf("self", "gift", "order"))
         require(result.givenBy == null || result.givenBy.isNotEmpty())
-        require(result.collectedAs == null || result.collectedAs in setOf("returned", "consumed", "missing"))
+        require(result.collectedAs == null || result.collectedAs in collectedAsValues)
         return result
     }
 
@@ -199,6 +263,20 @@ object MemberOfferCodec {
     }
     private fun JsonObject.nullableDouble(key: String): Double? = required(key).takeUnless { it === JsonNull }?.jsonPrimitive?.let { require(!it.isString); it.double }
     private fun JsonObject.optionalObject(key: String): JsonObject? = required(key).takeUnless { it === JsonNull }?.jsonObject
+    /**
+     * Catalogue revision 3's `name` and `variant`. Absent is legitimate (a pre-revision-3
+     * catalogue row); present must be a nonempty string within the bound in Unicode code
+     * points, never explicit null. An unknown key elsewhere is still refused by `requireKeys`.
+     */
+    private fun JsonObject.optionalCatalogueText(key: String, maxCodePoints: Int): String? {
+        if (!containsKey(key)) return null
+        val text = required(key).jsonPrimitive.let { require(it.isString); it.content }
+        require(text.isNotEmpty() && text.codePointCount(0, text.length) <= maxCodePoints)
+        return text
+    }
+    private fun requireKeys(actual: Set<String>, required: Set<String>, optional: Set<String>) {
+        require(required.all { it in actual } && (actual - required).all { it in optional })
+    }
     private fun identifier(value: String) = value.isNotEmpty() && value.all { it.isLetterOrDigit() || it == '_' || it == '-' }
     private inline fun <T> malformed(block: () -> T): T = try { block() } catch (e: IllegalArgumentException) {
         if (e.message == "scope") throw MemberFailure.ScopeMismatch else throw MemberFailure.Malformed

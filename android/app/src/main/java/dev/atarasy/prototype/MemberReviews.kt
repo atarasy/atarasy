@@ -31,6 +31,8 @@ data class MemberApprovalCandidate(
     val id: String, val product: String, val merchant: String, val maker: String, val ships: String, val givenBy: String?,
     val quantity: Long, val unitPrice: Long, val isExploration: Boolean, val valence: String, val alternatives: List<String>,
     val argumentAgainst: String, val disclosure: MemberDisclosureReference,
+    /** Catalogue revision 3. Matched against the offer's own candidate in `approval()`. */
+    val name: String? = null, val variant: String? = null,
 )
 data class MemberExcluded(val product: String, val reason: String)
 data class MemberApproval(
@@ -41,6 +43,8 @@ data class MemberApproval(
 data class MemberStatementLine(
     val candidate: String, val product: String, val merchant: String, val maker: String, val ships: String, val givenBy: String?,
     val valence: String, val quantity: Long, val unitPrice: Long, val amount: Long, val note: String?, val disclosure: MemberDisclosureReference,
+    /** Catalogue revision 3. Matched against the eligible or lost candidate this line settles. */
+    val name: String? = null, val variant: String? = null,
 )
 data class MemberStatement(
     val offer: String, val household: String, val expiresAt: Long, val lines: List<MemberStatementLine>,
@@ -49,6 +53,8 @@ data class MemberStatement(
 data class ProtocolSettlementLine(
     val candidate: String, val product: String, val merchant: String, val maker: String, val ships: String,
     val valence: String, val amount: Long, val disputed: Boolean,
+    /** Catalogue revision 3. Not matched against anything else here: the settlement decode takes no detail. */
+    val name: String? = null, val variant: String? = null,
 )
 data class ProtocolSettlement(
     val offer: String, val settledAt: Long, val keptAmount: Long, val consumedAmount: Long, val lostAmount: Long,
@@ -92,6 +98,10 @@ object MemberReviewCodec {
     private val approvalCandidateKeys = words("merchant maker ships given_by id product quantity unit_price is_exploration valence alternatives argument_against disclosure")
     private val statementKeys = words("offer household expires_at lines disclosures carriage challenge")
     private val lineKeys = words("candidate product merchant maker ships given_by valence quantity unit_price amount disclosure")
+    /** Catalogue revision 3, independent of `collected_as`/`note`. */
+    private val catalogueOptionalKeys = setOf("name", "variant")
+    private const val CATALOGUE_NAME_MAX = 120
+    private const val CATALOGUE_VARIANT_MAX = 60
     private val disclosureKeys = words("merchant product version items signature")
     private val contactKeys = setOf("kind", "value")
     private val contactKinds = setOf("email", "tel", "url")
@@ -105,7 +115,8 @@ object MemberReviewCodec {
         val rows = root.required("candidates").jsonArray.map { it.jsonObject }
         require(rows.map { it.containsKey("collected_as") }.distinct().size <= 1)
         rows.forEach { row ->
-            require(row.keys == approvalCandidateKeys || row.keys == approvalCandidateKeys + "collected_as")
+            val optional = catalogueOptionalKeys + (if (row.containsKey("collected_as")) setOf("collected_as") else emptySet())
+            requireKeys(row.keys, approvalCandidateKeys, optional)
             if (row.containsKey("collected_as")) require(row.nullableString("collected_as") in setOf(null, "returned", "consumed", "missing"))
         }
         val candidates = rows.map { row ->
@@ -114,6 +125,7 @@ object MemberReviewCodec {
                 row.safeLong("quantity"), row.safeLong("unit_price"), row.bool("is_exploration"), row.string("valence"),
                 row.required("alternatives").jsonArray.map { it.jsonPrimitive.let { p -> require(p.isString); p.content } },
                 row.string("argument_against"), reference(row.obj("disclosure")),
+                row.optionalCatalogueText("name", CATALOGUE_NAME_MAX), row.optionalCatalogueText("variant", CATALOGUE_VARIANT_MAX),
             )
         }
         val excluded = root.required("excluded").jsonArray.map { element ->
@@ -129,7 +141,7 @@ object MemberReviewCodec {
         require(candidates.map { it.id }.distinct().size == candidates.size)
         candidates.forEach { row ->
             val source = detail.candidates.singleOrNull { it.id == row.id } ?: error("candidate")
-            require(matches(source, row.product, row.merchant, row.maker, row.ships, row.givenBy, row.quantity, row.unitPrice, row.valence))
+            require(matches(source, row.product, row.merchant, row.maker, row.ships, row.givenBy, row.quantity, row.unitPrice, row.valence, row.name, row.variant))
             require(row.isExploration == source.isExploration && row.alternatives.isNotEmpty() && row.alternatives.all { it.isNotBlank() } && row.argumentAgainst.isNotBlank())
             require(governs(row.disclosure, source, disclosures))
         }
@@ -142,13 +154,15 @@ object MemberReviewCodec {
         val root = objectOf(bytes); require(root.keys == statementKeys)
         val rows = root.required("lines").jsonArray.map { it.jsonObject }
         val hasNote = rows.firstOrNull()?.containsKey("note") == true
-        rows.forEach { require(it.keys == if (hasNote) lineKeys + "note" else lineKeys) }
+        val requiredLineKeys = lineKeys + (if (hasNote) setOf("note") else emptySet())
+        rows.forEach { requireKeys(it.keys, requiredLineKeys, catalogueOptionalKeys) }
         val disclosures = disclosures(root.required("disclosures"))
         val lines = rows.map { row ->
             MemberStatementLine(
                 row.string("candidate"), row.string("product"), row.string("merchant"), row.string("maker"), row.string("ships"), row.nullableString("given_by"),
                 row.string("valence"), row.safeLong("quantity"), row.safeLong("unit_price"), row.safeLong("amount"),
                 if (hasNote) row.nullableString("note") else null, reference(row.obj("disclosure")),
+                row.optionalCatalogueText("name", CATALOGUE_NAME_MAX), row.optionalCatalogueText("variant", CATALOGUE_VARIANT_MAX),
             )
         }
         val result = MemberStatement(root.string("offer"), root.string("household"), root.safeLong("expires_at"), lines, disclosures, root.nullableLong("carriage"), root.string("challenge"))
@@ -159,7 +173,7 @@ object MemberReviewCodec {
         require(lines.count { it.valence != "lost" } == eligible.size && lines.map { it.candidate }.distinct().size == lines.size)
         lines.forEach { line ->
             val source = (if (line.valence == "lost") lost else eligible).singleOrNull { it.id == line.candidate } ?: error("candidate")
-            require(matches(source, line.product, line.merchant, line.maker, line.ships, line.givenBy, line.quantity, line.unitPrice, line.valence))
+            require(matches(source, line.product, line.merchant, line.maker, line.ships, line.givenBy, line.quantity, line.unitPrice, line.valence, line.name, line.variant))
             require(governs(line.disclosure, source, disclosures))
             if (line.valence == "lost") require(line.amount == 0L && !line.note.isNullOrBlank())
             else {
@@ -192,8 +206,8 @@ object MemberReviewCodec {
         return MemberDisclosureContact(kind, contactValue)
     }
     private fun reference(value: JsonObject): MemberDisclosureReference { require(value.keys == setOf("merchant", "product")); return MemberDisclosureReference(value.string("merchant"), value.nullableString("product")) }
-    private fun matches(source: MemberCandidate, product: String, merchant: String, maker: String, ships: String, giver: String?, quantity: Long, price: Long, valence: String) =
-        source.product == product && source.merchant == merchant && source.maker == maker && source.ships == ships && source.givenBy == giver && source.quantity == quantity && source.unitPrice == price && source.valence == valence
+    private fun matches(source: MemberCandidate, product: String, merchant: String, maker: String, ships: String, giver: String?, quantity: Long, price: Long, valence: String, name: String?, variant: String?) =
+        source.product == product && source.merchant == merchant && source.maker == maker && source.ships == ships && source.givenBy == giver && source.quantity == quantity && source.unitPrice == price && source.valence == valence && source.name == name && source.variant == variant
     private fun governs(reference: MemberDisclosureReference, source: MemberCandidate, blocks: List<MemberDisclosure>): Boolean {
         val relevant = blocks.filter { it.merchant == source.merchant }
         val product = if (relevant.any { it.product == source.product }) source.product else null
@@ -208,6 +222,19 @@ object MemberReviewCodec {
     private fun JsonObject.safeLong(key: String) = required(key).jsonPrimitive.let { require(!it.isString); it.long }.also { require(it in 0..Canonical.MAXIMUM_INTEGER) }
     private fun JsonObject.nullableLong(key: String) = required(key).takeUnless { it === JsonNull }?.jsonPrimitive?.let { require(!it.isString); it.long }.also { require(it == null || it in 0..Canonical.MAXIMUM_INTEGER) }
     private fun JsonObject.nullableObject(key: String) = required(key).takeUnless { it === JsonNull }?.jsonObject
+    /**
+     * Catalogue revision 3's `name` and `variant`. Absent is legitimate; present must be a
+     * nonempty string within the bound in Unicode code points, never explicit null.
+     */
+    private fun JsonObject.optionalCatalogueText(key: String, maxCodePoints: Int): String? {
+        if (!containsKey(key)) return null
+        val text = required(key).jsonPrimitive.let { require(it.isString); it.content }
+        require(text.isNotEmpty() && text.codePointCount(0, text.length) <= maxCodePoints)
+        return text
+    }
+    private fun requireKeys(actual: Set<String>, required: Set<String>, optional: Set<String>) {
+        require(required.all { it in actual } && (actual - required).all { it in optional })
+    }
     private fun words(value: String) = value.split(' ').toSet()
     private inline fun <T> malformed(block: () -> T): T = try { block() } catch (e: IllegalArgumentException) {
         if (e.message == "scope") throw MemberFailure.ScopeMismatch else throw MemberFailure.Malformed
@@ -217,15 +244,27 @@ object MemberReviewCodec {
 object MemberSettlementCodec {
     private val json = Json { ignoreUnknownKeys = false; isLenient = false }
     private val keys = "offer settled_at kept_amount consumed_amount lost_amount charged disputed_amount lines payer signed_by signed_as receipt confirmation".split(' ').toSet()
+    private val lineKeys = "candidate product merchant maker ships valence amount disputed".split(' ').toSet()
+    private val lineOptionalKeys = setOf("name", "variant")
+    private const val CATALOGUE_NAME_MAX = 120
+    private const val CATALOGUE_VARIANT_MAX = 60
     fun decode(bytes: ByteArray, expectedOffer: String): ProtocolSettlement = try {
         val root = json.parseToJsonElement(bytes.toString(StandardCharsets.UTF_8)).jsonObject; require(root.keys == keys)
         fun string(key: String): String = root.getValue(key).jsonPrimitive.let { require(it.isString); it.content }
         fun number(key: String): Long = root.getValue(key).jsonPrimitive.let { require(!it.isString); it.long }.also { require(it in 0..Canonical.MAXIMUM_INTEGER) }
         val lines = root.getValue("lines").jsonArray.map { element ->
-            val row = element.jsonObject; require(row.keys == "candidate product merchant maker ships valence amount disputed".split(' ').toSet())
+            val row = element.jsonObject
+            require(lineKeys.all { it in row.keys } && (row.keys - lineKeys).all { it in lineOptionalKeys })
             fun s(key: String) = row.getValue(key).jsonPrimitive.let { require(it.isString); it.content }
+            fun catalogueText(key: String, maxCodePoints: Int): String? {
+                if (!row.containsKey(key)) return null
+                val text = s(key); require(text.isNotEmpty() && text.codePointCount(0, text.length) <= maxCodePoints); return text
+            }
             val amount = row.getValue("amount").jsonPrimitive.let { require(!it.isString); it.long }; require(amount in 0..Canonical.MAXIMUM_INTEGER)
-            ProtocolSettlementLine(s("candidate"), s("product"), s("merchant"), s("maker"), s("ships"), s("valence"), amount, row.getValue("disputed").jsonPrimitive.boolean)
+            ProtocolSettlementLine(
+                s("candidate"), s("product"), s("merchant"), s("maker"), s("ships"), s("valence"), amount, row.getValue("disputed").jsonPrimitive.boolean,
+                catalogueText("name", CATALOGUE_NAME_MAX), catalogueText("variant", CATALOGUE_VARIANT_MAX),
+            )
         }
         val value = ProtocolSettlement(string("offer"), number("settled_at"), number("kept_amount"), number("consumed_amount"), number("lost_amount"), number("charged"), number("disputed_amount"), lines, string("payer"), string("signed_by"), string("signed_as"), string("receipt"), root.getValue("confirmation").takeUnless { it === JsonNull }?.jsonPrimitive?.let { require(it.isString); it.content })
         require(value.offer == expectedOffer) { "scope" }; require(value.signedAs == "agent" && value.receipt.isNotEmpty() && lines.map { it.candidate }.distinct().size == lines.size)
