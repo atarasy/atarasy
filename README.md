@@ -37,6 +37,38 @@ The engine listens on 8787 unless `PORT` says otherwise, and it has to be told t
 
 Open the page, name a household, create a passkey. The page then shows the two references a shop needs. Offers presented to that household appear when a presenter places them; each opens to the approval screen, where every candidate is kept or returned by a tap and the set is confirmed once.
 
+## Running it locally (OPS-01)
+
+The member track with no production account: no Stripe, no WorkOS, no `api-dev`. The engine runs in memory and this hub runs on `localhost`; nothing here reads the Vox workbench or the member API (see the last paragraph below).
+
+Pin Bun to 1.2.19 (`bun --version`), installed from [bun.sh](https://bun.sh), and use `bun install --frozen-lockfile` in every repository: a newer Bun rewrites `bun.lock`, which is a change to the repository and not one to commit. Clone `valence`, `atarasy`, `ataraxia` and `vox` side by side in one parent directory; this repository's `bun test` looks for the engine at `../valence/engine` unless `VALENCE_ENGINE_DIR` says otherwise.
+
+Start the engine, from the `valence` checkout's `engine/`:
+
+```
+bun install --frozen-lockfile
+VALENCE_EXPLORATION_RATE=0.2 VALENCE_RECOVERY_GRACE_DAYS=3 VALENCE_RP_ID=localhost bun run src/server.ts
+```
+
+`VALENCE_EXPLORATION_RATE` has no recommended figure (specification §5) and the engine refuses to start without one; `0.2` is what `test/hub.test.ts` and the conformance suites use. Then, in this repository:
+
+```
+bun install --frozen-lockfile
+VALENCE_ENGINE_URL=http://localhost:8787 VALENCE_PRESENTERS=sample-presenter bun run src/server.ts
+```
+
+Open `http://localhost:8790`, name a household and create a passkey (a platform authenticator such as Touch ID; a person has to be at the device for this step). The page then shows the household id. With both running, put a sample offer in front of that household:
+
+```
+bun scripts/present-sample.ts <household-id-shown-on-the-page>
+```
+
+The script registers a presenter named `sample-presenter`, the name `VALENCE_PRESENTERS` above names, so the offer it places reaches this hub's list. It publishes a one-product catalogue and presents an offer carrying the alternative and the argument against that clause 59 requires, the way `test/hub.test.ts` seeds one. Reload the hub's list, decline or keep the line, and confirm the set with the passkey. See `scripts/present-sample.ts` for what each step does and why every run publishes a fresh product rather than reusing the last one.
+
+**Resetting.** Stop the engine and this hub, then start the engine again: it holds nothing on disk by default, so it comes back with no offers and no households. Clear this hub's site data for `localhost:8790` in the browser too, since its local storage is where a household's label and mandate reference are kept and the engine's restart alone does not touch the browser. `scripts/present-sample.ts` keeps its presenter and merchant keys in `.ops01/sample-presenter.json` (git-ignored); delete it for fresh keys, or leave it, since a restarted engine has no record of the old ones either way and accepts them being registered again.
+
+**This hub reads the engine directly and never the member API.** The Vox workbench and the member API (`valence/experiments/member-postgres`) are a separate track: the workbench speaks only to the member API's `/presenter/*` routes, which this reference engine does not have. An offer a shop places through the Vox workbench does not appear here; it appears in the iOS and Android clients, which read the member API. Running the member track and the Vox track locally at the same time is two unconnected pairs of processes, not one system that shares offers between them.
+
 ## Checks
 
 ```

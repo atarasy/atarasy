@@ -2,6 +2,9 @@ node_modules/
 *.db
 *.db-journal
 
+# Keys `scripts/present-sample.ts` generates for its local presenter (OPS-01)
+.ops01/
+
 # Native prototype local build products
 ios/AtarasyCore/.build/
 ios/AtarasyPrototype.xcodeproj/
