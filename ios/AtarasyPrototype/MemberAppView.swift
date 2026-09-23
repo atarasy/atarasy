@@ -66,6 +66,8 @@ struct MemberEntryView: View {
                 if showingInvitation {
                     MemberCard {
                         Text("Enter the invitation code you were given. A passkey is created on this device; no password is used.").font(.subheadline)
+                        // Vault `81` option A: the pilot is one device per household.
+                        Text("Use Atarasy on this device only. Your records are encrypted with a key kept on this device, and another device cannot open them.").font(.footnote).foregroundStyle(.secondary).accessibilityIdentifier("oneDeviceNote")
                         SecureField("Invitation code", text: $invitation).textInputAutocapitalization(.never).autocorrectionDisabled()
                             .textFieldStyle(.roundedBorder)
                         Button("Create passkey") {
@@ -117,6 +119,7 @@ struct MemberLockedView: View {
                 Section {
                     DisclosureGroup("About this account") {
                         VStack(alignment: .leading, spacing: 4) {
+                            Text("This account's records open only on the device where you first signed in.").font(.footnote)
                             Text("Account reference, for support").font(.caption).foregroundStyle(.secondary)
                             Text(verbatim: session.household).font(.caption.monospaced()).textSelection(.enabled)
                         }

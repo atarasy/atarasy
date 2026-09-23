@@ -64,6 +64,7 @@
 "Checking your account" = "アカウントを確認しています";
 "Checking your shops" = "ショップを確認しています";
 "Checking…" = "確認しています…";
+"Choose Atarasy PRF test when asked. Then write down the two values below from each device." = "確認を求められたら「Atarasy PRF test」を選んでください。そのあと、端末ごとに下の 2 つの値を書き留めてください。";
 "Choose Keep or Decline for each item (%lld of %lld)." = "品目ごとに「受け取る」か「見送る」を選んでください（%2$lld 点中 %1$lld 点）。";
 "Close" = "閉じる";
 "Closed" = "締め切り済み";
@@ -78,7 +79,9 @@
 "Could not be checked." = "確認できませんでした。";
 "Could not open this" = "開けませんでした";
 "Coverage" = "移動する内容";
+"Create a test passkey" = "テスト用のパスキーを作る";
 "Create passkey" = "パスキーを作成";
+"Creates a passkey named Atarasy PRF test in your iCloud Keychain. Delete it in the Passwords app afterwards." = "iCloud キーチェーンに「Atarasy PRF test」という名前のパスキーを作ります。確認が終わったら「パスワード」アプリで削除してください。";
 "Daily limit" = "1 日の上限";
 "Decision recorded" = "決定を記録しました";
 "Decision undone" = "決定を取り消しました";
@@ -105,6 +108,8 @@
 "Face ID or Touch ID confirms it is you. It does not replace reading this screen." = "Face ID や Touch ID は本人確認のためのものです。この画面を読む代わりにはなりません。";
 "Fields: %@" = "項目: %@";
 "For %@ only" = "%@ のみ";
+"For the team" = "開発チーム向け";
+"For the team. This checks whether this passkey gives the same result on another device. Nothing is sent to Atarasy, and no account changes." = "開発チーム向けの確認です。このパスキーが別の端末でも同じ結果を返すかを調べます。Atarasy には何も送信せず、アカウントも変わりません。";
 "Free" = "無料";
 "Gift from %@" = "%@ からの贈り物";
 "Goods" = "商品";
@@ -130,6 +135,7 @@
 "Load the limits to sign" = "署名する内容を読み込む";
 "Made by %@" = "メーカー・生産者: %@";
 "Marked as not right, not charged here" = "申し出た分（ここでは請求なし）";
+"Measure" = "測定する";
 "Member account" = "アカウント";
 "Member sign-in unavailable" = "サインインできません";
 "Move Host" = "保管先の移動";
@@ -162,6 +168,7 @@
 "Nothing was decided or paid. Try again." = "決定も支払いもしていません。もう一度お試しください。";
 "Nothing yet." = "まだありません。";
 "Nothing. You decline every item." = "ありません。全て見送ります。";
+"Nothing. You declined every item." = "ありません。全て見送りました。";
 "Notice delivered before recovery completed" = "復旧の完了前に通知が届きました";
 "Notifications" = "通知";
 "Now" = "現在";
@@ -171,6 +178,7 @@
 "Opening Atarasy" = "Atarasy を開いています";
 "Opening your records." = "記録を開いています。";
 "Outside your limits" = "見守り設定の範囲外";
+"Passkey device check" = "パスキーの端末確認";
 "Payment status is not available here." = "支払いの状況はここでは確認できません。";
 "People who must agree to loosen these" = "ゆるめるときに同意が必要な人";
 "Permission details" = "詳細";
@@ -210,6 +218,7 @@
 "Requested by: %@" = "依頼元: %@";
 "Restore session" = "サインインを復元";
 "Restore this device" = "この端末を復旧する";
+"Result" = "結果";
 "Result not known yet" = "結果はまだ分かりません";
 "Retire source host access" = "いまの保管先を閉じる";
 "Review" = "確認へ進む";
@@ -257,6 +266,8 @@
 "Statement ready to confirm" = "明細を確認できます";
 "Statement signed" = "明細に署名しました";
 "Statements" = "ご利用明細";
+"Step 1, on the first device only" = "手順 1（1 台目の端末だけで行う）";
+"Step 2, on each device" = "手順 2（それぞれの端末で行う）";
 "Stopped. Your current host is unchanged" = "中断しました。いまの保管先は変わっていません";
 "Support may ask you for the account reference shown under Account on a device where you are signed in. It does not sign you in by itself." = "お問い合わせの際に、サインイン中の端末の「アカウント」に表示される番号を伺うことがあります。番号だけではサインインできません。";
 "Taken from the limits in effect when the change was proposed." = "変更を出した時点の設定に基づいています。";
@@ -274,11 +285,13 @@
 "These are the limits your agent works within. Nothing outside them can be bought for you, and loosening them needs the people you name here." = "あなたの代わりに買うときの範囲です。この範囲の外で何かを買うことはありません。ゆるめるには、ここで指定した人の同意が必要です。";
 "These goods are already with you. Use what you like; you pay only for what you use, and the rest goes back at the swap." = "既にお手元にある商品です。気になるものを使ってください。お支払いは使った分だけで、残りは入れ替えのときに回収します。";
 "This account cannot be deleted yet" = "このアカウントはまだ削除できません";
+"This account's records open only on the device where you first signed in." = "このアカウントの記録は、最初にサインインした端末でだけ開けます。";
 "This box has settled." = "この箱は精算済みです。";
 "This build has no independently delivered recovery notice channel, so recovery configuration remains closed." = "このアプリには別経路の通知手段がないため、復旧は設定できません。";
 "This build is not connected to a member service." = "このアプリは会員サービスに接続されていません。";
 "This build is not connected to a member service. You can continue exploring the sample proposals." = "このアプリは会員サービスに接続されていません。サンプルのご提案は引き続き見られます。";
 "This cannot be undone. You will be asked to confirm with your passkey." = "元に戻せません。パスキーで本人確認をします。";
+"This check needs iOS 18 or later." = "この確認には iOS 18 以降が必要です。";
 "This decision can no longer be undone." = "この決定はもう取り消せません。";
 "This device can receive a named recovery share" = "この端末は復旧用の鍵の一部を受け取れます";
 "This device has no recovery-only encryption key." = "この端末には復旧用の鍵がありません。";
@@ -302,6 +315,7 @@
 "Up to %@ a day" = "1 日 %@ まで";
 "Up to %@ at a shop outside your network" = "登録外のお店では %@ まで";
 "Up to, per day" = "1 日あたりの上限";
+"Use Atarasy on this device only. Your records are encrypted with a key kept on this device, and another device cannot open them." = "Atarasy はこの端末だけで使ってください。記録はこの端末にある鍵で暗号化され、ほかの端末では開けません。";
 "Used" = "使ったもの";
 "Used." = "使用済み。";
 "Uses scarcity pressure" = "品切れをあおる";
@@ -312,6 +326,7 @@
 "Waiting for your signature" = "署名待ち";
 "Went back at the swap." = "入れ替えのときに回収しました。";
 "What you have shared" = "提供している情報";
+"What you signed" = "署名した内容";
 "Who must sign" = "署名が必要な人";
 "Why this, and why not" = "この品目を勧める理由と、選ばない理由";
 "With you." = "お手元にあります。";
@@ -342,5 +357,3 @@
 "Your own agent for things that arrive to be tried. You pay only for what you keep, and nothing is bought without your signature." = "試しに届くものを、あなたの代わりに見きわめる窓口です。お支払いは手元に残したものだけで、署名なしに何かを買うことはありません。";
 "Your recovery" = "あなたの復旧";
 "Your recovery policy" = "復旧の設定";
-"What you signed" = "署名した内容";
-"Nothing. You declined every item." = "ありません。全て見送りました。";

@@ -139,6 +139,8 @@ final class MemberAppUITests: XCTestCase {
         XCTAssertTrue(element("memberSignIn", app).waitForExistence(timeout: 8))
         XCTAssertTrue(element("memberShowInvitation", app).exists)
         XCTAssertFalse(element("memberRestore", app).isHittable, "restoring by reference is behind the trouble link")
+        element("memberShowInvitation", app).tap()
+        XCTAssertTrue(element("oneDeviceNote", app).waitForExistence(timeout: 3), "vault 81 option A: joining says the pilot is one device")
         shot("entry-en", app)
     }
 }

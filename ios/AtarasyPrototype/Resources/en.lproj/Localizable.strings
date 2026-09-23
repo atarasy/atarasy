@@ -64,6 +64,7 @@
 "Checking your account" = "Checking your account";
 "Checking your shops" = "Checking your shops";
 "Checking…" = "Checking…";
+"Choose Atarasy PRF test when asked. Then write down the two values below from each device." = "Choose Atarasy PRF test when asked. Then write down the two values below from each device.";
 "Choose Keep or Decline for each item (%lld of %lld)." = "Choose Keep or Decline for each item (%lld of %lld).";
 "Close" = "Close";
 "Closed" = "Closed";
@@ -78,7 +79,9 @@
 "Could not be checked." = "Could not be checked.";
 "Could not open this" = "Could not open this";
 "Coverage" = "Coverage";
+"Create a test passkey" = "Create a test passkey";
 "Create passkey" = "Create passkey";
+"Creates a passkey named Atarasy PRF test in your iCloud Keychain. Delete it in the Passwords app afterwards." = "Creates a passkey named Atarasy PRF test in your iCloud Keychain. Delete it in the Passwords app afterwards.";
 "Daily limit" = "Daily limit";
 "Decision recorded" = "Decision recorded";
 "Decision undone" = "Decision undone";
@@ -105,6 +108,8 @@
 "Face ID or Touch ID confirms it is you. It does not replace reading this screen." = "Face ID or Touch ID confirms it is you. It does not replace reading this screen.";
 "Fields: %@" = "Fields: %@";
 "For %@ only" = "For %@ only";
+"For the team" = "For the team";
+"For the team. This checks whether this passkey gives the same result on another device. Nothing is sent to Atarasy, and no account changes." = "For the team. This checks whether this passkey gives the same result on another device. Nothing is sent to Atarasy, and no account changes.";
 "Free" = "Free";
 "Gift from %@" = "Gift from %@";
 "Goods" = "Goods";
@@ -130,6 +135,7 @@
 "Load the limits to sign" = "Load the limits to sign";
 "Made by %@" = "Made by %@";
 "Marked as not right, not charged here" = "Marked as not right, not charged here";
+"Measure" = "Measure";
 "Member account" = "Member account";
 "Member sign-in unavailable" = "Member sign-in unavailable";
 "Move Host" = "Move Host";
@@ -162,6 +168,7 @@
 "Nothing was decided or paid. Try again." = "Nothing was decided or paid. Try again.";
 "Nothing yet." = "Nothing yet.";
 "Nothing. You decline every item." = "Nothing. You decline every item.";
+"Nothing. You declined every item." = "Nothing. You declined every item.";
 "Notice delivered before recovery completed" = "Notice delivered before recovery completed";
 "Notifications" = "Notifications";
 "Now" = "Now";
@@ -171,6 +178,7 @@
 "Opening Atarasy" = "Opening Atarasy";
 "Opening your records." = "Opening your records.";
 "Outside your limits" = "Outside your limits";
+"Passkey device check" = "Passkey device check";
 "Payment status is not available here." = "Payment status is not available here.";
 "People who must agree to loosen these" = "People who must agree to loosen these";
 "Permission details" = "Permission details";
@@ -210,6 +218,7 @@
 "Requested by: %@" = "Requested by: %@";
 "Restore session" = "Restore session";
 "Restore this device" = "Restore this device";
+"Result" = "Result";
 "Result not known yet" = "Result not known yet";
 "Retire source host access" = "Retire source host access";
 "Review" = "Review";
@@ -257,6 +266,8 @@
 "Statement ready to confirm" = "Statement ready to confirm";
 "Statement signed" = "Statement signed";
 "Statements" = "Statements";
+"Step 1, on the first device only" = "Step 1, on the first device only";
+"Step 2, on each device" = "Step 2, on each device";
 "Stopped. Your current host is unchanged" = "Stopped. Your current host is unchanged";
 "Support may ask you for the account reference shown under Account on a device where you are signed in. It does not sign you in by itself." = "Support may ask you for the account reference shown under Account on a device where you are signed in. It does not sign you in by itself.";
 "Taken from the limits in effect when the change was proposed." = "Taken from the limits in effect when the change was proposed.";
@@ -274,11 +285,13 @@
 "These are the limits your agent works within. Nothing outside them can be bought for you, and loosening them needs the people you name here." = "These are the limits your agent works within. Nothing outside them can be bought for you, and loosening them needs the people you name here.";
 "These goods are already with you. Use what you like; you pay only for what you use, and the rest goes back at the swap." = "These goods are already with you. Use what you like; you pay only for what you use, and the rest goes back at the swap.";
 "This account cannot be deleted yet" = "This account cannot be deleted yet";
+"This account's records open only on the device where you first signed in." = "This account's records open only on the device where you first signed in.";
 "This box has settled." = "This box has settled.";
 "This build has no independently delivered recovery notice channel, so recovery configuration remains closed." = "This build has no independently delivered recovery notice channel, so recovery configuration remains closed.";
 "This build is not connected to a member service." = "This build is not connected to a member service.";
 "This build is not connected to a member service. You can continue exploring the sample proposals." = "This build is not connected to a member service. You can continue exploring the sample proposals.";
 "This cannot be undone. You will be asked to confirm with your passkey." = "This cannot be undone. You will be asked to confirm with your passkey.";
+"This check needs iOS 18 or later." = "This check needs iOS 18 or later.";
 "This decision can no longer be undone." = "This decision can no longer be undone.";
 "This device can receive a named recovery share" = "This device can receive a named recovery share";
 "This device has no recovery-only encryption key." = "This device has no recovery-only encryption key.";
@@ -302,6 +315,7 @@
 "Up to %@ a day" = "Up to %@ a day";
 "Up to %@ at a shop outside your network" = "Up to %@ at a shop outside your network";
 "Up to, per day" = "Up to, per day";
+"Use Atarasy on this device only. Your records are encrypted with a key kept on this device, and another device cannot open them." = "Use Atarasy on this device only. Your records are encrypted with a key kept on this device, and another device cannot open them.";
 "Used" = "Used";
 "Used." = "Used.";
 "Uses scarcity pressure" = "Uses scarcity pressure";
@@ -312,6 +326,7 @@
 "Waiting for your signature" = "Waiting for your signature";
 "Went back at the swap." = "Went back at the swap.";
 "What you have shared" = "What you have shared";
+"What you signed" = "What you signed";
 "Who must sign" = "Who must sign";
 "Why this, and why not" = "Why this, and why not";
 "With you." = "With you.";
@@ -342,5 +357,3 @@
 "Your own agent for things that arrive to be tried. You pay only for what you keep, and nothing is bought without your signature." = "Your own agent for things that arrive to be tried. You pay only for what you keep, and nothing is bought without your signature.";
 "Your recovery" = "Your recovery";
 "Your recovery policy" = "Your recovery policy";
-"What you signed" = "What you signed";
-"Nothing. You declined every item." = "Nothing. You declined every item.";
