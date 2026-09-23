@@ -24,9 +24,21 @@ struct MemberMandateView: View {
     @ObservedObject var account: MemberAccount
     let selected: MemberMandate
     @State private var acknowledged = false
+    @Environment(\.dismiss) private var dismiss
+    // `account.mandates` drops a mandate's id only after `signMandate()` submits it
+    // successfully (MemberAccount.swift), so its absence here is the signed state.
+    // Deriving it this way, rather than a separate local flag, keeps this screen and
+    // the "Mandates awaiting your signature" list in Account agreeing about what is
+    // signed without an extra round trip.
+    private var signed: Bool { !account.mandates.contains(where: { $0.id == selected.id }) }
     var body: some View {
         Form {
-            if let review = account.mandateReview, review.mandate == selected {
+            if signed {
+                Section {
+                    Text("Mandate signed. It is now in effect.").accessibilityIdentifier("mandateSignedNotice")
+                    Button("Done") { dismiss() }.accessibilityIdentifier("mandateSignedDone")
+                }
+            } else if let review = account.mandateReview, review.mandate == selected {
                 let m = review.mandate
                 Section("Terms to sign") {
                     Text("Host: \(review.host)")
@@ -50,13 +62,13 @@ struct MemberMandateView: View {
                 Button("Load terms for review") { Task { acknowledged = false; await account.reviewMandate(selected) } }
             }
             if account.busy { ProgressView("Waiting for your request") }
-            if !account.mandateNotice.isEmpty { Text(account.mandateNotice) }
+            if !signed, !account.mandateNotice.isEmpty { Text(account.mandateNotice) }
             if !account.notice.isEmpty { Text(account.notice) }
         }
         .navigationTitle("Review mandate")
         .disabled(account.busy)
         .interactiveDismissDisabled(account.busy)
-        .task { acknowledged = false; await account.reviewMandate(selected) }
+        .task { if !signed { acknowledged = false; await account.reviewMandate(selected) } }
     }
 }
 

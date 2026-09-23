@@ -92,6 +92,17 @@ func capturedCeremony(_ name: String) throws -> MemberCeremony {
     func restore(household: String) async throws -> MemberSessionInfo? { calls.append("restore:" + household); if let failure { throw failure }; return info }
     func offers(presenter: String) async throws -> [MemberOfferSummary] { [] }
     func logout() async throws -> MemberLogoutOutcome { calls.append("logout"); if let failure { throw failure }; return .revoked }
+    var unsigned: [MemberMandate] = []
+    func unsignedMandates() async throws -> [MemberMandate] { calls.append("unsigned-mandates"); if let failure { throw failure }; return unsigned }
+    func prepareMandate(_ selected: MemberMandate) async throws -> MemberMandateReview {
+        calls.append("prepare-mandate:" + selected.id)
+        if let failure { throw failure }
+        return MemberMandateReview(mandate: selected, host: "unit.example", ceremony: try capturedCeremony("login-options"), sessionID: "session", credentialID: "cred")
+    }
+    func submitMandate(_ review: MemberMandateReview, assertion: MemberPasskeyResponse) async throws {
+        calls.append("submit-mandate:" + review.mandate.id)
+        if let failure { throw failure }
+    }
 }
 @MainActor private final class AccountPasskeys: MemberPasskeyAuthorising {
     var fail: NativePasskeyFailure?
@@ -164,6 +175,26 @@ func capturedCeremony(_ name: String) throws -> MemberCeremony {
         model.close(); service.waiting?.resume(returning: service.info); service.waiting = nil
         await first.value
         XCTAssertNil(model.session); XCTAssertEqual(model.notice, ""); XCTAssertFalse(model.busy)
+    }
+    func testSuccessfulMandateSignatureRemovesItAndClearsReview() async {
+        let service = AccountService(), passkeys = AccountPasskeys()
+        let mandate = MemberMandate(id: "mandate-1", household: "server-household", ceilingOutOfNetwork: 10000, ceilingDaily: nil, coolingSeconds: nil, coSigners: [], lapsesAt: 999_999_999_000, version: 1)
+        service.unsigned = [mandate]
+        let model = MemberAccount(service: service, passkeys: passkeys)
+        await model.signIn()
+        await model.refreshMandates()
+        XCTAssertEqual(model.mandates, [mandate])
+        await model.reviewMandate(mandate)
+        XCTAssertEqual(model.mandateReview?.mandate, mandate)
+        await model.signMandate()
+        // MemberMandateView.signed reads exactly this: once a mandate's id is gone from
+        // `mandates`, the "Terms to sign" section and the "Load terms for review" button
+        // both stop appearing, so a signed mandate cannot be prepared a second time (the
+        // server refuses a prepare for an already-signed mandate with 404).
+        XCTAssertTrue(model.mandates.isEmpty)
+        XCTAssertNil(model.mandateReview)
+        XCTAssertEqual(model.mandateNotice, "Mandate signed.")
+        XCTAssertEqual(service.calls, ["login-options", "login", "unsigned-mandates", "prepare-mandate:mandate-1", "submit-mandate:mandate-1"])
     }
 }
 

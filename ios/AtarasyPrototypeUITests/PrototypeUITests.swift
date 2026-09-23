@@ -201,7 +201,10 @@ final class PrototypeUITests: XCTestCase {
         tap("acknowledgeFrozenStatement", app); XCTAssertTrue(app.buttons["approveMemberStatement"].isEnabled)
         tap("approveMemberStatement", app)
         XCTAssertTrue(app.staticTexts["statementFlowNotice"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["statementFlowNotice"].label.contains("still unknown"))
+        // Commit a4e34ec reworded the `.unresolved` notice so it no longer tells another
+        // passkey's holder a submission was theirs ("The result is still unknown." became
+        // this), but left this assertion on the retired wording.
+        XCTAssertTrue(app.staticTexts["statementFlowNotice"].label.contains("could not be read"))
         XCTAssertFalse(app.buttons["approveMemberStatement"].exists)
         tap("checkMemberStatement", app)
         XCTAssertTrue(app.staticTexts["statementFlowNotice"].label.contains("Nothing was resubmitted"))
