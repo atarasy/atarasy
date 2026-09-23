@@ -17,9 +17,11 @@ The hub provides these surfaces and carries their calls to the engine.
 
 What is declined is sent as a decision, not left as silence. That is the event the specification exists for.
 
-## Native clients
+## Three clients, one design
 
-The [iOS client](ios/README.md) contains the complete native member flows currently implemented. The [Android client](android/README.md) has its independent Kotlin canonical contract, Credential Manager passkey boundary, authenticated member decisions, statements, cooling-window withdrawals, encrypted reconciliation journal and a Compose phone/tablet shell. Android deployment remains gated on a reviewed release signing certificate, Digital Asset Links publication and release-device acceptance.
+This hub, the [iOS client](ios/README.md) and the [Android client](android/README.md) all render the same Inbox, Limits and Account design (vault `80`, rebuilt 2026-09-23), each in English and Japanese: Inbox lists every shop's offers and boxes by arrival, across "At home" and "Proposals"; Limits states the mandate's protections as sentences; Account holds records, recovery and account deletion. The Android client ports the same design onto its independent Kotlin canonical contract, Credential Manager passkey boundary, authenticated member decisions, statements, cooling-window withdrawals and encrypted reconciliation journal, with a Compose phone/tablet shell. Android deployment remains gated on a reviewed release signing certificate, Digital Asset Links publication and release-device acceptance.
+
+The iOS app is in TestFlight, internal group only, build 1.0 (5). The pilot is one device per household: a second device or a reinstall reaches a locked private-node screen by design (vault `81`). A second option, deriving the ledger key from the passkey, is to be measured by the procedure in vault `81` §6 before anything is built; the two-device measurement has not yet run.
 
 ## Running it
 
