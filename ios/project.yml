@@ -60,6 +60,7 @@ targets:
           # Production bundle either.
           EXCLUDED_SOURCE_FILE_NAMES: "fixtures.json"
       base:
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         PRODUCT_BUNDLE_IDENTIFIER: dev.atarasy.prototype
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
