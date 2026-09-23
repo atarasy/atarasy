@@ -80,3 +80,26 @@ export const awaitsDecision = (o: InboxOffer): boolean =>
  */
 export const byArrival = (a: InboxOffer, b: InboxOffer): number =>
   (b.presented_at ?? b.expires_at) - (a.presented_at ?? a.expires_at);
+
+/**
+ * Vault `80` §6.2 I. The one status line a row carries, in the member's own
+ * words rather than a protocol state. Four of the plan's six cases are ones
+ * this list can answer on its own; the other two (a decided set's cooling
+ * countdown and a result gone unknown) need the mandate and a saved
+ * operation handle this module does not hold, and are drawn by the caller.
+ *
+ * A pure function so the case a row falls into is decided once, here, rather
+ * than by an `if` chain repeated wherever a row is drawn.
+ */
+export type RowStatus =
+  | { kind: "box-waiting"; nextSwap: number }
+  | { kind: "box-statement-ready"; holdsNext: boolean }
+  | { kind: "proposal-undecided"; closes: number }
+  | { kind: "proposal-decided" };
+
+export function rowStatus(o: InboxOffer): RowStatus {
+  if (awaitsStatement(o)) return { kind: "box-statement-ready", holdsNext: holdsNextBox(o) };
+  if (o.binding === "physical") return { kind: "box-waiting", nextSwap: o.expires_at };
+  if (awaitsDecision(o)) return { kind: "proposal-undecided", closes: o.expires_at };
+  return { kind: "proposal-decided" };
+}
