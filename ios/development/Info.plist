@@ -2,12 +2,14 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>AtarasyAPNSEnvironment</key>
+	<string>sandbox</string>
+	<key>AtarasyMemberCurrency</key>
+	<string>JPY</string>
 	<key>AtarasyMemberEnvironment</key>
 	<string>development</string>
 	<key>AtarasyMemberOrigin</key>
 	<string>https://api-dev.vox.delivery</string>
-	<key>AtarasyAPNSEnvironment</key>
-	<string>sandbox</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleExecutable</key>
@@ -16,6 +18,11 @@
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>ja</string>
+	</array>
 	<key>CFBundleName</key>
 	<string>$(PRODUCT_NAME)</string>
 	<key>CFBundlePackageType</key>

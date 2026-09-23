@@ -1,228 +1,239 @@
 import SwiftUI
 import AtarasyCore
 
-struct MemberMandateSection: View {
+/// The Dials (`04b` §7b), called Limits on screen: what the member's agent may do without
+/// asking, written as sentences rather than fields (vault `80` §6.2 L). A change takes effect
+/// only when everyone the current version names has signed it; tightening needs only the
+/// member, loosening needs the people they named (clause 47).
+struct MemberLimitsView: View {
     @ObservedObject var account: MemberAccount
     var body: some View {
-        Section("Mandates awaiting your signature") {
-            Text("These terms are not active until you review and sign them.").font(.footnote)
-            Button("Refresh unsigned mandates") { Task { await account.refreshMandates() } }
-                .accessibilityIdentifier("refreshUnsignedMandates")
-            ForEach(account.mandates) { mandate in
-                NavigationLink { MemberMandateView(account: account, selected: mandate) } label: {
-                    VStack(alignment: .leading) {
-                        Text("Review mandate · version \(mandate.version)")
-                        Text(mandate.id).font(.caption)
+        List {
+            Section {
+                Text("These are the limits your agent works within. Nothing outside them can be bought for you, and loosening them needs the people you name here.")
+                    .font(.subheadline).foregroundStyle(.secondary)
+            }
+            if !account.mandates.isEmpty {
+                Section("Waiting for your signature") {
+                    ForEach(account.mandates) { mandate in
+                        NavigationLink { MemberMandateView(account: account, selected: mandate) } label: {
+                            Label { VStack(alignment: .leading, spacing: 2) { Text("Review and sign your limits"); Text(verbatim: MemberLimitsText.summary(mandate)).font(.caption).foregroundStyle(.secondary) } } icon: { Image(systemName: "signature").foregroundStyle(.orange) }
+                        }
+                        .accessibilityIdentifier("unsignedMandate-" + mandate.id)
                     }
                 }
             }
-            if !account.mandateNotice.isEmpty { Text(account.mandateNotice) }
+            ForEach(account.effectiveMandates) { mandate in
+                Section {
+                    MemberMandateSentences(mandate: mandate)
+                    NavigationLink("Change these limits") { MemberMandateEditor(account: account, before: mandate) }
+                        .accessibilityIdentifier("editMandate-" + mandate.id)
+                } header: {
+                    Text(account.effectiveMandates.count > 1 ? "Limits \(mandate.label)" : "Your limits")
+                }
+            }
+            let pending = account.mandateChanges.filter { $0.state == "pending" }
+            if !pending.isEmpty {
+                Section("Changes waiting for signatures") {
+                    ForEach(pending) { change in
+                        NavigationLink { MemberMandateChangeReview(account: account, change: change) } label: {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Change to your limits")
+                                Text("\(change.signedBy.count) of \(change.requiredSigners.count) signatures").font(.caption).foregroundStyle(.secondary)
+                            }
+                        }.accessibilityIdentifier("pendingMandateChange-" + change.id)
+                    }
+                }
+            }
+            if account.effectiveMandates.isEmpty && account.mandates.isEmpty {
+                Section { Text("No limits are recorded for this account yet.").foregroundStyle(.secondary) }
+            }
+            if !account.dialsNotice.isEmpty { Section { Text(verbatim: account.dialsNotice).accessibilityIdentifier("dialsNotice") } }
+            if !account.mandateNotice.isEmpty { Section { Text(verbatim: account.mandateNotice) } }
         }
+        .navigationTitle("Limits")
+        .refreshable { await account.refreshDials(); await account.refreshMandates() }
+        .task { await account.refreshDials(); await account.refreshMandates() }
     }
 }
+
+extension MemberMandate {
+    /// The part of the id after the household's, which the member or their hub chose (§13.2).
+    var label: String { id.split(separator: ".").last.map(String.init) ?? id }
+}
+extension Mandate {
+    init(_ m: MemberMandate) {
+        self.init(id: m.id, household: m.household, ceilingOutOfNetwork: m.ceilingOutOfNetwork, ceilingDaily: m.ceilingDaily, coolingSeconds: m.coolingSeconds, coSigners: m.coSigners, lapsesAt: m.lapsesAt, version: m.version)
+    }
+}
+extension MemberLimitsText {
+    static func summary(_ m: MemberMandate) -> String { summary(Mandate(m)) }
+}
+
+/// The five protections as sentences. The same view draws "now" and "after the change".
+struct MemberMandateSentences: View {
+    let mandate: MemberMandate
+    var body: some View {
+        sentence("calendar", MemberLimitsText.daily(Mandate(mandate)), "Everything bought for you in one day, including what has already been settled today.")
+        sentence("building.2", String(localized: "Up to \(MemberFormat.money(mandate.ceilingOutOfNetwork)) at a shop outside your network"), nil)
+        sentence("arrow.uturn.backward", MemberLimitsText.cooling(Mandate(mandate)), "After you sign a decision, how long you have to undo it.")
+        sentence("person.2", mandate.coSigners.isEmpty ? String(localized: "Nobody else needs to agree to loosen these") : String(localized: "\(mandate.coSigners.count) people must agree to loosen these"), nil)
+        sentence("hourglass", String(localized: "Ends on \(MemberFormat.day(mandate.lapsesAt))"), "After this date nothing can be bought for you until you sign new limits.")
+    }
+    private func sentence(_ icon: String, _ text: String, _ note: LocalizedStringKey?) -> some View {
+        Label {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(verbatim: text)
+                if let note { Text(note).font(.caption).foregroundStyle(.secondary) }
+            }
+        } icon: { Image(systemName: icon).foregroundStyle(MemberStyle.accent) }
+    }
+}
+
+/// Signing a version the host proposed for this household (question 56): until it is signed it is a claim with no effect.
 struct MemberMandateView: View {
     @ObservedObject var account: MemberAccount
     let selected: MemberMandate
-    @State private var acknowledged = false
     @Environment(\.dismiss) private var dismiss
-    // `account.mandates` drops a mandate's id only after `signMandate()` submits it
-    // successfully (MemberAccount.swift), so its absence here is the signed state.
-    // Deriving it this way, rather than a separate local flag, keeps this screen and
-    // the "Mandates awaiting your signature" list in Account agreeing about what is
-    // signed without an extra round trip.
+    // `account.mandates` drops a mandate only after `signMandate()` submits it, so its absence is the signed state.
     private var signed: Bool { !account.mandates.contains(where: { $0.id == selected.id }) }
     var body: some View {
-        Form {
+        List {
             if signed {
                 Section {
-                    Text("Mandate signed. It is now in effect.").accessibilityIdentifier("mandateSignedNotice")
+                    Label("Your limits are signed and in effect.", systemImage: "checkmark.circle.fill").foregroundStyle(.green).accessibilityIdentifier("mandateSignedNotice")
                     Button("Done") { dismiss() }.accessibilityIdentifier("mandateSignedDone")
                 }
             } else if let review = account.mandateReview, review.mandate == selected {
-                let m = review.mandate
-                Section("Terms to sign") {
-                    Text("Host: \(review.host)")
-                    Text("Mandate: \(m.id)").textSelection(.enabled)
-                    Text("Household: \(m.household)").textSelection(.enabled)
-                    Text("Version: \(m.version)")
-                    Text("Outside-network ceiling: ¥\(m.ceilingOutOfNetwork)")
-                    Text(m.ceilingDaily.map { "Daily ceiling: ¥\($0)" } ?? "No daily ceiling")
-                    Text(m.coolingSeconds.map { "Cooling period: \($0) seconds" } ?? "No cooling period")
-                    Text(m.coSigners.isEmpty ? "No co-signers" : "Co-signers: " + m.coSigners.joined(separator: ", "))
-                    Text("Lapses: \(Date(timeIntervalSince1970: Double(m.lapsesAt) / 1000).formatted())")
-                }
+                Section { Text("Until you sign these, nothing can be bought for you. After you sign, only you can tighten them, and loosening them needs the people you name.").font(.subheadline) }
+                Section("Limits to sign") { MemberMandateSentences(mandate: review.mandate) }
                 Section {
-                    Toggle("I have read and agree to these terms", isOn: $acknowledged)
-                        .accessibilityIdentifier("acknowledgeMandate")
-                    Button("Sign mandate with a passkey") { Task { await account.signMandate(); acknowledged = false } }
-                        .disabled(!acknowledged || account.busy)
-                        .accessibilityIdentifier("signMandate")
-                }
-            } else if !account.busy {
-                Button("Load terms for review") { Task { acknowledged = false; await account.reviewMandate(selected) } }
+                    Button { Task { await account.signMandate() } } label: { Label("Sign with passkey", systemImage: "person.badge.key").frame(maxWidth: .infinity) }
+                        .buttonStyle(.borderedProminent).disabled(account.busy).accessibilityIdentifier("signMandate")
+                } footer: { Text("Signed for \(review.host).") }
+            } else if account.busy {
+                ProgressView("Preparing")
+            } else {
+                Button("Load the limits to sign") { Task { await account.reviewMandate(selected) } }
             }
-            if account.busy { ProgressView("Waiting for your request") }
-            if !signed, !account.mandateNotice.isEmpty { Text(account.mandateNotice) }
-            if !account.notice.isEmpty { Text(account.notice) }
+            if !signed, !account.mandateNotice.isEmpty { Text(verbatim: account.mandateNotice) }
+            if !account.notice.isEmpty { Text(verbatim: account.notice) }
         }
-        .navigationTitle("Review mandate")
+        .navigationTitle("Sign your limits")
         .disabled(account.busy)
-        .interactiveDismissDisabled(account.busy)
-        .task { if !signed { acknowledged = false; await account.reviewMandate(selected) } }
+        .task { if !signed { await account.reviewMandate(selected) } }
     }
 }
 
-struct MemberDialsSection: View {
-    @ObservedObject var account: MemberAccount
-    var body: some View {
-        Section {
-            NavigationLink("Dials · standing protections") { MemberDialsView(account: account) }
-                .accessibilityIdentifier("openDials")
-        }
-    }
-}
-
-private struct MandateTermsView: View {
-    let title: String
-    let value: MemberMandate
-    var body: some View {
-        Section(title) {
-            Text("Version \(value.version)").font(.headline)
-            Text("Outside-network ceiling: ¥\(value.ceilingOutOfNetwork)")
-            Text(value.ceilingDaily.map { "Daily ceiling: ¥\($0)" } ?? "No daily ceiling")
-            Text(value.coolingSeconds.map { "Cooling period: \($0) seconds" } ?? "No cooling period")
-            Text(value.coSigners.isEmpty ? "No co-signers" : "Co-signers: " + value.coSigners.joined(separator: ", "))
-            Text("Lapses: \(Date(timeIntervalSince1970: Double(value.lapsesAt) / 1000).formatted())")
-        }
-    }
-}
-
-struct MemberDialsView: View {
-    @ObservedObject var account: MemberAccount
-    var body: some View {
-        Form {
-            Section {
-                Text("Dials are your standing protections. A change has no effect until every signer required by the previous effective version has signed it.").font(.footnote)
-                Button("Refresh effective protections") { Task { await account.refreshDials() } }
-                    .accessibilityIdentifier("refreshDials")
-            }
-            Section("Effective mandates") {
-                ForEach(account.effectiveMandates) { mandate in
-                    NavigationLink { MemberMandateEditor(account: account, before: mandate) } label: {
-                        VStack(alignment: .leading) {
-                            Text("Version \(mandate.version)").font(.headline)
-                            Text("Daily: " + (mandate.ceilingDaily.map { "¥\($0)" } ?? "none") + " · Cooling: " + (mandate.coolingSeconds.map { "\($0)s" } ?? "none"))
-                                .font(.caption).foregroundStyle(.secondary)
-                        }
-                    }.accessibilityIdentifier("editMandate-" + mandate.id)
-                }
-            }
-            Section("Pending changes and co-signatures") {
-                if account.mandateChanges.filter({ $0.state == "pending" }).isEmpty { Text("No pending changes.") }
-                ForEach(account.mandateChanges.filter { $0.state == "pending" }) { change in
-                    NavigationLink { MemberMandateChangeReview(account: account, change: change) } label: {
-                        VStack(alignment: .leading) {
-                            Text("Version \(change.mandate.version) · \(change.signedBy.count) of \(change.requiredSigners.count) signatures")
-                            Text(change.mandate.id).font(.caption).lineLimit(1)
-                        }
-                    }.accessibilityIdentifier("pendingMandateChange-" + change.id)
-                }
-            }
-            if !account.dialsNotice.isEmpty { Section { Text(account.dialsNotice).accessibilityIdentifier("dialsNotice") } }
-        }
-        .navigationTitle("Dials")
-        .task { if account.effectiveMandates.isEmpty && account.mandateChanges.isEmpty { await account.refreshDials() } }
-    }
-}
-
-private struct MemberMandateEditor: View {
+/// Editing the limits. Amounts in the host's currency, the undo time in hours, the end date on a calendar.
+struct MemberMandateEditor: View {
     @ObservedObject var account: MemberAccount
     let before: MemberMandate
     @State private var outside: String
     @State private var daily: String
     @State private var hasDaily: Bool
-    @State private var cooling: String
+    @State private var coolingHours: Int
     @State private var hasCooling: Bool
     @State private var signers: String
     @State private var lapse: Date
-    @State private var acknowledged = false
     @State private var validation = ""
     init(account: MemberAccount, before: MemberMandate) {
         self.account = account; self.before = before
         _outside = State(initialValue: String(before.ceilingOutOfNetwork))
         _daily = State(initialValue: before.ceilingDaily.map(String.init) ?? "")
         _hasDaily = State(initialValue: before.ceilingDaily != nil)
-        _cooling = State(initialValue: before.coolingSeconds.map(String.init) ?? "")
+        _coolingHours = State(initialValue: Int((before.coolingSeconds ?? 0) / 3600))
         _hasCooling = State(initialValue: before.coolingSeconds != nil)
         _signers = State(initialValue: before.coSigners.joined(separator: "\n"))
-        _lapse = State(initialValue: Date(timeIntervalSince1970: Double(before.lapsesAt) / 1000))
+        _lapse = State(initialValue: MemberFormat.date(before.lapsesAt))
     }
     private func proposed() -> MemberMandate? {
-        guard let outside = Int64(outside), outside >= 0,
-              !hasDaily || (Int64(daily).map { $0 >= 0 } == true),
-              !hasCooling || (Int64(cooling).map { (0...2_592_000).contains($0) } == true) else { return nil }
-        let names = signers.split(whereSeparator: \.isNewline).map(String.init).filter { !$0.isEmpty }
+        guard let outside = Int64(outside), outside >= 0, !hasDaily || (Int64(daily).map { $0 >= 0 } == true), (0...720).contains(coolingHours) else { return nil }
+        let names = signers.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         guard Set(names).count == names.count else { return nil }
-        let value = MemberMandate(id: before.id, household: before.household, ceilingOutOfNetwork: outside, ceilingDaily: hasDaily ? Int64(daily) : nil, coolingSeconds: hasCooling ? Int64(cooling) : nil, coSigners: names, lapsesAt: Int64(lapse.timeIntervalSince1970 * 1000), version: before.version + 1)
+        // A cooling period that was not a whole number of hours keeps its exact value unless the member moved it.
+        let original = before.coolingSeconds
+        let cooling: Int64? = hasCooling ? (original.map { Int($0 / 3600) == coolingHours ? $0 : Int64(coolingHours) * 3600 } ?? Int64(coolingHours) * 3600) : nil
+        let value = MemberMandate(id: before.id, household: before.household, ceilingOutOfNetwork: outside, ceilingDaily: hasDaily ? Int64(daily) : nil, coolingSeconds: cooling, coSigners: names, lapsesAt: Int64(lapse.timeIntervalSince1970 * 1000), version: before.version + 1)
         guard value.ceilingOutOfNetwork != before.ceilingOutOfNetwork || value.ceilingDaily != before.ceilingDaily || value.coolingSeconds != before.coolingSeconds || value.coSigners != before.coSigners || value.lapsesAt != before.lapsesAt else { return nil }
         return value
     }
     var body: some View {
         Form {
-            MandateTermsView(title: "Effective now", value: before)
-            Section("Proposed protections") {
-                TextField("Outside-network ceiling", text: $outside).keyboardType(.numberPad).accessibilityIdentifier("mandateOutsideCeiling")
-                Toggle("Use a daily ceiling", isOn: $hasDaily)
-                if hasDaily { TextField("Daily ceiling", text: $daily).keyboardType(.numberPad) }
-                Toggle("Use a cooling period", isOn: $hasCooling)
-                if hasCooling { TextField("Cooling seconds", text: $cooling).keyboardType(.numberPad) }
-                TextField("Co-signers, one key per line", text: $signers, axis: .vertical).textInputAutocapitalization(.never).autocorrectionDisabled()
-                DatePicker("Lapse", selection: $lapse, displayedComponents: [.date, .hourAndMinute])
-                Text("A wider ceiling, shorter cooling period, removed co-signer, or other weakening uses the co-signers from version \(before.version). The app never changes protections automatically.").font(.footnote)
-                Button("Review mandate change") {
-                    guard let value = proposed() else { validation = "Change or renew at least one protection. Use whole non-negative limits, a cooling period of at most 30 days, and distinct co-signer keys."; return }
+            Section("Now") { MemberMandateSentences(mandate: before) }
+            Section {
+                Toggle("Daily limit", isOn: $hasDaily)
+                if hasDaily { LabeledContent("Up to, per day") { TextField("Amount", text: $daily).keyboardType(.numberPad).multilineTextAlignment(.trailing) } }
+                LabeledContent("At a shop outside your network") { TextField("Amount", text: $outside).keyboardType(.numberPad).multilineTextAlignment(.trailing).accessibilityIdentifier("mandateOutsideCeiling") }
+                Toggle("Time to undo a decision", isOn: $hasCooling)
+                if hasCooling { Stepper(value: $coolingHours, in: 0...720) { Text(coolingHours == 0 ? String(localized: "No time to undo") : MemberFormat.duration(seconds: Int64(coolingHours) * 3600)) } }
+                DatePicker("Ends on", selection: $lapse, displayedComponents: [.date])
+            } header: { Text("New limits") } footer: { Text("Amounts are in \(MemberFormat.currencyCode).") }
+            Section {
+                TextField("One per line", text: $signers, axis: .vertical).textInputAutocapitalization(.never).autocorrectionDisabled()
+            } header: { Text("People who must agree to loosen these") } footer: { Text("Enter the account reference each person gives you.") }
+            Section {
+                Text("Raising a limit, shortening the time to undo or removing a person needs everyone named in your current limits to sign. Nothing changes until they have.").font(.footnote)
+                Button("Review this change") {
+                    guard let value = proposed() else { validation = String(localized: "Change at least one limit. Amounts must be whole numbers, the time to undo at most 30 days, and each person listed once."); return }
                     validation = ""; Task { await account.reviewMandateChange(value) }
                 }.accessibilityIdentifier("reviewMandateChange")
-                if !validation.isEmpty { Text(validation).accessibilityIdentifier("mandateValidation") }
+                if !validation.isEmpty { Text(verbatim: validation).foregroundStyle(.red).accessibilityIdentifier("mandateValidation") }
             }
             if let prepared = account.preparedMandateChange, prepared.change.before.id == before.id {
-                MandateTermsView(title: "Fixed proposal to sign", value: prepared.change.mandate)
-                Section("Required signatures from effective version \(before.version)") {
-                    ForEach(prepared.change.requiredSigners, id: \.self) { signer in Text((prepared.change.signedBy.contains(signer) ? "Signed · " : "Required · ") + signer) }
-                    Toggle("I reviewed the effective and proposed protections", isOn: $acknowledged).accessibilityIdentifier("acknowledgeMandateChange")
-                    Button("Sign mandate change with a passkey") { Task { await account.signPreparedMandateChange() } }
-                        .disabled(!acknowledged).accessibilityIdentifier("signMandateChange")
+                Section("After the change") { MemberMandateSentences(mandate: prepared.change.mandate) }
+                Section("Who must sign") {
+                    ForEach(prepared.change.requiredSigners, id: \.self) { signer in MemberSignerRow(signer: signer, signed: prepared.change.signedBy.contains(signer), isYou: signer == account.session?.household) }
+                    Button { Task { await account.signPreparedMandateChange() } } label: { Label("Sign with passkey", systemImage: "person.badge.key").frame(maxWidth: .infinity) }
+                        .buttonStyle(.borderedProminent).accessibilityIdentifier("signMandateChange")
                 }
             }
-            if !account.dialsNotice.isEmpty { Section { Text(account.dialsNotice).accessibilityIdentifier("dialsNotice") } }
-        }.navigationTitle("Change protections")
+            if !account.dialsNotice.isEmpty { Section { Text(verbatim: account.dialsNotice).accessibilityIdentifier("dialsNotice") } }
+        }
+        .navigationTitle("Change limits")
     }
 }
 
-private struct MemberMandateChangeReview: View {
+struct MemberSignerRow: View {
+    let signer: String
+    let signed: Bool
+    let isYou: Bool
+    var body: some View {
+        Label {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(isYou ? "You" : "Another person")
+                if !isYou { Text(verbatim: signer).font(.caption2).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle) }
+            }
+        } icon: { Image(systemName: signed ? "checkmark.circle.fill" : "circle").foregroundStyle(signed ? .green : .secondary) }
+        .accessibilityValue(signed ? Text("Signed") : Text("Waiting"))
+        .accessibilityIdentifier("mandateSigner-" + signer)
+    }
+}
+
+/// A change waiting for signatures. The signers come from the version in effect when it was proposed.
+struct MemberMandateChangeReview: View {
     @ObservedObject var account: MemberAccount
     let change: MemberMandateChange
-    @State private var acknowledged = false
     private var current: MemberMandateChange { account.mandateChanges.first(where: { $0.id == change.id }) ?? change }
     private var maySign: Bool { account.session.map { current.requiredSigners.contains($0.household) && !current.signedBy.contains($0.household) } ?? false }
     private var owns: Bool { account.session?.household == current.mandate.household }
     var body: some View {
-        Form {
-            MandateTermsView(title: "Effective when proposed", value: current.before)
-            MandateTermsView(title: "Proposed version", value: current.mandate)
-            Section("Required signers from version \(current.before.version)") {
-                Text("Signatures required by effective version \(current.before.version)").accessibilityIdentifier("mandateSignerBasis")
-                ForEach(current.requiredSigners, id: \.self) { signer in Text((current.signedBy.contains(signer) ? "Signed · " : "Waiting · ") + signer).accessibilityIdentifier("mandateSigner-" + signer) }
+        List {
+            Section("Now") { MemberMandateSentences(mandate: current.before) }
+            Section("After the change") { MemberMandateSentences(mandate: current.mandate) }
+            Section {
+                ForEach(current.requiredSigners, id: \.self) { signer in MemberSignerRow(signer: signer, signed: current.signedBy.contains(signer), isYou: signer == account.session?.household) }
                 if maySign && account.preparedMandateChange?.change.id != current.id {
                     Button("Review for my signature") { Task { await account.reviewPendingMandateChange(current.id) } }.accessibilityIdentifier("reviewPendingMandateChange")
                 }
                 if account.preparedMandateChange?.change.id == current.id {
-                    Toggle("I reviewed both versions", isOn: $acknowledged).accessibilityIdentifier("acknowledgePendingMandateChange")
-                    Button("Add my passkey signature") { Task { await account.signPreparedMandateChange() } }.disabled(!acknowledged).accessibilityIdentifier("signPendingMandateChange")
+                    Button { Task { await account.signPreparedMandateChange() } } label: { Label("Sign with passkey", systemImage: "person.badge.key").frame(maxWidth: .infinity) }
+                        .buttonStyle(.borderedProminent).accessibilityIdentifier("signPendingMandateChange")
                 }
-                if owns { Button("Cancel pending change", role: .destructive) { Task { await account.cancelMandateChange(current.id) } }.accessibilityIdentifier("cancelMandateChange") }
-            }
-            if !account.dialsNotice.isEmpty { Section { Text(account.dialsNotice).accessibilityIdentifier("dialsNotice") } }
-        }.navigationTitle("Mandate review")
+                if owns { Button("Cancel this change", role: .destructive) { Task { await account.cancelMandateChange(current.id) } }.accessibilityIdentifier("cancelMandateChange") }
+            } header: { Text("Who must sign") } footer: { Text("Taken from the limits in effect when the change was proposed.").accessibilityIdentifier("mandateSignerBasis") }
+            if !account.dialsNotice.isEmpty { Section { Text(verbatim: account.dialsNotice).accessibilityIdentifier("dialsNotice") } }
+        }
+        .navigationTitle("Change to your limits")
     }
 }

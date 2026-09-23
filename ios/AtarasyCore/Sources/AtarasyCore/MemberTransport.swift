@@ -157,6 +157,7 @@ public struct MemberOfferSummary: Decodable, Equatable, Sendable {
         self.id = id; self.household = household; self.presenter = presenter; self.binding = binding; self.state = state
         self.presentedAt = presentedAt; self.expiresAt = expiresAt; self.decidedAt = decidedAt; self.candidates = candidates
     }
-    /// The date a row is ordered by: when it was presented, which is when it arrived.
-    public var arrivedAt: Int64 { presentedAt ?? 0 }
+    /// The date a row is ordered by: when it was presented, which is when it arrived, and its
+    /// expiry for a row never presented, as the web hub's `byArrival` does.
+    public var arrivedAt: Int64 { presentedAt ?? expiresAt ?? 0 }
 }

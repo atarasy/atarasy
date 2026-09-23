@@ -86,3 +86,33 @@ final class MemberCopyTests: XCTestCase {
         for (key, value) in ja { XCTAssertNotEqual(value, key, "untranslated: \(key)") }
     }
 }
+
+/// The same cases as the web hub's inbox rules (`src/shared/inbox.ts`).
+final class MemberInboxRuleTests: XCTestCase {
+    private func offer(_ binding: String, _ state: String, _ lines: [(String, String?)], expires: Int64 = 50) -> MemberOfferSummary {
+        MemberOfferSummary(id: "o", household: "h", presenter: "p", binding: binding, state: state, presentedAt: 10, expiresAt: expires,
+                           candidates: lines.map { .init(product: "x", merchant: "m", valence: $0.0, collectedAs: $0.1) })
+    }
+    func testAPhysicalBoxIsAtHomeUntilItsCollectionLeavesSomethingToSign() {
+        XCTAssertEqual(offer("physical", "presented", [("offered", nil)]).rowStatus, .atHome(nextSwap: 50))
+        XCTAssertEqual(offer("physical", "expired", [("consumed", "consumed"), ("returned", "returned")]).rowStatus, .statementReady(holdsNextBox: true))
+        XCTAssertEqual(offer("physical", "expired", [("returned", "returned")]).rowStatus, .boxClosed(settled: false))
+        XCTAssertEqual(offer("physical", "settled", [("consumed", "consumed")]).rowStatus, .boxClosed(settled: true))
+    }
+    // Question 48. A line the deadline made lost is on no statement; one recorded missing is.
+    func testOnlyAMissingRecordPutsALostLineOnAStatement() {
+        XCTAssertEqual(offer("physical", "expired", [("lost", nil as String?)]).rowStatus, .statementReady(holdsNextBox: false))
+        XCTAssertEqual(offer("physical", "expired", [("lost", "missing")]).rowStatus, .statementReady(holdsNextBox: false))
+        XCTAssertEqual(offer("physical", "expired", [("lost", "missing"), ("kept", nil)]).rowStatus, .statementReady(holdsNextBox: true))
+        var deadline = offer("physical", "expired", [("lost", "returned")]); deadline = MemberOfferSummary(id: "o", household: "h", presenter: "p", binding: "physical", state: "expired", candidates: [.init(product: "x", merchant: "m", valence: "lost", collectedAs: "consumed")])
+        XCTAssertEqual(deadline.rowStatus, .boxClosed(settled: false))
+    }
+    func testADigitalProposalIsOpenOnlyWhileALineIsUnanswered() {
+        XCTAssertEqual(offer("digital", "presented", [("offered", nil)]).rowStatus, .proposalOpen(closesAt: 50))
+        XCTAssertEqual(offer("digital", "presented", [("kept", nil)]).rowStatus, .proposalDecided)
+        XCTAssertEqual(offer("digital", "decided", [("kept", nil)]).rowStatus, .proposalDecided)
+        XCTAssertEqual(offer("digital", "expired", [("returned", nil)]).rowStatus, .proposalClosed)
+        XCTAssertTrue(offer("digital", "presented", [("offered", nil)]).needsMember)
+        XCTAssertFalse(offer("physical", "presented", [("offered", nil)]).needsMember)
+    }
+}

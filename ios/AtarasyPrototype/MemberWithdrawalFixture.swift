@@ -83,7 +83,7 @@ struct MemberWithdrawalFixtureView: View {
     @StateObject private var model = WithdrawalFixtureModel()
     var body: some View {
         Group {
-            if let original = model.original { MemberWithdrawalScreen(flow: model.flow, original: original) }
+            if let original = model.original { MemberUndoScreen(flow: model.flow, original: original) }
             else { ProgressView("Loading fixture") }
         }
         .safeAreaInset(edge: .top) { Text("Synthetic withdrawal fixture. No payment or actual passkey.").font(.caption) }
