@@ -23,7 +23,7 @@ import { awaitsDecision, awaitsStatement, byArrival, rowGoods, rowMerchants, row
 import { REFUSALS, refusal } from "../shared/refusals.js";
 // The judgements the screens make, separated from the drawing of them: a
 // reviewer reverted five of them at once and the suite stayed green.
-import { blocksFor, decidable, decisionGoodsTotal, decisionOutcome, disputable, disputeMovesMoney, lostOutcome, statementTotal, undoDeadline, validateCorrections, type Corrections } from "../shared/screen.js";
+import { blocksFor, blocksForLines, decidable, decisionGoodsTotal, decisionOutcome, disputable, disputeMovesMoney, lostOutcome, statementTotal, undoDeadline, validateCorrections, type Corrections } from "../shared/screen.js";
 // D-1, D-3. What a member reads for money, a date and the goods themselves,
 // mirroring `ios/AtarasyPrototype/MemberFormat.swift` so the two apps say
 // the same thing about the same offer.
@@ -770,6 +770,24 @@ async function account(member: Member) {
  * 'Terms from <merchant>' row... satisfies" §10a.4) is answered by this
  * plan's own choice: collapsed while browsing, open where the signature is.
  */
+/**
+ * The open terms on a review step: every governing block once, whatever the
+ * number of lines it governs. A missing block for any line is still said, as
+ * `blockFor` says it.
+ */
+function termsOnce(
+  blocks: Parameters<typeof blockFor>[0],
+  lines: { merchant: string; product: string | null }[]
+): Node[] {
+  const missing = lines.filter((w) => blocksFor(blocks, w).length === 0);
+  const body: Node[] = missing.map((w) => failure(`${w.merchant} sent no terms for this line.`));
+  for (const { block, scope } of blocksForLines(blocks, lines)) {
+    body.push(el("p", { class: "muted" }, scope === "product" ? `${block.merchant}, for this product:` : `${block.merchant}:`));
+    body.push(el("dl", { class: "terms" }, ...block.items.flatMap((i) => [el("dt", {}, i.label), el("dd", {}, i.value)])));
+    if (block.contact) body.push(contactLink(block.contact));
+  }
+  return body;
+}
 function blockFor(
   blocks: { merchant: string; product: string | null; items: { label: string; value: string }[]; contact?: { kind: "email" | "tel" | "url"; value: string } }[],
   which: { merchant: string; product: string | null },
@@ -1073,7 +1091,7 @@ function approvalReview(member: Member, a: Approval, decisions: Decision[], bind
     // this is the step §10a.4 asks the disclosure to be seen on, before the
     // signature below it.
     el("h2", {}, L("Shop terms")),
-    ...[...kept, ...declined].flatMap((c) => blockFor(a.disclosures ?? [], c.disclosure, false)),
+    ...termsOnce(a.disclosures ?? [], [...kept, ...declined].map((c) => c.disclosure)),
     el("div", { class: "row" }, sign, backToPicking),
     status
   );
@@ -1403,7 +1421,7 @@ function statementReview(member: Member, st: Statement, disputed: ReadonlySet<st
     // D-7. Open, per line's governing terms: this is the step §10a.4 asks
     // the disclosure to be seen on, before the signature below it.
     el("h2", {}, L("Shop terms")),
-    ...st.lines.flatMap((l) => blockFor(st.disclosures ?? [], l.disclosure, false)),
+    ...termsOnce(st.disclosures ?? [], st.lines.map((l) => l.disclosure)),
     el("div", { class: "row" }, sign, backToDisputing),
     status
   );

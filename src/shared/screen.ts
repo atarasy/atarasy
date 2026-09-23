@@ -76,6 +76,28 @@ export function blocksFor(
   return out;
 }
 
+/**
+ * §10a.5 across a whole review step. Every block that governs any of the
+ * lines, each once, in the order the lines first reach it. A step that drew
+ * `blocksFor` per line showed a shop's standing text once for every line of
+ * that shop, which read as several different sets of terms.
+ */
+export function blocksForLines<B extends Block>(
+  blocks: readonly B[],
+  lines: readonly { merchant: string; product: string | null }[]
+): { block: B; scope: "product" | "standing" }[] {
+  const seen = new Set<B>();
+  const out: { block: B; scope: "product" | "standing" }[] = [];
+  for (const which of lines) {
+    for (const entry of blocksFor(blocks, which)) {
+      if (seen.has(entry.block as B)) continue;
+      seen.add(entry.block as B);
+      out.push(entry as { block: B; scope: "product" | "standing" });
+    }
+  }
+  return out;
+}
+
 export type StatementLine = { candidate: string; valence: string; amount: number };
 
 /**
