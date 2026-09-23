@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import CryptoKit
 
 public protocol MemberAccountService: MemberProposalService {
     func registrationOptions(invitation: String) async throws -> MemberCeremony
@@ -61,6 +62,8 @@ public enum MemberLeavePhase: String, Sendable { case idle, checkingStatus, bloc
     @Published public private(set) var dialsNotice = ""
     @Published public private(set) var privateNodeState: MemberPrivateNodeState = .locked
     @Published public private(set) var privateNodeNotice = ""
+    /// The host holds records this device's key cannot open, as opposed to a read that failed.
+    @Published public private(set) var privateNodeKeyMismatch = false
     @Published public private(set) var refreshSubscription: MemberRefreshSubscription?
     @Published public private(set) var refreshNotice = ""
     @Published public private(set) var leavePhase: MemberLeavePhase = .idle
@@ -102,11 +105,25 @@ public enum MemberLeavePhase: String, Sendable { case idle, checkingStatus, bloc
     public var protectedAccessReady: Bool { privateNode == nil || privateNodeState == .ready }
     private func openPrivateNode(_ info: MemberSessionInfo) async {
         guard let privateNode else { privateNodeState = .ready; return }
-        privateNodeState = .locked; privateNodeNotice = L("Opening your records.")
+        privateNodeState = .locked; privateNodeKeyMismatch = false; privateNodeNotice = L("Opening your records.")
         do {
             let result = try await privateNode.open(session: info); privateNodeState = result; await recovery?.refresh()
             privateNodeNotice = result == .ready ? L("Your records are encrypted on this device before they are stored.") : L("This device cannot open your encrypted records. Use Recovery to restore access.")
-        } catch { privateNodeState = .locked; privateNodeNotice = L("Your records could not be opened on this device. Actions that need them are unavailable.") }
+        } catch is CryptoKitError {
+            // The records on the host were sealed with a key this device does not hold, typically
+            // because another device signed in to the same household and set them up first. Nothing
+            // here can make them readable; the way out is recovery or leaving and joining again.
+            privateNodeState = .locked; privateNodeKeyMismatch = true
+            privateNodeNotice = L("This device's key does not match your encrypted records. They may have been set up on another device. Use Recovery, or delete this account and join again with a new invitation.")
+        } catch MemberFailure.scopeMismatch {
+            privateNodeState = .locked; privateNodeKeyMismatch = true
+            privateNodeNotice = L("This device's key does not match your encrypted records. They may have been set up on another device. Use Recovery, or delete this account and join again with a new invitation.")
+        } catch { privateNodeState = .locked; privateNodeNotice = L("Your records could not be opened on this device. Check your connection and try again.") }
+    }
+    /// Opens the private node again for the current session, after a failure that may have been transient.
+    public func retryPrivateNode() async {
+        guard let session, !busy else { return }
+        await openPrivateNode(session)
     }
     public func clearExpired(now: Int64) {
         if let session, session.expiresAt <= now { self.session = nil; proposals.setSession(nil); notice = L("Your sign-in expired. Sign in again.") }
