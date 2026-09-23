@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { COPY_KEYS, pickLanguage, t } from "../src/client/copy.js";
 
 /**
@@ -66,5 +68,43 @@ describe("completeness: every key in the table resolves to a non-empty string in
     ]) {
       expect(COPY_KEYS).toContain(key);
     }
+  });
+});
+
+/**
+ * Coverage, not just completeness: the suite above proves every key already
+ * *in* the table has a real Japanese row; this one proves nothing in
+ * `app.ts` calls `L(...)` with a key that never made it into the table in
+ * the first place, which the app itself cannot catch (`t()` falls back to
+ * the English key by design, so a missing translation renders silently
+ * rather than throwing).
+ *
+ * Reads the source rather than importing the module: `app.ts` runs
+ * top-level code against `document` and `navigator.credentials.create` at
+ * import time, which this file has neither `screens.test.ts`'s
+ * `GlobalRegistrator` nor its authenticator stub for.
+ */
+describe("coverage: every L(key) call site in app.ts has both a table row and a real translation", () => {
+  const source = readFileSync(join(import.meta.dir, "..", "src", "client", "app.ts"), "utf-8");
+  // `L(` is always called with its key as a plain double-quoted string
+  // literal (never a template literal or a variable): the two- and
+  // three-argument calls that fill `%@`/`%lld` still open with one.
+  const keys = [...source.matchAll(/\bL\(\s*"((?:[^"\\]|\\.)*)"/g)].map((m) => m[1]!.replace(/\\"/g, '"'));
+
+  test("at least one call site was actually found (a rewritten helper would make this pass vacuously)", () => {
+    expect(keys.length).toBeGreaterThan(50);
+  });
+
+  test("every key L(...) calls with is in the table, with a non-empty Japanese row distinct from its English spelling", () => {
+    const sameInBothLanguages = new Set(["Atarasy"]);
+    const missing: string[] = [];
+    const untranslated: string[] = [];
+    for (const key of new Set(keys)) {
+      if (!COPY_KEYS.includes(key)) { missing.push(key); continue; }
+      const ja = t("ja", key);
+      if (!ja || (ja === key && !sameInBothLanguages.has(key))) untranslated.push(key);
+    }
+    expect(missing).toEqual([]);
+    expect(untranslated).toEqual([]);
   });
 });

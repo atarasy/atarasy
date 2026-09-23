@@ -57,6 +57,23 @@ export function sellers(merchants: readonly string[], locale?: string): string {
   return new Intl.ListFormat(locale, { style: "long", type: "conjunction" }).format(merchants);
 }
 
+/**
+ * A cooling period or any other span, in the largest unit that reads
+ * naturally: days where it divides evenly into whole days, hours where it
+ * divides into whole hours, otherwise minutes, otherwise seconds. Mirrors
+ * `MemberFormat.duration(seconds:)` in `ios/AtarasyPrototype/MemberFormat.swift`,
+ * which the review step's "Your limits" line and the protections screen both
+ * lean on for the same number.
+ */
+export function formatDuration(seconds: number, lang: "en" | "ja"): string {
+  const say = (value: number, ja: string, singular: string, plural: string) =>
+    lang === "ja" ? `${value} ${ja}` : `${value} ${value === 1 ? singular : plural}`;
+  if (seconds >= 86_400 && seconds % 86_400 === 0) return say(seconds / 86_400, "日", "day", "days");
+  if (seconds >= 3_600 && seconds % 3_600 === 0) return say(seconds / 3_600, "時間", "hour", "hours");
+  if (seconds >= 60) return say(Math.round(seconds / 60), "分", "minute", "minutes");
+  return say(seconds, "秒", "second", "seconds");
+}
+
 /** The same day, with the clock time beside it, for a deadline that is also an hour. */
 export function formatDayTime(ms: number, locale?: string): string {
   return new Date(ms).toLocaleString(locale, {
