@@ -10,12 +10,17 @@
  * about what to call the same thing is a worse defect than either being
  * imperfect on its own; using one source removes the chance of it.
  *
- * Not every sentence in this hub has an iOS counterpart: the longer,
- * clause-citing explanations this screen carries (the ones with a section
- * number in their own comment) are this hub's own and stay English-only.
- * What is here is what the plan's D-5 and the acceptance test both call
- * "equivalent elements": navigation, section and row wording, button labels
- * and the shared vocabulary table (vault `80` §6.3).
+ * Not every sentence in this hub has an iOS counterpart. Where one exists,
+ * the Japanese is copied from it verbatim, as above; where none exists (a
+ * disclosure block, a settlement receipt, a refusal this hub alone answers)
+ * the sentence is this hub's own, translated fresh and held to the same
+ * de-AI gate as everything else this vault publishes (no em-dash, kanji for
+ * 既に/全て, Arabic numerals). **Every member-visible sentence carries both
+ * languages**: PR 43 left a run of clause-citing explanations English-only,
+ * on the reasoning that they had no iOS counterpart to copy from, and one of
+ * them named the mandate on the review step to a member who had never heard
+ * that word. A sentence with no iOS original is not a reason to skip the
+ * translation; it is a reason to write one.
  */
 
 export type Lang = "en" | "ja";
@@ -246,6 +251,102 @@ const JA: Record<string, string> = {
   "Your limits": "見守り設定",
   "Your limits are signed and in effect.": "見守り設定に署名しました。いまから有効です。",
   "Your own agent for things that arrive to be tried. You pay only for what you keep, and nothing is bought without your signature.": "試しに届くものを、あなたの代わりに見きわめる窓口です。お支払いは手元に残したものだけで、署名なしに何かを買うことはありません。",
+
+  // Added 2026-09-23, routing the last hardcoded sentences in app.ts through
+  // this table and dropping the clause and section numbers they used to
+  // carry. Reused verbatim from iOS where the sentence already exists there
+  // (noted inline); everything else is this hub's own, translated fresh.
+  "The route found this used, so it is not yours to decide here. It comes back on the statement you sign.": "回収でこの品目は使用済みとされ、この画面では決められません。署名する明細に含まれます。",
+  "answered in a form this screen could not read, so what is waiting there is not on this list": "この画面が読み取れない形式で返ってきたため、待っている内容は一覧に表示されていません",
+  "The route has resolved this box. Nothing here is waiting on you.": "この箱は回収により処理済みです。あなたが対応することはありません。",
+  "Decided. It is the shop's to settle now; you can undo until %@.": "決定済みです。以降はショップが精算します。%@ まで取り消せます。",
+  "Decided. It is the shop's to settle now; what you can still do is take it back.": "決定済みです。以降はショップが精算します。まだ取り消すことはできます。",
+  "Decided. This box is past its expiry, so what you signed stands and it is the shop's to settle.": "決定済みです。この箱は期限を過ぎているため、署名した内容のまま確定し、以降はショップが精算します。",
+  "This decision has no recorded decision time, so it cannot be taken back safely.": "この決定には記録された決定時刻がないため、安全に取り消せません。",
+  "This list may be incomplete: not every shop answered.": "一覧が全てではない可能性があります。応答しなかったショップがあります。",
+  "%@ to undo": "%@以内なら取り消せる",
+  "Ends on %@": "%@ まで有効",
+  "You are named in another household's limits. Step down first.": "ほかの世帯の見守り設定で同意が必要な人に指定されています。先に外れてください。",
+  "You help another household recover its account. Step down first.": "ほかの世帯の復旧を手助けする人に指定されています。先に外れてください。",
+  "The answer came back in a form this screen could not read, so it cannot say whether this was recorded. Go back and open it again.": "答えをこの画面が読み取れない形式で受け取ったため、記録されたかどうかを示せません。戻ってもう一度開いてください。",
+  "The answer came back in a form this screen could not read, so it cannot say whether this settled. Open the list again before signing a second time.": "答えをこの画面が読み取れない形式で受け取ったため、精算されたかどうかを示せません。もう一度署名する前に一覧を開き直してください。",
+  "Offered by %@.": "%@ からのご提案です。",
+  "It was offered until %@, and the route comes for it around then.": "%@ までのお届けで、回収もそのころになります。",
+  "This box is with you: what you use is bought, and what you send back is not.": "この箱はお手元にあります。使ったものだけを買うことになり、送り返した分は買いません。",
+  "each": "1 点あたり",
+  "To be charged for the goods: %@.": "商品代としての請求額: %@。",
+  "The carriage above is not in this figure.": "上の送料はこの金額に含まれていません。",
+  "Disputed and not charged here: %lld.": "申し出により請求しない品目: %lld 点。",
+  "Disputed as missing: %lld.": "見当たらないと申し出た品目: %lld 点。",
+  "This box was offered until %@.": "%@ までのお届けでした。",
+  "a name for this household": "世帯の呼び名",
+  "The household needs a name.": "世帯の名前を入力してください。",
+  "The passkey is held by this browser's authenticator and never leaves it for us. Its public half confirms your decisions.": "パスキーはこのブラウザーの認証情報として保管され、外部に渡ることはありません。公開鍵の部分があなたの決定を確認します。",
+  "no credential was created": "パスキーを作成できませんでした。",
+  "no passkey was offered": "パスキーが選択されませんでした。",
+  "this passkey carries no household": "このパスキーには世帯の情報がありません。",
+  "no assertion was made": "確認が行われませんでした。",
+  "this passkey is another household's": "このパスキーは別の世帯のものです。",
+  "Already have one, on this device or another?": "この端末か別の端末で、すでにお持ちですか。",
+  "Your passkey is your household. Answering with it here brings back everything placed with it, wherever you last used it.": "パスキーがそのまま世帯です。ここで応答すると、最後に使った場所を問わず、それに結び付く全てが戻ります。",
+  // "Account reference, for support" is iOS's own label (MemberAccountTab.swift).
+  "Account reference, for support": "お問い合わせ用のアカウント番号",
+  "The giver set a price range of %@ to %@.": "贈り主が %@ から %@ までの価格帯を設定しました。",
+  "You were reminded once. There will be no second reminder.": "一度だけお知らせしました。次のお知らせはありません。",
+  "Carried by %@": "配送: %@",
+  "Carriage: not recorded yet.": "送料: まだ記録されていません。",
+  "Carriage: nothing to pay on this delivery.": "送料: この配送では負担がありません。",
+  "Carriage: %@.": "送料: %@。",
+  "%lld already resolved by what the route found. %lld left for you to decide.": "%lld 点はすでに回収の記録で解決済みです。残り %lld 点はあなたが決めてください。",
+  "Nothing on this screen is still yours to decide. Every line has already been resolved, by you, by the route, or by the deadline passing.": "この画面で決めることは残っていません。全ての品目は、あなた自身か、回収か、締め切りの経過によってすでに解決しています。",
+  "What you returned is recorded as a decision of yours, not as nothing.": "見送った品目も、あなたの決定として記録されます。何もしなかったことにはなりません。",
+  "This offer came back in a form this screen could not read. Nothing was decided.": "このご提案はこの画面が読み取れない形式で返ってきました。何も決定していません。",
+  "This page could not reach the service that serves it, so nothing could be listed. Nothing was sent.": "このページはサービスに接続できなかったため、一覧を表示できませんでした。何も送信していません。",
+  "This page could not reach the service that serves it. Nothing was saved.": "このページはサービスに接続できませんでした。何も保存していません。",
+  // "This isn't right" and "It was in the box" are iOS's own labels for this toggle (MemberBoxScreen.swift).
+  "Disputed": "申し出済み",
+  "You say this was in the box. Nothing moves either way; your signature records that you dispute it.": "箱にあったと申し出ています。これだけでは何も動きません。署名すると、申し出た事実が記録されます。",
+  "Not charged here. What is owed for it, if anything, is between you and the seller.": "ここでは請求されません。何か支払う分があれば、それはショップとの間で決まります。",
+  "You kept this when you decided. It is here because it is on the same bill.": "この品目は決定のときに手元に残すと選んだものです。同じ明細に載っているためここに表示しています。",
+  "The collection says this was not in the box. You are never charged for it and it is no claim against you. If it was there, dispute it.": "回収の記録では箱に見当たらなかった品目です。この分を請求されることはなく、あなたの責任にもなりません。箱にあった場合は申し出てください。",
+  "The collection found this used.": "回収時に使用済みだったものです。",
+  "The collection's note: %@": "回収からの注記: %@",
+  "What the box came back with": "箱から戻ってきたもの",
+  "Nothing on this box needs your signature. Anything not collected by the deadline is never charged to you.": "この箱には署名が必要なものはありません。締め切りまでに回収されなかった分は、請求されることはありません。",
+  "What came back with this box came back in a form this screen could not read. Nothing was signed.": "この箱の内容はこの画面が読み取れない形式で返ってきました。何も署名していません。",
+  "The route wrote this down. Nothing is charged until you sign it, and no further box comes from whoever sent this one while it waits.": "回収の記録です。署名するまで何も請求されず、署名するまでは送り主から次の箱も届きません。",
+  "The route wrote this down. Nothing is charged until you sign it.": "回収の記録です。署名するまで何も請求されません。",
+  "Signed.": "署名しました。",
+  "This box has settled, on %@.": "この箱は %@ に精算済みです。",
+  "The amount could not be read back, so this screen cannot say what was charged. Nothing here means it was nothing.": "請求額を読み取れなかったため、この画面では金額を示せません。何も表示されていないことは、金額がゼロという意味ではありません。",
+  "%@ was charged by the settlement that stands.": "%@ が、確定している精算で請求されました。",
+  "%@ charged.": "%@ を請求しました。",
+  "What you just signed is not what settled it. This is the settlement that stands, and nothing was charged twice.": "いま署名した内容がこの箱を精算したわけではありません。確定しているのはこちらの精算で、二重に請求されてはいません。",
+  "The answer to your signature never came back, but this settlement carries the signature you just gave. Nothing was charged twice.": "署名への答えは届きませんでしたが、確定している精算にはいま送った署名が記録されています。二重に請求されてはいません。",
+  "The answer to your signature never came back, and the settlement that stands was not made by the signature you just gave. Nothing was charged twice.": "署名への答えは届かず、確定している精算はいま送った署名によるものではありません。二重に請求されてはいません。",
+  "The answer to your signature never came back, and this is the settlement that stands. This screen could not read which signature made it. Nothing was charged twice.": "署名への答えは届かず、確定しているのはこちらの精算です。どの署名によるものかはこの画面では読み取れませんでした。二重に請求されてはいません。",
+  "%@ was disputed and is not charged here. What is owed for it, if anything, is between you and the seller.": "%@ は申し出により、ここでは請求されません。何か支払う分があれば、それはショップとの間で決まります。",
+  "The merchant of record has appended the following to the settlement above. There is nothing here for you to sign or dispute.": "上の精算に対し、契約上のショップが次を追記しました。ここで署名や申し出をすることはありません。",
+  "Collection from %@": "%@ からの回収",
+  "Net after corrections: %@.": "追記後の合計: %@。",
+  "The refund of %@ from %@ did not reach you. The shop still owes it to you, off this platform.": "%@ の返金が %@ から届きませんでした。ショップには引き続き返金する義務があり、このサービスの外で対応されます。",
+  "%@ reports it repaid this another way.": "%@ が別の方法で返金済みと報告しています。",
+  "Contact": "連絡先",
+  "A box is waiting for your signature on what it cost.": "箱の代金についてまだ署名が必要です。",
+  "Money is still held for an order.": "注文のために資金が確保されたままです。",
+  "A gift you are paying for has not finished.": "支払い中の贈り物がまだ完了していません。",
+  "What is holding you here came back in a form this screen could not read. Nothing was deleted.": "何がこのアカウントの削除を止めているかを、この画面は読み取れませんでした。何も削除していません。",
+  "Something changed since this screen opened. What is holding you here now:": "この画面を開いてから状況が変わりました。いま止めているのは次のとおりです。",
+  "Records removed: %lld.": "削除した記録: %lld 件。",
+  "What you have set came back in a form this screen could not read. Nothing here has changed.": "設定した内容をこの画面が読み取れない形式で受け取りました。ここでは何も変わっていません。",
+  "Shortening or removing a cooling window is a loosening.": "取り消せる期間を短くする、またはなくすことは、設定をゆるめる変更です。",
+  "Raising or removing a daily ceiling is a loosening.": "1 日の上限を上げる、またはなくすことは、設定をゆるめる変更です。",
+  "%@ Loosening this needs everyone you named: %@.": "%@ ゆるめるには、指定した人全員の同意が必要です: %@。",
+  "Tightening is yours alone; loosening needs everyone you named: %@.": "厳しくする変更はあなただけで行えます。ゆるめるには、指定した人全員の同意が必要です: %@。",
+  "You have named nobody to hold these with you, so anything here is yours to change back at any time. Naming somebody is what would make it otherwise, and this screen cannot yet do that.": "あなたのほかに指定した人がいないため、ここでの設定はいつでもあなた一人で変更を戻せます。誰かを指定すればそうではなくなりますが、この画面はまだそれに対応していません。",
+  "Nothing yet. Until you name somebody to hold them with you, anything you set here stays yours alone to change back.": "まだ何も設定していません。誰かを指定するまでは、ここで設定した内容はあなた一人でいつでも変更を戻せます。",
+  "A ceiling can stop a box settling altogether, not just delay it: if what you used in one box comes to more than this, it cannot settle until the ceiling is raised, and raising one needs the people you named.": "上限は箱の精算を遅らせるだけでなく、止めることもあります。1 つの箱で使った分がこの上限を超えると、上限を上げるまで精算できず、上げるには指定した人の同意が必要です。",
+  "Setting one of these also records a ceiling of ¥100,000 on an offer from outside the network, and a lapse a year from now.": "いずれかを設定すると、登録外のお店での上限も 10 万円で記録され、1 年後に失効する期限も同時に設定されます。",
 };
 
 /** Replaces `%@`, `%lld`/`%d`, or an indexed `%1$@`, left to right by default. */
