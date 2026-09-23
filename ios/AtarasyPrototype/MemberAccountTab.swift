@@ -43,11 +43,8 @@ struct MemberAccountTab: View {
                     }
                 }
             }
-            if MemberPRFMeasurementView.isAvailable, let host = (Bundle.main.object(forInfoDictionaryKey: "AtarasyMemberOrigin") as? String).flatMap({ URL(string: $0)?.host }) {
-                Section("For the team") {
-                    NavigationLink { MemberPRFMeasurementView(relyingParty: host) } label: { Label("Passkey device check", systemImage: "stethoscope") }
-                        .accessibilityIdentifier("openPRFMeasurement")
-                }
+            if MemberPRFMeasurementView.isAvailable && MemberPRFMeasurementView.relyingParty != nil {
+                Section("For the team") { MemberPRFMeasurementLink() }
             }
             if !account.notice.isEmpty { Section { Text(verbatim: account.notice).accessibilityIdentifier("memberNotice") } }
         }
