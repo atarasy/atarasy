@@ -36,9 +36,9 @@
 "The change was cancelled. Your current limits are unchanged." = "変更を取り消しました。現在の設定は変わっていません。";
 "The move is complete, and your old host is closed." = "移動が完了し、以前の保管先は閉じました。";
 "The move stopped. Your current host is unchanged." = "移動を中断しました。いまの保管先は変わっていません。";
-"The new host has everything. Your current host stays active until you close it." = "移動先にすべて揃いました。閉じるまで、いまの保管先も使えます。";
+"The new host has everything. Your current host stays active until you close it." = "移動先に全て揃いました。閉じるまで、いまの保管先も使えます。";
 "This box has settled. This device cannot confirm that the settlement is the statement it saved. Nothing was sent again." = "この箱は精算済みです。保存していた明細による精算かどうかは、この端末では確認できません。送り直してはいません。";
-"This box was already settled from another device. Nothing was sent again." = "この箱は別の端末ですでに精算済みです。送り直してはいません。";
+"This box was already settled from another device. Nothing was sent again." = "この箱は別の端末で既に精算済みです。送り直してはいません。";
 "This cancellation could not be prepared. Check the decision and the proposal, then try again." = "取り消しを準備できませんでした。決定とご提案を確認してからもう一度お試しください。";
 "This change was refused. Check the amounts, the end date, the time to undo and who must agree." = "この変更は受け付けられませんでした。金額、有効期限、取り消せる期間、同意が必要な人を確認してください。";
 "This could not be completed. Check your connection and try again." = "完了できませんでした。通信状態を確認してもう一度お試しください。";
@@ -48,7 +48,7 @@
 "This is no longer available. Start again." = "この操作は有効期限が切れました。最初からやり直してください。";
 "This request could not be checked." = "この依頼を確認できませんでした。";
 "This review has expired. You can still check the result of anything you sent." = "この確認画面の有効期限が切れました。送信済みのものは結果を確認できます。";
-"This statement could not be prepared. The box may already be settled. Go back, open it again and check My records before trying again." = "明細を準備できませんでした。すでに精算済みの可能性があります。戻って開き直し、記録を確認してからお試しください。";
+"This statement could not be prepared. The box may already be settled. Go back, open it again and check My records before trying again." = "明細を準備できませんでした。既に精算済みの可能性があります。戻って開き直し、記録を確認してからお試しください。";
 "Update notifications are on. They never contain what was proposed." = "更新の通知がオンです。通知に提案の内容は含まれません。";
 "Update notifications are unavailable. Pull down to refresh." = "更新の通知は使えません。下に引いて更新してください。";
 "Waiting for your helper and the separate notice." = "手助けする人と別の通知を待っています。";
@@ -87,7 +87,7 @@
 "No saved sign-in was found for this account." = "このアカウントの保存済みのサインインは見つかりませんでした。";
 "Signed out." = "サインアウトしました。";
 "You were not signed in on this device." = "この端末ではサインインしていませんでした。";
-"Some shops could not be reached. This list may be incomplete." = "確認できなかったショップがあります。一覧がすべてではない可能性があります。";
+"Some shops could not be reached. This list may be incomplete." = "確認できなかったショップがあります。一覧が全てではない可能性があります。";
 "The new host may hold a copy, and your current host is still active. Check the new host before closing the current one." = "移動先に写しがある可能性があり、いまの保管先もまだ使えます。いまの保管先を閉じる前に移動先を確認してください。";
 "Nothing was closed. Your current host is still active." = "何も閉じていません。いまの保管先はそのまま使えます。";
 "Your answer was recorded. The current status is below." = "回答を記録しました。現在の状態は下に表示しています。";

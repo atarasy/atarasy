@@ -120,7 +120,6 @@
 "Install recovered key" = "Install recovered key";
 "Invitation code" = "Invitation code";
 "It was in the box" = "It was in the box";
-"It was offered until %@." = "It was offered until %@.";
 "Keep" = "Keep";
 "Kept" = "Kept";
 "Left out by your agent" = "Left out by your agent";
@@ -166,6 +165,7 @@
 "Notice delivered before recovery completed" = "Notice delivered before recovery completed";
 "Notifications" = "Notifications";
 "Now" = "Now";
+"Offered until %@." = "Offered until %@.";
 "One per line" = "One per line";
 "Opening" = "Opening";
 "Opening Atarasy" = "Opening Atarasy";

@@ -1,7 +1,7 @@
 /* The member-facing strings of the Atarasy app. English is the key; see vault 80 D-5. */
 "%@ and %lld more" = "%1$@ ほか %2$lld 点";
 "%@ says it repaid this another way." = "%@ は別の方法で返金したと伝えています。";
-"%@ to undo" = "%@ 以内なら取り消せる";
+"%@ to undo" = "%@以内なら取り消せる";
 "%lld of %lld signatures" = "%2$lld 人中 %1$lld 人が署名";
 "%lld × %@" = "%1$lld × %2$@";
 "A box" = "お届け箱";
@@ -33,7 +33,7 @@
 "After you sign a decision, how long you have to undo it." = "決定に署名したあと、取り消せる期間です。";
 "Aggregate computation" = "集計のための提供";
 "Allow this access" = "提供を許可";
-"Already settled" = "すでに精算済み";
+"Already settled" = "既に精算済み";
 "Alternatives" = "ほかの選択肢";
 "Amount" = "金額";
 "Amounts are in %@." = "金額の単位は %@ です。";
@@ -88,7 +88,7 @@
 "Declined." = "見送りました。";
 "Delete account" = "アカウントを削除";
 "Delete this account?" = "このアカウントを削除しますか？";
-"Deleting removes your account and everything this host holds for it. Shops keep their own records of sales. Gifts you shared with other households stay in their records, showing you as a member who has left." = "削除すると、アカウントと保管先にあるすべてのデータが消えます。ショップは自社の販売記録を保持します。ほかの世帯に贈ったものは相手の記録に残り、退会した会員として表示されます。";
+"Deleting removes your account and everything this host holds for it. Shops keep their own records of sales. Gifts you shared with other households stay in their records, showing you as a member who has left." = "削除すると、アカウントと保管先にある全てのデータが消えます。ショップは自社の販売記録を保持します。ほかの世帯に贈ったものは相手の記録に残り、退会した会員として表示されます。";
 "Delivery" = "送料";
 "Delivery costs have not been recorded. This statement is not ready to sign." = "送料がまだ記録されていないため、この明細にはまだ署名できません。";
 "Delivery costs have not been recorded. You can choose now and sign once they are." = "送料がまだ記録されていません。いま選んでおき、記録されてから署名できます。";
@@ -99,7 +99,7 @@
 "Ends on %@" = "%@ まで有効";
 "Enter the account reference each person gives you." = "それぞれの人から伝えられたアカウント番号を入力してください。";
 "Enter the invitation code you were given. A passkey is created on this device; no password is used." = "受け取った招待コードを入力してください。この端末にパスキーを作ります。パスワードは使いません。";
-"Everything bought for you in one day, including what has already been settled today." = "あなたの代わりに 1 日に買う合計です。今日すでに精算した分も含みます。";
+"Everything bought for you in one day, including what has already been settled today." = "あなたの代わりに 1 日に買う合計です。今日既に精算した分も含みます。";
 "Excluded" = "対象外";
 "Expires %@" = "%@ に期限";
 "Face ID or Touch ID confirms it is you. It does not replace reading this screen." = "Face ID や Touch ID は本人確認のためのものです。この画面を読む代わりにはなりません。";
@@ -120,7 +120,6 @@
 "Install recovered key" = "復旧した鍵を入れる";
 "Invitation code" = "招待コード";
 "It was in the box" = "箱に入っていた";
-"It was offered until %@." = "%@ までのお届けでした。";
 "Keep" = "受け取る";
 "Kept" = "手元に残したもの";
 "Left out by your agent" = "提案から外したもの";
@@ -162,10 +161,11 @@
 "Nothing is bought unless you choose it and sign." = "選んで署名しない限り、何も買いません。";
 "Nothing was decided or paid. Try again." = "決定も支払いもしていません。もう一度お試しください。";
 "Nothing yet." = "まだありません。";
-"Nothing. You decline every item." = "ありません。すべて見送ります。";
+"Nothing. You decline every item." = "ありません。全て見送ります。";
 "Notice delivered before recovery completed" = "復旧の完了前に通知が届きました";
 "Notifications" = "通知";
 "Now" = "現在";
+"Offered until %@." = "お届け期間は %@ まででした。";
 "One per line" = "1 行に 1 人";
 "Opening" = "開いています";
 "Opening Atarasy" = "Atarasy を開いています";
@@ -250,7 +250,7 @@
 "Signing in at the new host" = "移動先でサインインしています";
 "Signing shows you were told which items the collection did not find. It is not you agreeing they are missing or taking responsibility for them; you are never charged for them, and you can say any of them was there." = "署名は、回収時に見当たらなかった品目を知らされたことを示すものです。紛失を認めることや責任を負うことにはなりません。この分を請求されることはなく、箱にあった場合は申し出られます。";
 "Sold by %@" = "販売: %@";
-"Some shops could not be reached. This list may be incomplete." = "確認できなかったショップがあります。一覧がすべてではない可能性があります。";
+"Some shops could not be reached. This list may be incomplete." = "確認できなかったショップがあります。一覧が全てではない可能性があります。";
 "Something is holding this account open." = "処理中のものがあるため、アカウントを削除できません。";
 "Something is still in progress." = "処理中のものがあります。";
 "Something you signed is still waiting for its result." = "署名したものの結果がまだ出ていません。";
@@ -272,7 +272,7 @@
 "The target is verified. Source access remains active until the final signed retirement." = "移動先の確認が済みました。署名して閉じるまで、いまの保管先も使えます。";
 "There is nothing left to sign for this box." = "この箱で署名するものはもうありません。";
 "These are the limits your agent works within. Nothing outside them can be bought for you, and loosening them needs the people you name here." = "あなたの代わりに買うときの範囲です。この範囲の外で何かを買うことはありません。ゆるめるには、ここで指定した人の同意が必要です。";
-"These goods are already with you. Use what you like; you pay only for what you use, and the rest goes back at the swap." = "すでにお手元にある商品です。気になるものを使ってください。お支払いは使った分だけで、残りは入れ替えのときに回収します。";
+"These goods are already with you. Use what you like; you pay only for what you use, and the rest goes back at the swap." = "既にお手元にある商品です。気になるものを使ってください。お支払いは使った分だけで、残りは入れ替えのときに回収します。";
 "This account cannot be deleted yet" = "このアカウントはまだ削除できません";
 "This box has settled." = "この箱は精算済みです。";
 "This build has no independently delivered recovery notice channel, so recovery configuration remains closed." = "このアプリには別経路の通知手段がないため、復旧は設定できません。";

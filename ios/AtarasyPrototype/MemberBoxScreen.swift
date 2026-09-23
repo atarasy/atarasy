@@ -76,7 +76,7 @@ struct MemberBoxHeader: View {
                 Text("These goods are already with you. Use what you like; you pay only for what you use, and the rest goes back at the swap.").font(.subheadline).foregroundStyle(.secondary)
             } else {
                 // §2.2b, §10a.5: the date is on the screen, and it is not the member's deadline.
-                Text("It was offered until \(MemberFormat.day(detail.expiresAt)).").font(.subheadline)
+                Text("Offered until \(MemberFormat.day(detail.expiresAt)).").font(.subheadline)
                 Text("The collection has recorded what was used and what went back.").font(.subheadline).foregroundStyle(.secondary)
             }
         }
@@ -159,7 +159,8 @@ struct MemberStatementLines: View {
                         if line.maker != line.merchant { Text("Made by \(line.maker)").font(.caption).foregroundStyle(.secondary) }
                         if let giver = line.givenBy { MemberTag(text: "Gift from \(giver)", systemImage: "gift", tint: .pink) }
                         if let note = line.note { Text(verbatim: note).font(.caption).foregroundStyle(.secondary) }
-                        if editable && (line.valence == "consumed" || line.valence == "lost") {
+                        // A gift is free whatever the collection recorded, so there is nothing on it to dispute (COPY-13).
+                        if editable && ((line.valence == "consumed" && line.givenBy == nil) || line.valence == "lost") {
                             Toggle(isOn: Binding(get: { disputed.contains(line.candidate) }, set: { if $0 { disputed.insert(line.candidate) } else { disputed.remove(line.candidate) } })) {
                                 Text(line.valence == "lost" ? "It was in the box" : "This isn't right").font(.subheadline)
                             }
