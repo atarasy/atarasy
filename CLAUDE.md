@@ -24,6 +24,15 @@ It has its own repository so that the hub is not filed under the specification's
 | `src/shared/encoding.ts` | base64 as the engine reads it; SPKI DER to the PEM `/_identities` takes |
 | `test/hub.test.ts` | the hub against a running engine, end to end but for the button |
 
+## The iOS member app (`ios/`)
+
+Rebuilt on 2026-09-23 around vault `80`: Inbox, Limits and Account, one review screen per act, results that keep protocol and payment apart, English and Japanese. `ios/README.md` has the launch arguments. Four things the rebuild taught:
+
+- **Drive the whole app with `--showcase`** in the UI-testing configuration before believing a screen: `MemberAppUITests` does, including a scan for identifiers and protocol words on every primary screen. The showcase service builds prepared operations the flows accept, so a change to what a flow validates shows up there first.
+- **A screen that can stop the member must keep a way out.** Build 3 on a real iPhone stopped at the locked private node with only Recovery (unconfigurable in production) and Sign out, where the old form had offered Delete account (#41). The private-node key is per installation, so a second device or a reinstall reaches that screen by design (vault `81`).
+- **A literal is not localised until both tables carry it**: run `ios/scripts/check-strings.py` after adding one. A string produced in `AtarasyCore` goes through `L(...)` and the core's own tables, and a test fails on a Japanese entry equal to its English key.
+- **The "Passkey device check" screen appears only in TestFlight and development builds** (`MemberPRFMeasurementView.isAvailable`, a sandbox receipt in Production). It measures PRF for vault `81` §6 and contacts no service; do not grow it into anything a member relies on.
+
 ## Rules that are this repository's
 
 - **The screen renders data and never presentation from a presenter** (clause 54). Text from fields, in the hub's own type. If a field arrives that looks like markup or an ordering directive, the bug is in the engine's contract, not something to render.

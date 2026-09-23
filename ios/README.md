@@ -19,7 +19,16 @@ open ios/AtarasyPrototype.xcodeproj
 
 Select the AtarasyPrototype scheme and an iPhone/iPad simulator. Signing is disabled for this simulator prototype. The bundle identifier is a development-only identifier; no associated domain or production app identity is configured. iOS 17 is the prototype's API floor, not a settled supported-device promise. The first measured toolchain is recorded in the validation record.
 
-The app starts at Overtures. Choose a digital proposal or physical statement. Digital unselected lines are explicitly returned when the simulated decision is submitted; leaving the screen sends nothing. Only consumed physical lines have dispute controls. Gifts remain free and carriage remains explicit.
+Since 2026-09-23 every configuration opens the member's app: the signed-out entry, then Inbox, Limits and Account (vault `80`). A Debug build with no member service configured shows "Sign-in unavailable". The launch arguments that change that:
+
+| Argument | Configuration | What it opens |
+|---|---|---|
+| `--showcase` | UITesting | a synthetic household from two shops (a box with a statement, a box at home, a digital proposal, a settled box) driving the real screens with no network or authenticator (`MemberShowcase.swift`) |
+| `--showcase-lose-reply` | UITesting | the same, losing the response to the first signature |
+| `--showcase-signed-out` | UITesting | the showcase at the entry screen |
+| `--prototype` | any but Production | the earlier synthetic design prototype (Overtures) |
+
+Member-facing text lives in `AtarasyPrototype/Resources/{en,ja}.lproj/Localizable.strings` and, for the core's notices, `AtarasyCore/Sources/AtarasyCore/Resources/{en,ja}.lproj/Localizable.strings`. After a build, `python3 ios/scripts/check-strings.py <derived-data>` fails on any member-facing literal without an English and a Japanese entry; the synthetic prototype and the fixtures are exempt.
 
 Use the labelled prototype scenarios to lose an acknowledgement, omit carriage or invalidate a review. After a simulated lost reply, close/reopen the app and check the original result: the simulated effect count remains one. Reset is destructive only to that synthetic scenario. Presentation and journal state use UserDefaults solely for these fake records; it is not the proposed private production store.
 
