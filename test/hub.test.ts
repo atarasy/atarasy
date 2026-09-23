@@ -15,6 +15,7 @@ import { join, resolve } from "node:path";
 import { canonicalDecisions, canonicalExport, canonicalLeave, canonicalWithdrawal, challengeFor, type Decision } from "../src/shared/canonical.js";
 import { canonicalMandate } from "../src/shared/mandate.js";
 import { spkiToPem, toBase64 } from "../src/shared/encoding.js";
+import { goodsTitle } from "../src/shared/format.js";
 
 const ENGINE_DIR = resolve(process.env.VALENCE_ENGINE_DIR ?? join(import.meta.dir, "..", "..", "valence", "engine"));
 const ENGINE_PORT = Number(process.env.ENGINE_PORT ?? 9700);
@@ -1122,3 +1123,109 @@ describe("the statement a household signs (§6.5)", () => {
 });
 
 let memberKey: KeyPairKeyObjectResult | undefined;
+
+/**
+ * D-1, catalogue revision 3, vault `80` §6.2 I. `shared/inbox.ts`'s
+ * `InboxOffer` used to declare only `id`, `valence` and `collected_as` for a
+ * candidate on the list route, and the screen asked a second question
+ * (`.../approval`) for what `GET /offers` had been carrying the whole time.
+ * Widening the type was the fix; this is the probe that the wire actually
+ * carries what the type now claims, and that `goodsTitle()` reads it the way
+ * the plan's row does: the catalogue's own name and variant, not the bare
+ * product reference.
+ *
+ * A publication with a display name signs "valence.catalogue.3"
+ * (`valence/engine/src/shared/catalogue.ts`), not the "valence.catalogue.2"
+ * every other fixture in this file uses, so this test builds its own
+ * canonical bytes rather than reuse `canonicalConfig` above. **This is the
+ * one test in this file that is allowed to find nothing**: a `VALENCE_ENGINE_DIR`
+ * pointed at an engine from before D-1 refuses a revision 3 publication, and
+ * there is nothing yet to measure until the reference engine carries it,
+ * which `81`'s plan already names as not yet merged. Every other test in this
+ * file is unconditional.
+ */
+describe("D-1: catalogue revision 3's name and variant reach the list a row reads", () => {
+  test("a row can read a candidate's display name and variant, and its merchant, off GET /offers alone", async () => {
+    const presenterKey = generateKeyPairSync("ed25519");
+    const presenter = "presenter-d1-probe";
+    expect((await post(ENGINE, "/_identities", {
+      key: presenter,
+      public_key: presenterKey.publicKey.export({ type: "spki", format: "pem" }).toString(),
+      attested: true,
+    })).status).toBe(201);
+
+    const config = {
+      version: "cfg-d1-probe",
+      presenter,
+      products: {
+        "oat-milk-ref": { merchant: "maker-d1-probe", maker: "made-by-d1-probe", ships: "carrier-d1-probe", price: 350, name: "Oat milk", variant: "1L" },
+      },
+    };
+    // `canonicalConfig`'s revision 3 shape: the revision 2 row (ref, merchant,
+    // maker, ships, price, category, physical) with `name` and `variant`
+    // appended, under the "valence.catalogue.3" domain tag.
+    const row3 = ["oat-milk-ref", "maker-d1-probe", "made-by-d1-probe", "carrier-d1-probe", 350, null, null, "Oat milk", "1L"];
+    const canonical = Buffer.from(JSON.stringify(["valence.catalogue.3", config.version, config.presenter, [row3]]), "utf8");
+    const published = await post(ENGINE, "/_presenter/configs", {
+      ...config,
+      signature: sign(null, canonical, presenterKey.privateKey).toString("base64"),
+    });
+    if (published.status !== 201) {
+      console.warn(`D-1 probe: this engine (${ENGINE_DIR}) refused a catalogue revision 3 publication (${published.status}); nothing to measure yet.`);
+      return;
+    }
+
+    // §10a. `present` refuses an offer whose merchant has no signed block.
+    const d1MerchantKey = generateKeyPairSync("ed25519");
+    expect((await post(ENGINE, "/_identities", {
+      key: "maker-d1-probe",
+      public_key: d1MerchantKey.publicKey.export({ type: "spki", format: "pem" }).toString(),
+      attested: false,
+    })).status).toBe(201);
+    const d1Block = { merchant: "maker-d1-probe", product: null as string | null, version: "d-1-probe", items: [{ label: "returns", value: "as published" }] };
+    expect((await post(ENGINE, "/_disclosures", {
+      ...d1Block,
+      signature: sign(null, canonicalDisclosure(d1Block), d1MerchantKey.privateKey).toString("base64"),
+    })).status).toBe(201);
+
+    const created = await post(ENGINE, "/offers", {
+      binding: "digital",
+      household: HOUSEHOLD,
+      purpose: "replenish",
+      config_version: config.version,
+      expires_at: Date.now() + 3_600_000,
+      mandate: MANDATE,
+      price_band: null,
+      giver: null,
+      candidates: [{ product: "oat-milk-ref", quantity: 1, predicted_conversion: 0.5, is_exploration: true, given_by: null }],
+    });
+    expect(created.status).toBe(201);
+    const offer = created.body as unknown as { id: string; candidates: { id: string }[] };
+    const per: Record<string, unknown> = {};
+    for (const c of offer.candidates) per[c.id] = { alternatives: ["oat-milk-ref-2"], argument_against: "you have some already" };
+    expect((await post(ENGINE, `/offers/${offer.id}/deliberation`, {
+      per_candidate: per,
+      excluded: [],
+      mandate: { kind: "individual", scope: "this offer", lapses_at: null },
+    })).status).toBe(201);
+    expect((await post(ENGINE, `/offers/${offer.id}/present`, {})).status).toBe(200);
+
+    // The same route and the same shape the Inbox screen reads
+    // (`src/client/app.ts`'s `offers()`), through the hub's own proxy.
+    const list = (await (await fetch(`${HUB}/api/offers?household=${encodeURIComponent(HOUSEHOLD)}&presenter=${presenter}`)).json()) as {
+      offers: { id: string; candidates: { id: string; product: string; merchant: string; name?: string; variant?: string }[] }[];
+    };
+    const row = list.offers.find((o) => o.id === offer.id);
+    expect(row).toBeDefined();
+    const candidate = row!.candidates[0]!;
+    expect(candidate.product).toBe("oat-milk-ref");
+    expect(candidate.merchant).toBe("maker-d1-probe");
+    expect(candidate.name).toBe("Oat milk");
+    expect(candidate.variant).toBe("1L");
+    // The exact function an Inbox row calls (`shared/format.ts`'s
+    // `goodsTitle`), imported directly rather than re-derived here: what is
+    // proven is that the real function, given the wire's own candidate,
+    // produces the title the row shows, not a hand-written stand-in for it.
+    expect(goodsTitle(candidate)).toBe("Oat milk 1L");
+  });
+});
