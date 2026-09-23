@@ -111,5 +111,53 @@ public struct MemberSessionInfo: Codable, Equatable, Sendable {
     public init(id: String, household: String, presenters: [String], expiresAt: Int64) { self.id = id; self.household = household; self.presenters = presenters; self.expiresAt = expiresAt }
 }
 public struct MemberOfferSummary: Decodable, Equatable, Sendable {
+    /// What a list row can say without a second request per offer (`04b` §1b). Every field
+    /// here is optional so a list from an engine that sends less still draws its rows; the
+    /// authoritative checks are the detail's, made when the row is opened.
+    public struct Line: Decodable, Equatable, Sendable {
+        public let product: String
+        public let merchant: String
+        public let quantity: Int64?
+        public let unitPrice: Int64?
+        public let givenBy: String?
+        public let valence: String?
+        public let collectedAs: String?
+        public let name: String?
+        public let variant: String?
+        public init(product: String, merchant: String, quantity: Int64? = nil, unitPrice: Int64? = nil, givenBy: String? = nil, valence: String? = nil, collectedAs: String? = nil, name: String? = nil, variant: String? = nil) {
+            self.product = product; self.merchant = merchant; self.quantity = quantity; self.unitPrice = unitPrice
+            self.givenBy = givenBy; self.valence = valence; self.collectedAs = collectedAs; self.name = name; self.variant = variant
+        }
+        enum CodingKeys: String, CodingKey {
+            case product, merchant, quantity, valence, name, variant
+            case unitPrice = "unit_price", givenBy = "given_by", collectedAs = "collected_as"
+        }
+    }
     public let id: String; public let household: String; public let presenter: String; public let binding: String; public let state: String
+    public let presentedAt: Int64?
+    public let expiresAt: Int64?
+    public let decidedAt: Int64?
+    public let candidates: [Line]?
+    enum CodingKeys: String, CodingKey {
+        case id, household, presenter, binding, state, candidates
+        case presentedAt = "presented_at", expiresAt = "expires_at", decidedAt = "decided_at"
+    }
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id); household = try c.decode(String.self, forKey: .household)
+        presenter = try c.decode(String.self, forKey: .presenter); binding = try c.decode(String.self, forKey: .binding)
+        state = try c.decode(String.self, forKey: .state)
+        presentedAt = try? c.decodeIfPresent(Int64.self, forKey: .presentedAt)
+        expiresAt = try? c.decodeIfPresent(Int64.self, forKey: .expiresAt)
+        decidedAt = try? c.decodeIfPresent(Int64.self, forKey: .decidedAt)
+        // A row whose lines cannot be read still lists; its detail is where a malformed offer is refused.
+        candidates = try? c.decodeIfPresent([Line].self, forKey: .candidates)
+    }
+    public init(id: String, household: String, presenter: String, binding: String, state: String, presentedAt: Int64? = nil, expiresAt: Int64? = nil, decidedAt: Int64? = nil, candidates: [Line]? = nil) {
+        self.id = id; self.household = household; self.presenter = presenter; self.binding = binding; self.state = state
+        self.presentedAt = presentedAt; self.expiresAt = expiresAt; self.decidedAt = decidedAt; self.candidates = candidates
+    }
+    /// The date a row is ordered by: when it was presented, which is when it arrived, and its
+    /// expiry for a row never presented, as the web hub's `byArrival` does.
+    public var arrivedAt: Int64 { presentedAt ?? expiresAt ?? 0 }
 }

@@ -1,6 +1,7 @@
 name: AtarasyPrototype
 options:
   bundleIdPrefix: dev.atarasy
+  developmentLanguage: en
 configs:
   Debug: debug
   Release: release
@@ -17,6 +18,9 @@ settings:
   base:
     SWIFT_VERSION: '6.0'
     CODE_SIGNING_ALLOWED: NO
+    # The member's app is localised (vault `80` D-5); the compiler lists every localisable
+    # literal so the string tables can be checked for coverage.
+    SWIFT_EMIT_LOC_STRINGS: YES
     TARGETED_DEVICE_FAMILY: '1,2'
 targets:
   AtarasyPrototype:

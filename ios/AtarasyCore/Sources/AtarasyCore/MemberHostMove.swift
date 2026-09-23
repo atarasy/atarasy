@@ -151,7 +151,7 @@ public enum MemberHostMovePhase: String, Sendable { case idle, signingIntoTarget
         guard phase != .importing && phase != .verifying && phase != .retiring, let sourceSession else { return }
         var imported = false
         do {
-            phase = .signingIntoTarget; notice = "Sign in to the target host. Source access remains active."
+            phase = .signingIntoTarget; notice = L("Sign in at the new host. Your current host stays active.")
             let login = try await target.loginOptions(), loginAssertion = try await targetPasskeys.authorise(login, kind: .assertion), targetSession = try await target.login(ceremony: login, response: loginAssertion)
             guard targetSession.household == sourceSession.household, targetSession.presenters.sorted() == sourceSession.presenters.sorted() else { throw MemberFailure.scopeMismatch }
             phase = .exporting
@@ -168,16 +168,16 @@ public enum MemberHostMovePhase: String, Sendable { case idle, signingIntoTarget
             let proofReview = try await target.prepareHostImportAttestation(digest: export.digest), proof = try await targetPasskeys.authorise(proofReview.ceremony, kind: .hostMove), attestation = try await target.attestHostImport(proofReview, assertion: proof)
             self.targetSession = targetSession; self.exported = export; self.attestation = attestation; targetReceipt = receipt
             coverage = "\(targetOffers.details.count) offers, \(targetPermissions.permissions.count) permissions and \(move.target.count) encrypted private records verified on \(targetEnvironment.origin.host ?? targetEnvironment.origin.absoluteString)."
-            phase = .readyToRetire; notice = "Target verification is complete. Source access is still active until you retire it."
-        } catch is CancellationError { phase = imported ? .unresolved : .sourceRetained; notice = "Host move stopped. Source access remains active." }
-        catch { phase = imported ? .unresolved : .sourceRetained; notice = imported ? "The target may contain an imported copy, but source access remains active. Verify the target before retirement." : "Nothing was retired. Source access remains active." }
+            phase = .readyToRetire; notice = L("The new host has everything. Your current host stays active until you close it.")
+        } catch is CancellationError { phase = imported ? .unresolved : .sourceRetained; notice = L("The move stopped. Your current host is unchanged.") }
+        catch { phase = imported ? .unresolved : .sourceRetained; notice = imported ? L("The new host may hold a copy, and your current host is still active. Check the new host before closing the current one.") : L("Nothing was closed. Your current host is still active.") }
     }
     public func retireSource() async {
         guard phase == .readyToRetire, let exported, let attestation else { return }
         do {
             phase = .retiring; let prepared = try await source.prepareHostRetirement(move: exported.id, attestation: attestation), assertion = try await sourcePasskeys.authorise(prepared.ceremony, kind: .hostMove)
-            _ = try await source.retireHost(prepared, assertion: assertion); phase = .completed; notice = "The target host is verified and source-host access has ended."; onRetired?()
-        } catch { phase = .unresolved; notice = "Source retirement is unresolved. Do not repeat import. Check target receipt and source access before continuing." }
+            _ = try await source.retireHost(prepared, assertion: assertion); phase = .completed; notice = L("The move is complete, and your old host is closed."); onRetired?()
+        } catch { phase = .unresolved; notice = L("We could not confirm that your old host was closed. Do not move again. Check both hosts first.") }
     }
     private struct Surface: Equatable { let summaries: [[MemberOfferSummary]]; let details: [String: MemberOfferDetail]; let settlements: [String: ProtocolSettlement] }
     private func surface(_ service: any MemberHostMoveService, presenters: [String]) async throws -> Surface {

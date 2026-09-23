@@ -20,6 +20,10 @@ public struct Mandate: Codable, Sendable {
     public var id: String; public var household: String
     public var ceilingOutOfNetwork: Int64; public var ceilingDaily: Int64?; public var coolingSeconds: Int64?
     public var coSigners: [String]; public var lapsesAt: Int64; public var version: Int64
+    public init(id: String, household: String, ceilingOutOfNetwork: Int64, ceilingDaily: Int64?, coolingSeconds: Int64?, coSigners: [String], lapsesAt: Int64, version: Int64) {
+        self.id = id; self.household = household; self.ceilingOutOfNetwork = ceilingOutOfNetwork; self.ceilingDaily = ceilingDaily
+        self.coolingSeconds = coolingSeconds; self.coSigners = coSigners; self.lapsesAt = lapsesAt; self.version = version
+    }
 }
 public enum Canonical {
     public static let maximumInteger: Int64 = 9_007_199_254_740_991

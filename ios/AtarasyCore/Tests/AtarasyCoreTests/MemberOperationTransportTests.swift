@@ -380,7 +380,7 @@ extension MemberOperationTransportTests {
         await flow.cancelPrepared()
         XCTAssertNil(flow.handle); XCTAssertNil(flow.review); XCTAssertFalse(flow.canApprove)
         XCTAssertEqual(flow.saved.count, 1); XCTAssertFalse(flow.saved[0].attempted)
-        XCTAssertTrue(flow.notice.contains("cancelled"))
+        XCTAssertTrue(flow.notice.contains("Review closed"))
         XCTAssertEqual(service.submissions, 0); XCTAssertEqual(passkeys.calls, 0)
     }
     func testClosingDuringNativeCeremonyDropsLateAssertion() async throws {
@@ -433,7 +433,7 @@ extension MemberOperationTransportTests {
         let (flow, service, passkeys, detail, statement, _) = try flowSetup()
         await flow.prepare(detail: detail, statement: statement, disputed: [])
         await flow.cancelPrepared()
-        XCTAssertFalse(flow.canApprove); XCTAssertTrue(flow.notice.contains("cancelled"))
+        XCTAssertFalse(flow.canApprove); XCTAssertTrue(flow.notice.contains("Review closed"))
         XCTAssertEqual(service.submissions, 0); XCTAssertEqual(passkeys.calls, 0)
     }
 

@@ -60,8 +60,8 @@ extension MemberClient: MemberPermissionService {}
         do {
             let result = try await service.permissionList()
             guard current == generation, !Task.isCancelled, session.expiresAt > now(), result.household == session.household else { return }
-            rows = result.permissions; loaded = true; notice = "Permissions checked. Expired and revoked records remain in your history."
-        } catch { if current == generation { notice = "Permissions could not be checked. Refresh to confirm current access." } }
+            rows = result.permissions; loaded = true; notice = L("Permissions checked. Expired and revoked ones stay in your history.")
+        } catch { if current == generation { notice = L("Permissions could not be checked. Refresh to see current access.") } }
     }
     public func revoke(_ confirmed: MemberPermission? = nil) async {
         guard !busy, !Task.isCancelled, loaded, let selected = confirmed ?? selected, rows.contains(selected), let session, session.expiresAt > now() else { return }
@@ -70,7 +70,7 @@ extension MemberClient: MemberPermissionService {}
             let result = try await service.revokePermission(selected)
             guard current == generation, !Task.isCancelled, session.expiresAt > now() else { return }
             guard result.sameGrant(selected), result.revoked_at != nil else { throw MemberFailure.scopeMismatch }
-            rows = rows.map { $0.id == result.id ? result : $0 }; notice = "Permission revoked. Refresh to check the full list." 
-        } catch { if current == generation { notice = "The result could not be confirmed. Refresh permissions before taking another action." } }
+            rows = rows.map { $0.id == result.id ? result : $0 }; notice = L("Permission revoked.") 
+        } catch { if current == generation { notice = L("We could not confirm the result. Refresh before doing anything else.") } }
     }
 }

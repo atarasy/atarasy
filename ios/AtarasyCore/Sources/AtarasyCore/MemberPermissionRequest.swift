@@ -76,8 +76,8 @@ extension MemberClient: MemberPermissionRequestService {}
         do {
             let result = try await service.permissionRequests()
             guard current == generation, !Task.isCancelled, session.expiresAt > now() else { return }
-            rows = result; notice = "Requests checked. Open an action to review its access."
-        } catch { if current == generation { notice = "Requests could not be checked. Refresh to try again." } }
+            rows = result; notice = L("Requests checked.")
+        } catch { if current == generation { notice = L("Requests could not be checked. Refresh to try again.") } }
     }
     public func open(_ id: String) async {
         guard !busy, !Task.isCancelled, let session, session.expiresAt > now() else { return }
@@ -86,7 +86,7 @@ extension MemberClient: MemberPermissionRequestService {}
             let result = try await service.permissionRequest(id)
             guard current == generation, !Task.isCancelled, session.expiresAt > now() else { return }
             review = result; ready = result.canDecide(at: now()); notice = ""
-        } catch { if current == generation { notice = "This request could not be checked." } }
+        } catch { if current == generation { notice = L("This request could not be checked.") } }
     }
     public func decide(grant: Bool) async {
         guard !busy, !Task.isCancelled, ready, let review, review.canDecide(at: now()), let session, session.expiresAt > now() else { return }
@@ -94,7 +94,7 @@ extension MemberClient: MemberPermissionRequestService {}
         do {
             let result = try await service.decidePermissionRequest(review, grant: grant)
             guard current == generation, !Task.isCancelled, session.expiresAt > now() else { return }
-            self.review = result; notice = grant ? "Permission decision recorded. Check the current access status below." : "Request cancelled. No permission was granted."
-        } catch { if current == generation { notice = "The result could not be confirmed. Check this request again before taking another action." } }
+            self.review = result; notice = grant ? L("Your answer was recorded. The current status is below.") : L("Request declined. Nothing was shared.")
+        } catch { if current == generation { notice = L("We could not confirm the result. Check this request again before doing anything else.") } }
     }
 }

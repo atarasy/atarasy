@@ -62,7 +62,7 @@ struct MemberDialsFixtureView: View {
         _account = StateObject(wrappedValue: MemberAccount(service: service, passkeys: DialsFixturePasskeys()))
     }
     var body: some View {
-        MemberDialsView(account: account)
+        MemberLimitsView(account: account)
             .task { if account.session == nil { await account.restore(household: "key:member-fixture"); await account.refreshDials() } }
     }
 }

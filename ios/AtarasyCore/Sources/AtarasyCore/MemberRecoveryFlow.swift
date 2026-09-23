@@ -47,14 +47,14 @@ extension MemberClient: MemberRecoveryService {}
     }
     private func run(_ work: () async throws -> Void) async {
         guard !busy else { return }; busy = true; defer { busy = false }
-        do { try await work() } catch is CancellationError { notice = "Recovery action cancelled. Nothing was changed." }
-        catch { notice = "Recovery is not complete. Existing records have not been replaced." }
+        do { try await work() } catch is CancellationError { notice = L("Cancelled. Nothing was changed.") }
+        catch { notice = L("Recovery is not complete. Your existing records have not been replaced.") }
     }
     public func refresh() async {
         guard session != nil else { return }
         await run {
             let started = generation, key = try await service.recoveryKeyStatus(), configuration = try await service.recoveryConfiguration(), requests = try await service.recoveryRequests(), log = try await service.recoveryLog()
-            guard started == generation else { return }; self.keyStatus = key; self.configuration = configuration; self.requests = requests; self.log = log; notice = "Recovery status refreshed."
+            guard started == generation else { return }; self.keyStatus = key; self.configuration = configuration; self.requests = requests; self.log = log; notice = L("Recovery status refreshed.")
         }
     }
     public func registerRecoveryKey() async {
@@ -63,11 +63,11 @@ extension MemberClient: MemberRecoveryService {}
             let started = generation, pair = try vault.agreementKey(scope: scope(session.household), create: true); guard let pair else { throw MemberFailure.storage }
             let prepared = try await service.prepareRecoveryKey(pair.publicKey), assertion = try await passkeys.authorise(prepared.ceremony, kind: .recovery)
             guard started == generation, self.session?.id == session.id else { return }
-            keyStatus = try await service.registerRecoveryKey(prepared, assertion: assertion); notice = "This device can now act only in a named recovery ceremony."
+            keyStatus = try await service.registerRecoveryKey(prepared, assertion: assertion); notice = L("This device can now help someone recover, and nothing else.")
         }
     }
     public func configure(recoverer: String) async {
-        guard let session, let noticeChannel, !recoverer.isEmpty, recoverer != session.household else { notice = "An independent recovery notice channel and a different recoverer are required."; return }
+        guard let session, let noticeChannel, !recoverer.isEmpty, recoverer != session.household else { notice = L("Recovery needs a separate notice channel and a different person to help."); return }
         await run {
             let started = generation, current = try await service.recoveryConfiguration(), participant = try await service.recoveryParticipant(recoverer), key = try await privateNode.recoveryKey(session: session), shares = try MemberRecoveryShares.split(key: key), digest = try MemberRecoveryShares.digest(key), epoch = (current.epoch ?? 0) + 1
             guard let device = shares.first(where: { $0.participant == .device }), let recovererShare = shares.first(where: { $0.participant == .recoverer }), let host = shares.first(where: { $0.participant == .host }) else { throw MemberFailure.storage }
@@ -77,7 +77,7 @@ extension MemberClient: MemberRecoveryService {}
             let prepared = try await service.prepareRecoveryConfiguration(draft, recovererKeyDigest: participant.keyDigest), assertion = try await passkeys.authorise(prepared.ceremony, kind: .recovery)
             guard started == generation, self.session?.id == session.id else { return }
             configuration = try await service.submitRecoveryConfiguration(prepared, assertion: assertion)
-            try vault.saveDeviceShare(device, scope: scope(session.household), epoch: epoch); notice = "Recovery was configured with this device, the named recoverer and the host."
+            try vault.saveDeviceShare(device, scope: scope(session.household), epoch: epoch); notice = L("Recovery is set up with this device, your helper and the host.")
         }
     }
     public func beginLostDeviceRecovery() async {
@@ -85,7 +85,7 @@ extension MemberClient: MemberRecoveryService {}
         await run {
             let started = generation, pair = try vault.requesterKey(scope: scope(session.household), create: true); guard let pair else { throw MemberFailure.storage }
             let request = try await service.createRecoveryRequest(requesterPublicKey: pair.publicKey)
-            guard started == generation else { return }; requests.removeAll { $0.id == request.id }; requests.append(request); requests.sort { $0.id < $1.id }; notice = "Waiting for the named recoverer and independent notice delivery."
+            guard started == generation else { return }; requests.removeAll { $0.id == request.id }; requests.append(request); requests.sort { $0.id < $1.id }; notice = L("Waiting for your helper and the separate notice.")
         }
     }
     public func approve(_ request: MemberRecoveryRequest) async {
@@ -98,7 +98,7 @@ extension MemberClient: MemberRecoveryService {}
             let release = try MemberRecoveryPackets.seal(share.bytes, recipientPublicKey: request.requesterPublicKey, context: outbound)
             let prepared = try await service.prepareRecoveryApproval(id: request.id, release: release), assertion = try await passkeys.authorise(prepared.ceremony, kind: .recovery)
             guard started == generation else { return }; let result = try await service.approveRecovery(prepared, assertion: assertion)
-            requests.removeAll { $0.id == result.id }; requests.append(result); requests.sort { $0.id < $1.id }; notice = "Recovery approval recorded. It grants no everyday record access."
+            requests.removeAll { $0.id == result.id }; requests.append(result); requests.sort { $0.id < $1.id }; notice = L("Your approval was recorded. It gives no access to everyday records.")
         }
     }
     public func finish(_ request: MemberRecoveryRequest) async {
@@ -110,7 +110,7 @@ extension MemberClient: MemberRecoveryService {}
             let context = MemberRecoveryPacketContext(purpose: "requester-release", owner: latest.owner, recoverer: latest.recoverer, reference: latest.id, epoch: latest.epoch)
             let recovererBytes = try MemberRecoveryPackets.open(release, recipient: requester, context: context), recovererShare = try MemberRecoveryShare(participant: .recoverer, bytes: recovererBytes), hostShare = try MemberRecoveryShare(participant: .host, bytes: MemberRecoveryCodec.data(hostEncoded)), key = try MemberRecoveryShares.recover(recovererShare, hostShare)
             guard try MemberRecoveryShares.digest(key) == expected else { throw MemberFailure.storage }
-            try await privateNode.installRecoveredKey(key, session: session); try vault.removeRequesterKey(scope: scope(session.household)); requests = try await service.recoveryRequests(); log = try await service.recoveryLog(); notice = "Recovery completed after the independent notice was delivered."
+            try await privateNode.installRecoveredKey(key, session: session); try vault.removeRequesterKey(scope: scope(session.household)); requests = try await service.recoveryRequests(); log = try await service.recoveryLog(); notice = L("Recovery is complete. The separate notice was delivered.")
         }
     }
 }

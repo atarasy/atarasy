@@ -187,7 +187,7 @@ extension MemberDigitalTransportTests {
         await flow.approve(); XCTAssertFalse(flow.canApprove); XCTAssertTrue(flow.handle?.attempted == true)
         await flow.approve(); XCTAssertEqual(keys.calls, 1)
         let resumed = MemberDigitalFlow(environment: l.environment, service: client, passkeys: keys, store: try FileMemberOperationStore(directory: directory), now: { 1_800_000_000_001 })
-        resumed.setSession(l.session); await resumed.check(try XCTUnwrap(resumed.saved.first)); XCTAssertTrue(resumed.notice.contains("Decision recorded"))
+        resumed.setSession(l.session); await resumed.check(try XCTUnwrap(resumed.saved.first)); XCTAssertEqual(resumed.result, .recorded(amount: nil))
         let calls = await transport.requests.filter { $0.url!.path.hasSuffix("/submit") }; XCTAssertEqual(calls.count, 1)
         resumed.setSession(.init(id: "other-session", household: l.session.household, presenters: ["another-presenter"], expiresAt: l.session.expiresAt)); XCTAssertTrue(resumed.saved.isEmpty)
     }
@@ -198,7 +198,7 @@ extension MemberDigitalTransportTests {
         let flow = MemberDigitalFlow(environment: l.environment, service: client, passkeys: keys, store: store, now: { 1_800_000_000_001 })
         flow.setSession(l.session); await flow.prepare(detail: l.detail, draft: try draft(l)); await flow.approve()
         XCTAssertEqual(keys.calls, 0); XCTAssertFalse(flow.canApprove)
-        await flow.cancelPrepared(); XCTAssertNil(flow.handle); XCTAssertNil(flow.review); XCTAssertTrue(flow.notice.contains("cancelled"))
+        await flow.cancelPrepared(); XCTAssertNil(flow.handle); XCTAssertNil(flow.review); XCTAssertTrue(flow.notice.contains("Review closed"))
     }
 }
 extension MemberDigitalTransportTests {

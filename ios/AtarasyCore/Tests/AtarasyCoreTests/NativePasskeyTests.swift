@@ -130,7 +130,7 @@ func capturedCeremony(_ name: String) throws -> MemberCeremony {
         // The fixture expires at 5 seconds after the epoch; the live screen clock rejects it.
         await model.proposals.refresh()
         XCTAssertNil(model.session); XCTAssertNil(model.proposals.sessionIdentity)
-        XCTAssertTrue(model.notice.contains("no longer available"))
+        XCTAssertTrue(model.notice.contains("signed out"))
     }
     func testCancelAndPlatformFailureNeverSubmitVerification() async {
         for error in [NativePasskeyFailure.cancelled, .unavailable] {
@@ -147,14 +147,14 @@ func capturedCeremony(_ name: String) throws -> MemberCeremony {
         let model = MemberAccount(service: service, passkeys: AccountPasskeys())
         await model.signIn()
         XCTAssertEqual(service.calls, ["login-options", "login"])
-        XCTAssertNil(model.session); XCTAssertTrue(model.notice.contains("could not be confirmed"))
+        XCTAssertNil(model.session); XCTAssertTrue(model.notice.contains("could not confirm"))
         XCTAssertFalse(model.notice.contains("cancelled"))
     }
     func testLogoutClearsVisibleSessionEvenWhenRemoteResultLost() async {
         let service = AccountService()
         let active = MemberAccount(service: service, passkeys: AccountPasskeys())
         await active.signIn(); service.failure = .remoteLogoutUnconfirmed; await active.signOut()
-        XCTAssertNil(active.session); XCTAssertTrue(active.notice.contains("Server revocation could not be confirmed"))
+        XCTAssertNil(active.session); XCTAssertTrue(active.notice.contains("could not confirm the sign-out on the server"))
     }
     func testRestoreFailureAndExpiryHideSession() async {
         let service = AccountService(), passkeys = AccountPasskeys()
@@ -193,7 +193,7 @@ func capturedCeremony(_ name: String) throws -> MemberCeremony {
         // server refuses a prepare for an already-signed mandate with 404).
         XCTAssertTrue(model.mandates.isEmpty)
         XCTAssertNil(model.mandateReview)
-        XCTAssertEqual(model.mandateNotice, "Mandate signed.")
+        XCTAssertEqual(model.mandateNotice, "Your limits are signed and in effect.")
         XCTAssertEqual(service.calls, ["login-options", "login", "unsigned-mandates", "prepare-mandate:mandate-1", "submit-mandate:mandate-1"])
     }
 }

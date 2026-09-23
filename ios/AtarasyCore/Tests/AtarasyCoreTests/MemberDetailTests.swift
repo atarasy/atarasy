@@ -73,7 +73,7 @@ private actor DetailTransport: MemberHTTPTransport {
     }
 
     func testLostOutcomeNamesTheKindOfLossOnlyWhenTheEngineSaidIt() {
-        XCTAssertTrue(MemberOfferDetail.lostOutcome("missing", supplied: true).hasPrefix("Not in the box"))
+        XCTAssertTrue(MemberOfferDetail.lostOutcome("missing", supplied: true).hasPrefix("Not found in the box"))
         XCTAssertTrue(MemberOfferDetail.lostOutcome(nil, supplied: true).hasPrefix("Not collected by the deadline"))
         XCTAssertTrue(MemberOfferDetail.lostOutcome(nil, supplied: false).hasPrefix("Not returned"))
         XCTAssertTrue(MemberOfferDetail.lostOutcome("missing", supplied: false).hasPrefix("Not returned"))

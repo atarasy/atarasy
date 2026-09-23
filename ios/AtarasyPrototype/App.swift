@@ -22,7 +22,7 @@ final class AtarasyAppDelegate: NSObject, UIApplicationDelegate {
             #if ATARASY_RELEASE
             MemberProductionRootView()
             #else
-            InboxView()
+            DevelopmentRootView()
             #endif
         }
     }
@@ -34,6 +34,21 @@ final class AtarasyAppDelegate: NSObject, UIApplicationDelegate {
 // launch experience; the Production root is `MemberProductionRootView` in
 // MemberAccountView.swift.
 #if !ATARASY_RELEASE
+/// Every non-Production build opens the member's app as Production does. The synthetic design
+/// prototype stays reachable with `--prototype` for its UI tests, and the UI-testing
+/// configuration adds a fixture-backed household with `--showcase`.
+struct DevelopmentRootView: View {
+    var body: some View {
+        #if ATARASY_UI_TEST_FIXTURES
+        if ProcessInfo.processInfo.arguments.contains("--showcase") { MemberShowcaseRootView() } else { standard }
+        #else
+        standard
+        #endif
+    }
+    @ViewBuilder private var standard: some View {
+        if ProcessInfo.processInfo.arguments.contains("--prototype") || ProcessInfo.processInfo.arguments.contains(where: { $0.hasPrefix("--member-") }) { InboxView() } else { MemberProductionRootView() }
+    }
+}
 private func merchantName(_ id: String) -> String { id == "merchant-fixture-a" ? "Pantry Market" : "Neighbourhood Goods" }
 
 struct InboxView: View {

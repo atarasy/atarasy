@@ -40,47 +40,39 @@ private struct MemberWindowReader: UIViewRepresentable {
     func makeUIView(context: Context) -> Probe { let view = Probe(); view.reference = reference; return view }
     func updateUIView(_ uiView: Probe, context: Context) { uiView.reference = reference }
 }
-#if ATARASY_RELEASE
-/// The Production `WindowGroup` root. There is no sample inbox in this configuration
-/// (App.swift excludes it under `ATARASY_RELEASE`), so the member account is the app
-/// itself: a `NavigationStack`, not a sheet, with no "Done" that would dismiss into a
-/// screen that does not exist here.
+/// The app's root in every configuration but the synthetic prototype (vault `80` §6.1): the
+/// member's app itself, not a sheet over a sample inbox. Each tab owns its navigation stack.
 struct MemberProductionRootView: View {
     @StateObject private var holder = MemberAccountHolder()
     var body: some View {
-        NavigationStack {
+        Group {
             if let environment = configuredMemberEnvironment() {
                 ConfiguredMemberAccount(environment: environment, holder: holder)
             } else {
-                ContentUnavailableView("Member sign-in unavailable", systemImage: "person.crop.circle.badge.exclamationmark", description: Text("This app is not yet connected to a member host on this device."))
-                    .accessibilityIdentifier("memberUnconfigured")
-                    .navigationTitle("Member account")
+                NavigationStack {
+                    ContentUnavailableView("Sign-in unavailable", systemImage: "person.crop.circle.badge.exclamationmark", description: Text("This build is not connected to a member service."))
+                        .accessibilityIdentifier("memberUnconfigured")
+                        .navigationTitle("Atarasy")
+                }
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .atarasyAPNSToken)) { if let token = $0.object as? Data { holder.apnsToken = token } }
     }
 }
-#endif
 struct MemberAccountSheet: View {
     @ObservedObject var holder: MemberAccountHolder
     @Environment(\.dismiss) private var dismiss
     var body: some View {
-        NavigationStack {
+        Group {
             #if ATARASY_UI_TEST_FIXTURES
             if ProcessInfo.processInfo.arguments.contains("--member-dials-fixture") {
-                MemberDialsFixtureView()
+                NavigationStack { MemberDialsFixtureView() }
             } else if ProcessInfo.processInfo.arguments.contains("--member-request-fixture") {
-                MemberRequestFixtureView()
+                NavigationStack { MemberRequestFixtureView() }
             } else if ProcessInfo.processInfo.arguments.contains("--member-permission-fixture") {
-                MemberPermissionFixtureView()
+                NavigationStack { MemberPermissionFixtureView() }
             } else if ProcessInfo.processInfo.arguments.contains("--member-withdrawal-fixture") {
-                MemberWithdrawalFixtureView()
-            } else if ProcessInfo.processInfo.arguments.contains("--member-digital-fixture") {
-                MemberDigitalFixtureView()
-            } else if ProcessInfo.processInfo.arguments.contains("--member-statement-fixture") {
-                MemberStatementFixtureView()
-            } else if ProcessInfo.processInfo.arguments.contains("--member-list-fixture") {
-                MemberProposalFixtureView()
+                NavigationStack { MemberWithdrawalFixtureView() }
             } else { configuredContent }
             #else
             configuredContent
@@ -91,10 +83,12 @@ struct MemberAccountSheet: View {
             if let environment = configuredMemberEnvironment() {
                 ConfiguredMemberAccount(environment: environment, holder: holder)
             } else {
-                ContentUnavailableView("Member sign-in unavailable", systemImage: "person.crop.circle.badge.exclamationmark", description: Text("This build is not connected to a member service. You can continue exploring the sample proposals."))
-                    .accessibilityIdentifier("memberUnconfigured")
-                    .navigationTitle("Member account")
-                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() }.accessibilityIdentifier("memberDone") } }
+                NavigationStack {
+                    ContentUnavailableView("Member sign-in unavailable", systemImage: "person.crop.circle.badge.exclamationmark", description: Text("This build is not connected to a member service. You can continue exploring the sample proposals."))
+                        .accessibilityIdentifier("memberUnconfigured")
+                        .navigationTitle("Member account")
+                        .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() }.accessibilityIdentifier("memberDone") } }
+                }
             }
     }
 }
@@ -109,12 +103,11 @@ private struct ConfiguredMemberAccount: View {
     }
     var body: some View {
         Group {
-            if let account = holder.account { MemberAccountForm(account: account) }
-            else { ProgressView("Opening member account") }
+            if let account = holder.account { MemberAppView(account: account) }
+            else { ProgressView("Opening Atarasy") }
         }
         .background(MemberWindowReader(reference: holder.window).frame(width: 0, height: 0))
         .overlay { if scenePhase != .active { Color(uiColor: .systemBackground).ignoresSafeArea().accessibilityHidden(true) } }
-        .navigationTitle("Member account")
         .onAppear { holder.account?.clearExpired(now: Int64(Date().timeIntervalSince1970 * 1000)) }
         .task(id: scenePhase) {
             guard scenePhase == .active, holder.account == nil else { return }
@@ -173,76 +166,6 @@ private struct ConfiguredMemberAccount: View {
         }
     }
 }
-private struct MemberAccountForm: View {
-    @ObservedObject var account: MemberAccount
-    @Environment(\.dismiss) private var dismiss
-    @State private var invitation = ""
-    @State private var household = ""
-    @State private var action: Task<Void, Never>?
-    @State private var showingLeaveSheet = false
-    private let clock = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
-    private func perform(_ work: @escaping @MainActor () async -> Void) {
-        guard action == nil else { return }
-        action = Task { await work(); action = nil }
-    }
-    var body: some View {
-        Form {
-            if let session = account.session {
-                Section("Your session") {
-                    Text(session.household).textSelection(.enabled)
-                    Text("Expires \(Date(timeIntervalSince1970: Double(session.expiresAt) / 1000).formatted())")
-                    Button("Sign out") { perform { await account.signOut() } }.accessibilityIdentifier("memberSignOut")
-                    Button("Delete account", role: .destructive) { showingLeaveSheet = true }.accessibilityIdentifier("memberDeleteAccount")
-                }
-                Section("Private node") {
-                    Text(account.privateNodeNotice.isEmpty ? "Private records have not been opened." : account.privateNodeNotice).accessibilityIdentifier("privateNodeStatus")
-                    if let recovery = account.recovery { NavigationLink("Recovery") { MemberRecoveryView(model: recovery, recoveryRequired: account.privateNodeState == .recoveryRequired) } }
-                    if let hostMove = account.hostMove { NavigationLink("Exit / Move Host") { MemberHostMoveView(model: hostMove) }.disabled(account.privateNodeState != .ready) }
-                }
-                if account.protectedAccessReady {
-                    if !account.refreshNotice.isEmpty { Section("Updates") { Text(account.refreshNotice).accessibilityIdentifier("memberRefreshNotice") } }
-                    if let requests = account.permissionRequests { Section { NavigationLink("Access requests") { MemberPermissionRequestsView(model: requests) } } }
-                    if let permissions = account.permissions { Section { NavigationLink("Permissions") { MemberPermissionsView(model: permissions) } } }
-                    MemberDialsSection(account: account)
-                    MemberMandateSection(account: account)
-                    MemberProposalSections(model: account.proposals, statements: account.statements, decisions: account.decisions)
-                    if let statements = account.statements { SavedMemberOperationSections(flow: statements) }
-                    if let withdrawals = account.withdrawals { SavedMemberWithdrawalSections(flow: withdrawals) }
-                    if let decisions = account.decisions { SavedMemberDecisionSections(flow: decisions, withdrawals: account.withdrawals) }
-                }
-            } else {
-                Section {
-                    Button("Sign in with a passkey") { perform { await account.signIn() } }.accessibilityIdentifier("memberSignIn")
-                }
-                Section("Join with an invitation") {
-                    SecureField("Invitation", text: $invitation).textInputAutocapitalization(.never).autocorrectionDisabled()
-                    Button("Register a passkey") {
-                        let supplied = invitation; invitation = ""
-                        perform { await account.enrol(invitation: supplied) }
-                    }.disabled(invitation.isEmpty).accessibilityIdentifier("memberEnrol")
-                }
-                Section("Restore a saved session") {
-                    TextField("Household reference", text: $household).textInputAutocapitalization(.never).autocorrectionDisabled()
-                    Text("Use the reference shown in your previous session. It does not grant access by itself.").font(.footnote)
-                    Button("Restore session") { let selected = household; perform { await account.restore(household: selected) } }.disabled(household.isEmpty).accessibilityIdentifier("memberRestore")
-                }
-            }
-            if account.busy { ProgressView("Waiting for your request") }
-            if !account.notice.isEmpty { Section { Text(account.notice).accessibilityIdentifier("memberNotice") } }
-        }
-        .disabled(account.busy || action != nil)
-        .interactiveDismissDisabled(account.busy || action != nil)
-        // In Production this form is the WindowGroup root, not a presented sheet: there is
-        // nothing to dismiss into, so no "Done" is offered there.
-        #if !ATARASY_RELEASE
-        .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() }.disabled(account.busy || action != nil) } }
-        #endif
-        .onReceive(clock) { date in account.clearExpired(now: Int64(date.timeIntervalSince1970 * 1000)) }
-        .onDisappear { invitation = ""; household = ""; action?.cancel() }
-        .sheet(isPresented: $showingLeaveSheet) { NavigationStack { MemberLeaveSheet(account: account) } }
-    }
-}
-
 private struct MemberExportDocument: FileDocument {
     static var readableContentTypes: [UTType] { [.json] }
     let data: Data
@@ -254,7 +177,7 @@ private struct MemberExportDocument: FileDocument {
 /// §14.3. Apple Guideline 5.1.1(v): account deletion, reachable from "Your session" beside
 /// "Sign out". Mirrors the host-move ceremony: load a status, review a blocker list or
 /// review-then-sign-then-submit, and show the result.
-private struct MemberLeaveSheet: View {
+struct MemberLeaveSheet: View {
     @ObservedObject var account: MemberAccount
     @Environment(\.dismiss) private var dismiss
     @State private var confirmingDelete = false
@@ -324,30 +247,44 @@ private struct MemberLeaveSheet: View {
     }
     private static func blockerDescription(_ blocker: MemberLeaveBlocker) -> String {
         switch blocker.kind {
-        case "offer_in_progress": return "A box or order is still open. Finish or decline it first."
-        case "statement_unsigned": return "A settlement statement is waiting for your signature."
-        case "reservation_held": return "A reservation is still held against your account."
-        case "gift_in_flight": return "A gift to or from this household is still in flight."
-        case "permission_action_pending": return "A permission request is still pending a decision."
-        case "co_signer": return "You co-sign another household's shopping mandate. Step down first."
-        case "recoverer": return "You help another household recover its account. Step down first."
-        case "host_move_pending": return "A host move is in progress for this account."
-        case "operation_pending": return "An operation is still awaiting its outcome."
-        case "mandate_change_pending": return "A change to a mandate is still pending signatures."
-        case "recovery_request_pending": return "A recovery request involving this household is still pending."
-        case "permission_request_pending": return "A permission request involving this household is still pending."
-        default: return "Blocked: \(blocker.kind)."
+        case "offer_in_progress": return String(localized: "A box or order is still open. Finish or decline it first.")
+        case "statement_unsigned": return String(localized: "A settlement statement is waiting for your signature.")
+        case "reservation_held": return String(localized: "A reservation is still held against your account.")
+        case "gift_in_flight": return String(localized: "A gift to or from this household is still in flight.")
+        case "permission_action_pending": return String(localized: "A permission request is still pending a decision.")
+        case "co_signer": return String(localized: "You are named in another household's limits. Step down first.")
+        case "recoverer": return String(localized: "You help another household recover its account. Step down first.")
+        case "host_move_pending": return String(localized: "A host move is in progress for this account.")
+        case "operation_pending": return String(localized: "Something you signed is still waiting for its result.")
+        case "mandate_change_pending": return String(localized: "A change to your limits is still waiting for signatures.")
+        case "recovery_request_pending": return String(localized: "A recovery request involving this household is still pending.")
+        case "permission_request_pending": return String(localized: "A permission request involving this household is still pending.")
+        default: return String(localized: "Something is still in progress.")
         }
     }
 }
 
-private struct MemberHostMoveView: View {
+struct MemberHostMoveView: View {
     @ObservedObject var model: MemberHostMoveFlow
+    static func phase(_ p: MemberHostMovePhase) -> LocalizedStringKey {
+        switch p {
+        case .idle: return "Not started"
+        case .signingIntoTarget: return "Signing in at the new host"
+        case .exporting: return "Preparing your data"
+        case .importing: return "Copying to the new host"
+        case .verifying: return "Checking the new host"
+        case .readyToRetire: return "Ready to close your current host"
+        case .retiring: return "Closing your current host"
+        case .completed: return "Move complete"
+        case .sourceRetained: return "Stopped. Your current host is unchanged"
+        case .unresolved: return "Not confirmed. Check both hosts"
+        }
+    }
     var body: some View {
         Form {
             Section("Target") {
                 Text("The configured target host must be trusted by this build. You will sign in there before anything is copied.")
-                Text(model.phase.rawValue).font(.headline).accessibilityIdentifier("hostMovePhase")
+                Text(Self.phase(model.phase)).font(.headline).accessibilityIdentifier("hostMovePhase")
             }
             Section("Coverage") {
                 Text(model.coverage.isEmpty ? "Coverage has not been verified on the target host." : model.coverage)
@@ -368,7 +305,7 @@ private struct MemberHostMoveView: View {
     }
 }
 
-private struct MemberRecoveryView: View {
+struct MemberRecoveryView: View {
     @ObservedObject var model: MemberRecoveryFlow
     let recoveryRequired: Bool
     @State private var recoverer = ""

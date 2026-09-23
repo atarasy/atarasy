@@ -16,6 +16,7 @@ extension MemberClient: MemberWithdrawalService {}
     @Published public private(set) var review: FrozenMemberWithdrawal?
     @Published public private(set) var busy = false
     @Published public private(set) var notice = ""
+    @Published public private(set) var result: MemberActResult?
     public var canApprove: Bool { !busy && review != nil && handle?.attempted == false && (handle?.expiresAt ?? 0) > now() && (session?.expiresAt ?? 0) > now() }
     private let environment: MemberEnvironment
     private let service: any MemberWithdrawalService
@@ -29,12 +30,12 @@ extension MemberClient: MemberWithdrawalService {}
         self.environment = environment; self.service = service; self.passkeys = passkeys; self.store = store; self.now = now
     }
     public func setSession(_ session: MemberSessionInfo?) {
-        generation &+= 1; self.session = session; handle = nil; review = nil; prepared = nil; notice = ""; refreshSaved()
+        generation &+= 1; self.session = session; handle = nil; review = nil; prepared = nil; notice = ""; result = nil; refreshSaved()
     }
-    public func closeReview() { generation &+= 1; handle = nil; review = nil; prepared = nil; notice = "" }
+    public func closeReview() { generation &+= 1; handle = nil; review = nil; prepared = nil; notice = ""; result = nil }
     public func checkExpiry() {
         if (session?.expiresAt ?? 0) <= now() { setSession(nil) }
-        else if let handle, handle.expiresAt <= now(), review != nil { review = nil; prepared = nil; notice = "The approval window ended. You can still check the saved result." }
+        else if let handle, handle.expiresAt <= now(), review != nil { review = nil; prepared = nil; notice = L("This review has expired. You can still check the result of anything you sent.") }
     }
     public func refreshSaved() {
         guard let session, session.expiresAt > now() else { saved = []; return }
@@ -43,18 +44,18 @@ extension MemberClient: MemberWithdrawalService {}
                 handle.operationProfile == memberWithdrawalProfile && ReviewValidation.same(handle.environment, environment.name) && handle.origin == environment.origin &&
                 ReviewValidation.same(handle.household, session.household) && session.presenters.contains(where: { ReviewValidation.same($0, handle.presenter) })
             }
-        } catch { saved = []; notice = "Saved withdrawals could not be read. Do not repeat an earlier submission." }
+        } catch { saved = []; notice = L("Your saved cancellations could not be read. Do not send one again before checking its result.") }
     }
     public func prepare(original: MemberOperationHandle) async {
         guard !busy, let session, session.expiresAt > now() else { return }
-        busy = true; let current = generation; closeFields(); notice = ""; defer { busy = false }
+        busy = true; let current = generation; closeFields(); notice = ""; result = nil; defer { busy = false }
         do {
             let (h, p, frozen) = try await service.prepareWithdrawal(original, store: store)
             guard current == generation, !Task.isCancelled, session.expiresAt > now() else { return }
             handle = h; refreshSaved()
             guard h.operationProfile == memberWithdrawalProfile, !h.attempted else { throw MemberFailure.scopeMismatch }
-            review = frozen; prepared = p; notice = "Review the decision being withdrawn and the cooling deadline before signing."
-        } catch { if current == generation { review = nil; prepared = nil; notice = "The withdrawal could not be prepared. Check the recorded decision and current proposal before trying again."; refreshSaved() } }
+            review = frozen; prepared = p; notice = ""
+        } catch { if current == generation { review = nil; prepared = nil; notice = L("This cancellation could not be prepared. Check the decision and the proposal, then try again."); refreshSaved() } }
     }
     private func closeFields() { handle = nil; review = nil; prepared = nil }
     public func approve() async {
@@ -76,8 +77,8 @@ extension MemberClient: MemberWithdrawalService {}
             self.handle = try store.load(id: handle.id) ?? handle; show(value); refreshSaved()
         } catch {
             guard current == generation else { return }
-            if !dispatchStarted && (error as? NativePasskeyFailure == .cancelled || error is CancellationError) { notice = "Approval cancelled. No assertion was submitted." }
-            else { review = nil; self.prepared = nil; notice = "Approval could not be confirmed. Check the saved result before taking another action." }
+            if !dispatchStarted && (error as? NativePasskeyFailure == .cancelled || error is CancellationError) { notice = L("Signing cancelled. Nothing was sent.") }
+            else { review = nil; self.prepared = nil; if dispatchStarted { result = .unknown; self.handle = (try? store.load(id: handle.id)) ?? handle }; notice = L("We could not confirm the result. It may have arrived. Check the result before doing anything else.") }
             refreshSaved()
         }
     }
@@ -93,14 +94,14 @@ extension MemberClient: MemberWithdrawalService {}
         do {
             try await service.cancelOperation(handle)
             guard current == generation else { return }
-            closeFields(); notice = "Prepared withdrawal cancelled. The original decision remains unchanged by this action."
-        } catch { if current == generation { review = nil; prepared = nil; notice = "Cancellation could not be confirmed. Check the saved result." } }
+            closeFields(); notice = L("Review closed. Your decision still stands.")
+        } catch { if current == generation { review = nil; prepared = nil; notice = L("We could not confirm that the review was closed. Check the result.") } }
     }
     private func show(_ value: MemberWithdrawalOutcome) {
         switch value {
-        case .recorded: notice = "Withdrawal recorded for this saved operation. Refresh the proposal before choosing again. This is a historical result, not a payment or current order status."
-        case .pending(let state): notice = "No committed withdrawal is reported. State: \(state). Nothing was resubmitted."
-        case .unresolved: notice = "The result could not be read. Check again later; do not repeat the submission."
+        case .recorded: result = .recorded(amount: nil); notice = L("Your decision was cancelled. Refresh the proposal before choosing again.")
+        case .pending: result = .pending; notice = L("No recorded cancellation was found yet. Nothing was sent again.")
+        case .unresolved: result = .unknown; notice = L("We could not read the result. Check again later, and do not send it again.")
         }
     }
 }
