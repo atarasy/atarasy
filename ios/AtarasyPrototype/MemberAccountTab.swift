@@ -36,10 +36,17 @@ struct MemberAccountTab: View {
                 Section {
                     DisclosureGroup("About this account") {
                         VStack(alignment: .leading, spacing: 4) {
+                            Text("This account's records open only on the device where you first signed in.").font(.footnote)
                             Text("Account reference, for support").font(.caption).foregroundStyle(.secondary)
                             Text(verbatim: session.household).font(.caption.monospaced()).textSelection(.enabled).accessibilityIdentifier("accountReference")
                         }
                     }
+                }
+            }
+            if MemberPRFMeasurementView.isAvailable, let host = (Bundle.main.object(forInfoDictionaryKey: "AtarasyMemberOrigin") as? String).flatMap({ URL(string: $0)?.host }) {
+                Section("For the team") {
+                    NavigationLink { MemberPRFMeasurementView(relyingParty: host) } label: { Label("Passkey device check", systemImage: "stethoscope") }
+                        .accessibilityIdentifier("openPRFMeasurement")
                 }
             }
             if !account.notice.isEmpty { Section { Text(verbatim: account.notice).accessibilityIdentifier("memberNotice") } }
