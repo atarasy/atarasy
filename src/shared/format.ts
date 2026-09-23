@@ -48,6 +48,15 @@ export function formatDay(ms: number, locale?: string): string {
   return new Date(ms).toLocaleDateString(locale, { weekday: "short", day: "numeric", month: "short" });
 }
 
+/**
+ * Who sells what, said once: one merchant by name, several as "A, B and C"
+ * (or its Japanese equivalent). Mirrors iOS's `MemberParties.sellers`, which
+ * lists a row's or a screen's distinct merchants the same way.
+ */
+export function sellers(merchants: readonly string[], locale?: string): string {
+  return new Intl.ListFormat(locale, { style: "long", type: "conjunction" }).format(merchants);
+}
+
 /** The same day, with the clock time beside it, for a deadline that is also an hour. */
 export function formatDayTime(ms: number, locale?: string): string {
   return new Date(ms).toLocaleString(locale, {
