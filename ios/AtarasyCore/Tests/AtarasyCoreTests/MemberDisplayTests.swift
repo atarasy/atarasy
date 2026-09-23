@@ -72,3 +72,17 @@ private actor UnionService: MemberProposalService {
         XCTAssertThrowsError(try ReferenceResponseReader.settlement(status: 200, contentType: "application/json", data: body(#","colour":"red""#), expectedOffer: "o"))
     }
 }
+
+/// The package's notices are looked up in its own tables, so a Japanese member reads Japanese.
+final class MemberCopyTests: XCTestCase {
+    func testEveryNoticeHasAJapaneseEntry() throws {
+        func table(_ lang: String) throws -> [String: String] {
+            let url = try XCTUnwrap(AtarasyCoreResources.url(lang))
+            return try XCTUnwrap(NSDictionary(contentsOf: url) as? [String: String])
+        }
+        let en = try table("en"), ja = try table("ja")
+        XCTAssertEqual(Set(en.keys), Set(ja.keys))
+        XCTAssertFalse(en.isEmpty)
+        for (key, value) in ja { XCTAssertNotEqual(value, key, "untranslated: \(key)") }
+    }
+}

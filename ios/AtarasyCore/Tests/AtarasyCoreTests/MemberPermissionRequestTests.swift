@@ -56,7 +56,7 @@ private actor RequestTransport: MemberHTTPTransport {
     func testUncertainGrantRequiresReadbackAndSessionChangeClearsReview() async throws {
         let f = try fixture(), source = try review(f), (client, transport, session) = try await client(f, [digitalData(f["review"]!), nil, digitalData(f["granted"]!)])
         let model = MemberPermissionRequests(service: client, now: { 1_800_000_000_001 }); model.setSession(session)
-        await model.open(source.id); XCTAssertTrue(model.ready); await model.decide(grant: true); XCTAssertFalse(model.ready); XCTAssertTrue(model.notice.contains("could not be confirmed"))
+        await model.open(source.id); XCTAssertTrue(model.ready); await model.decide(grant: true); XCTAssertFalse(model.ready); XCTAssertTrue(model.notice.contains("could not confirm"))
         await model.decide(grant: true); await model.open(source.id); XCTAssertEqual(model.review?.state, "granted"); XCTAssertFalse(model.ready)
         let count = await transport.requests.filter { $0.httpMethod == "POST" }.count; XCTAssertEqual(count, 1)
         model.setSession(nil); XCTAssertNil(model.review); XCTAssertTrue(model.rows.isEmpty)

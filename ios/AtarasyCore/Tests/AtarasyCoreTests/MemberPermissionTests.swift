@@ -61,7 +61,7 @@ private actor PermissionTransport: MemberHTTPTransport {
         let f = try fixture(), (client, transport, session) = try await client(f, [digitalData(f["listed"]!), nil, digitalData(f["after"]!)])
         let model = MemberPermissions(service: client, now: { 1_800_000_000_001 }); model.setSession(session); await model.refresh()
         let first = try XCTUnwrap(model.rows.first); model.select(first); model.cancel(); await model.revoke()
-        XCTAssertTrue(model.loaded); model.select(first); await model.revoke(); XCTAssertFalse(model.loaded); XCTAssertTrue(model.notice.contains("could not be confirmed"))
+        XCTAssertTrue(model.loaded); model.select(first); await model.revoke(); XCTAssertFalse(model.loaded); XCTAssertTrue(model.notice.contains("could not confirm"))
         model.select(first); await model.revoke(); await model.refresh(); XCTAssertTrue(model.loaded); XCTAssertEqual(model.rows[0].status(at: first.granted_at), "Revoked")
         let requests = await transport.requests.filter { $0.url!.path == "/member/permissions/revoke" }; XCTAssertEqual(requests.count, 1)
         model.setSession(nil); XCTAssertTrue(model.rows.isEmpty); XCTAssertNil(model.selected)

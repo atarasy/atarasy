@@ -16,6 +16,7 @@ extension MemberClient: MemberDecisionService {}
     @Published public private(set) var review: FrozenMemberDecision?
     @Published public private(set) var busy = false
     @Published public private(set) var notice = ""
+    @Published public private(set) var result: MemberActResult?
     public var canApprove: Bool { !busy && review != nil && handle?.attempted == false && (handle?.expiresAt ?? 0) > now() && (session?.expiresAt ?? 0) > now() }
     private let environment: MemberEnvironment
     private let service: any MemberDecisionService
@@ -29,12 +30,12 @@ extension MemberClient: MemberDecisionService {}
         self.environment = environment; self.service = service; self.passkeys = passkeys; self.store = store; self.now = now
     }
     public func setSession(_ session: MemberSessionInfo?) {
-        generation &+= 1; self.session = session; handle = nil; review = nil; prepared = nil; notice = ""; refreshSaved()
+        generation &+= 1; self.session = session; handle = nil; review = nil; prepared = nil; notice = ""; result = nil; refreshSaved()
     }
-    public func closeReview() { generation &+= 1; handle = nil; review = nil; prepared = nil; notice = "" }
+    public func closeReview() { generation &+= 1; handle = nil; review = nil; prepared = nil; notice = ""; result = nil }
     public func checkExpiry() {
         if (session?.expiresAt ?? 0) <= now() { setSession(nil) }
-        else if let handle, handle.expiresAt <= now(), review != nil { review = nil; prepared = nil; notice = "The approval window ended. You can still check the saved result." }
+        else if let handle, handle.expiresAt <= now(), review != nil { review = nil; prepared = nil; notice = L("This review has expired. You can still check the result of anything you sent.") }
     }
     public func refreshSaved() {
         guard let session, session.expiresAt > now() else { saved = []; return }
@@ -43,11 +44,11 @@ extension MemberClient: MemberDecisionService {}
                 handle.operationProfile == memberDecisionProfile && ReviewValidation.same(handle.environment, environment.name) && handle.origin == environment.origin &&
                 ReviewValidation.same(handle.household, session.household) && session.presenters.contains(where: { ReviewValidation.same($0, handle.presenter) })
             }
-        } catch { saved = []; notice = "Saved decisions could not be read. Do not repeat an earlier submission." }
+        } catch { saved = []; notice = L("Your saved decisions could not be read. Do not send a decision again before checking its result.") }
     }
     public func prepare(detail: MemberOfferDetail, draft: MemberDigitalDraft) async {
         guard !busy, let session, session.expiresAt > now() else { return }
-        busy = true; let current = generation; closeFields(); notice = ""; defer { busy = false }
+        busy = true; let current = generation; closeFields(); notice = ""; result = nil; defer { busy = false }
         do {
             let local = try PreparedMemberDecision(environment: environment, session: session, detail: detail, draft: draft, now: now())
             let (h, p) = try await service.prepareDecision(local, store: store)
@@ -55,8 +56,8 @@ extension MemberClient: MemberDecisionService {}
             handle = h; refreshSaved()
             let frozen = try FrozenMemberDecision(p, local: local, now: now())
             guard h.operationProfile == memberDecisionProfile, !h.attempted else { throw MemberFailure.scopeMismatch }
-            review = frozen; prepared = p; notice = "Review the frozen choices, terms and mandate before signing."
-        } catch { if current == generation { review = nil; prepared = nil; notice = "The decision could not be prepared. Refresh the proposal and check saved results before trying again."; refreshSaved() } }
+            review = frozen; prepared = p; notice = ""
+        } catch { if current == generation { review = nil; prepared = nil; notice = L("This decision could not be prepared. Refresh the proposal, check My records, then try again."); refreshSaved() } }
     }
     private func closeFields() { handle = nil; review = nil; prepared = nil }
     public func approve() async {
@@ -78,8 +79,8 @@ extension MemberClient: MemberDecisionService {}
             self.handle = try store.load(id: handle.id) ?? handle; show(value); refreshSaved()
         } catch {
             guard current == generation else { return }
-            if !dispatchStarted && (error as? NativePasskeyFailure == .cancelled || error is CancellationError) { notice = "Approval cancelled. No assertion was submitted." }
-            else { review = nil; self.prepared = nil; notice = "Approval could not be confirmed. Check the saved result before taking another action." }
+            if !dispatchStarted && (error as? NativePasskeyFailure == .cancelled || error is CancellationError) { notice = L("Signing cancelled. Nothing was sent.") }
+            else { review = nil; self.prepared = nil; if dispatchStarted { result = .unknown }; notice = L("We could not confirm the result. It may have arrived. Check the result before doing anything else.") }
             refreshSaved()
         }
     }
@@ -95,14 +96,14 @@ extension MemberClient: MemberDecisionService {}
         do {
             try await service.cancelOperation(handle)
             guard current == generation else { return }
-            closeFields(); notice = "Prepared decision cancelled. No decision was submitted by this action."
-        } catch { if current == generation { review = nil; prepared = nil; notice = "Cancellation could not be confirmed. Check the saved result." } }
+            closeFields(); notice = L("Review closed. No decision was sent.")
+        } catch { if current == generation { review = nil; prepared = nil; notice = L("We could not confirm that the review was closed. Check the result.") } }
     }
     private func show(_ value: MemberDecisionOutcome) {
         switch value {
-        case .recorded: notice = "Decision recorded for this saved operation. This is the original decision, not a payment confirmation or current order status."
-        case .pending(let state): notice = "No committed decision is reported. State: \(state). Nothing was resubmitted."
-        case .unresolved: notice = "The result could not be read. Check again later; do not repeat the submission."
+        case .recorded: result = .recorded(amount: nil); notice = L("Your decision was recorded. This is not a payment confirmation.")
+        case .pending: result = .pending; notice = L("No recorded decision was found yet. Nothing was sent again.")
+        case .unresolved: result = .unknown; notice = L("We could not read the result. Check again later, and do not send it again.")
         }
     }
 }

@@ -161,7 +161,7 @@ private actor WithdrawalTransport: MemberHTTPTransport {
         await flow.approve(); XCTAssertFalse(flow.canApprove); XCTAssertTrue(flow.handle?.attempted == true)
         await flow.approve(); XCTAssertEqual(keys.calls, 1)
         let resumed = MemberWithdrawalFlow(environment: environment, service: client, passkeys: keys, store: try FileMemberOperationStore(directory: directory), now: { 1_800_000_000_001 })
-        resumed.setSession(session); await resumed.check(try XCTUnwrap(resumed.saved.first)); XCTAssertTrue(resumed.notice.contains("Withdrawal recorded"))
+        resumed.setSession(session); await resumed.check(try XCTUnwrap(resumed.saved.first)); XCTAssertEqual(resumed.result, .recorded(amount: nil))
         let sent = await transport.requests.filter { $0.url!.path.hasSuffix("/submit") }; XCTAssertEqual(sent.count, 1)
     }
 

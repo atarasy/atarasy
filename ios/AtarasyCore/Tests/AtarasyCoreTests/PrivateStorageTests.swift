@@ -175,7 +175,7 @@ final class PrivateStorageTests: XCTestCase {
         let request = MemberRecoveryRequest(profile: "atarasy.member-recovery-request.1", id: id, owner: session.household, recoverer: recovererID, epoch: 1, requesterPublicKey: requester.publicKey, state: "completed", createdAt: 1_800_000_000_000, updatedAt: 1_800_000_000_001, recovererPacket: nil, release: release, hostShare: MemberRecoveryCodec.b64(hostShare.bytes), keyDigest: try MemberRecoveryShares.digest(key))
         let service = CompletedRecoveryService(request: request), flow = MemberRecoveryFlow(environment: environment, service: service, privateNode: replacement, passkeys: NoRecoveryPasskeys(), vault: materials, noticeChannel: nil)
         flow.setSession(session); await flow.finish(request)
-        let state = await replacement.state; XCTAssertEqual(state, .ready); XCTAssertEqual(replacementKeys.count, 1); XCTAssertNil(try materials.requesterKey(scope: scope, create: false)); XCTAssertTrue(flow.notice.contains("completed"))
+        let state = await replacement.state; XCTAssertEqual(state, .ready); XCTAssertEqual(replacementKeys.count, 1); XCTAssertNil(try materials.requesterKey(scope: scope, create: false)); XCTAssertTrue(flow.notice.contains("Recovery is complete"))
     }
     func testRemoveAllClearsOneHouseholdsJournalAndItsKeyAndLeavesAnother() throws {
         let env = try MemberEnvironment(name: "test", origin: URL(string: "https://unit.example")!), keys = MemoryOperationKeys(), dir = try directory()

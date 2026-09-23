@@ -90,9 +90,9 @@ public enum MemberLeavePhase: String, Sendable { case idle, checkingStatus, bloc
         proposals.onSessionUnavailable = { [weak self] in
             guard let self else { return }
             self.generation &+= 1; self.session = nil
-            self.notice = "Your session is no longer available. Sign in again."
+            self.notice = L("You have been signed out. Sign in again.")
         }
-        hostMove?.onRetired = { [weak self] in self?.generation &+= 1; self?.session = nil; self?.notice = "Host move completed. Sign in at the target host." }
+        hostMove?.onRetired = { [weak self] in self?.generation &+= 1; self?.session = nil; self?.notice = L("Your data has moved. Sign in at the new host.") }
     }
     // Closing hides late results. A verification already sent can still complete on the service.
     public func close() { generation &+= 1; session = nil; proposals.setSession(nil); privateNodeState = .locked; privateNodeNotice = ""; notice = "" }
@@ -102,23 +102,23 @@ public enum MemberLeavePhase: String, Sendable { case idle, checkingStatus, bloc
     public var protectedAccessReady: Bool { privateNode == nil || privateNodeState == .ready }
     private func openPrivateNode(_ info: MemberSessionInfo) async {
         guard let privateNode else { privateNodeState = .ready; return }
-        privateNodeState = .locked; privateNodeNotice = "Opening encrypted private records."
+        privateNodeState = .locked; privateNodeNotice = L("Opening your records.")
         do {
             let result = try await privateNode.open(session: info); privateNodeState = result; await recovery?.refresh()
-            privateNodeNotice = result == .ready ? "Private records are encrypted on this device before host storage." : "This node has encrypted records but this installation has no decryption key. Recovery is required."
-        } catch { privateNodeState = .locked; privateNodeNotice = "Private records are unavailable. Protected actions remain closed." }
+            privateNodeNotice = result == .ready ? L("Your records are encrypted on this device before they are stored.") : L("This device cannot open your encrypted records. Use Recovery to restore access.")
+        } catch { privateNodeState = .locked; privateNodeNotice = L("Your records could not be opened on this device. Actions that need them are unavailable.") }
     }
     public func clearExpired(now: Int64) {
-        if let session, session.expiresAt <= now { self.session = nil; proposals.setSession(nil); notice = "Your session expired. Sign in again." }
+        if let session, session.expiresAt <= now { self.session = nil; proposals.setSession(nil); notice = L("Your sign-in expired. Sign in again.") }
     }
     private func message(_ error: Error) -> String {
         switch error {
-        case is CancellationError, NativePasskeyFailure.cancelled: return "Passkey operation cancelled. No verification was submitted."
-        case MemberFailure.uncertainVerification: return "The verification result could not be confirmed. Do not repeat the same request. Try a new sign-in, or obtain a new invitation for registration."
-        case MemberFailure.remoteLogoutUnconfirmed: return "Signed out on this device. Server revocation could not be confirmed."
-        case MemberFailure.storage: return "Secure session storage could not be updated. Sign-out may be incomplete on this device."
-        case MemberFailure.expired, MemberFailure.http(401): return "Your session or request is no longer available. Start again."
-        default: return "This request could not be completed. Check your connection and try a new request."
+        case is CancellationError, NativePasskeyFailure.cancelled: return L("Passkey cancelled. Nothing was sent.")
+        case MemberFailure.uncertainVerification: return L("We could not confirm the result. Do not repeat it. Sign in again, or ask for a new invitation to register.")
+        case MemberFailure.remoteLogoutUnconfirmed: return L("Signed out on this device. We could not confirm the sign-out on the server.")
+        case MemberFailure.storage: return L("Secure storage on this device could not be updated. Sign-out may be incomplete here.")
+        case MemberFailure.expired, MemberFailure.http(401): return L("This is no longer available. Start again.")
+        default: return L("This could not be completed. Check your connection and try again.")
         }
     }
     private func run(_ work: () async throws -> Void) async {
@@ -138,7 +138,7 @@ public enum MemberLeavePhase: String, Sendable { case idle, checkingStatus, bloc
             try Task.checkCancellation(); guard started == generation else { return }
             try await service.register(ceremony: ceremony, response: response)
             guard started == generation else { return }
-            notice = "Passkey registered. Sign in to open your session."
+            notice = L("Passkey registered. Sign in to continue.")
         }
     }
     public func signIn() async {
@@ -151,7 +151,7 @@ public enum MemberLeavePhase: String, Sendable { case idle, checkingStatus, bloc
             try Task.checkCancellation(); guard started == generation else { return }
             let info = try await service.login(ceremony: ceremony, response: response)
             guard started == generation else { return }
-            session = info; proposals.setSession(info); await openPrivateNode(info); notice = "Signed in."
+            session = info; proposals.setSession(info); await openPrivateNode(info); notice = L("Signed in.")
         }
     }
     public func restore(household: String) async {
@@ -178,17 +178,17 @@ public enum MemberLeavePhase: String, Sendable { case idle, checkingStatus, bloc
         do {
             let value = try await service.registerRefresh(token: token, apnsEnvironment: apnsEnvironment)
             guard session?.id == expected else { return }
-            refreshSubscription = value; refreshNotice = "Private update notifications are enabled. Notifications contain no proposal details."
+            refreshSubscription = value; refreshNotice = L("Update notifications are on. They never contain what was proposed.")
         } catch {
             guard session?.id == expected else { return }
-            refreshSubscription = nil; refreshNotice = "Update notifications are unavailable. Foreground refresh remains available."
+            refreshSubscription = nil; refreshNotice = L("Update notifications are unavailable. Pull down to refresh.")
         }
     }
     @discardableResult public func receiveRefreshHint(_ data: Data) async -> Bool {
         guard MemberRefreshHint.validate(data), session != nil else { return false }
-        proposals.markStale(); refreshNotice = "An update is available. Checking configured sources."
+        proposals.markStale(); refreshNotice = L("Something new arrived. Checking your shops.")
         await proposals.refresh()
-        guard session != nil else { refreshNotice = "Access was denied while checking the update. Sign in again."; return true }
+        guard session != nil else { refreshNotice = L("Access was refused while checking for updates. Sign in again."); return true }
         refreshNotice = proposals.incomplete ? "Some sources could not be checked. Cached rows remain stale." : "Configured sources were refreshed."
         return true
     }
@@ -220,11 +220,11 @@ public enum MemberLeavePhase: String, Sendable { case idle, checkingStatus, bloc
             do {
                 try await service.submitMandate(review, assertion: response)
                 guard started == generation, session != nil else { return }
-                mandates.removeAll { $0.id == review.mandate.id }; mandateNotice = "Mandate signed."
+                mandates.removeAll { $0.id == review.mandate.id }; mandateNotice = L("Your limits are signed and in effect.")
             } catch {
-                mandateNotice = "The result is unconfirmed. Refresh unsigned mandates before taking further action; do not repeat this submission."
+                mandateNotice = L("We could not confirm the result. Refresh before doing anything else, and do not sign again.")
                 // This is not enrolment; do not suggest replacing a passkey.
-                notice = "Mandate submission could not be confirmed. Inspect the current mandate state before trying again."
+                notice = L("We could not confirm your signature. Check your limits before trying again.")
             }
         }
     }
@@ -251,7 +251,7 @@ public enum MemberLeavePhase: String, Sendable { case idle, checkingStatus, bloc
                 let started = generation; let prepared = try await service.prepareMandateChange(mandate)
                 guard started == generation, session != nil else { return }
                 preparedMandateChange = prepared; upsert(prepared.change)
-                dialsNotice = "Review the effective and proposed protections before signing."
+                dialsNotice = ""
             } catch { dialsNotice = dialsMessage(error); throw error }
         }
     }
@@ -263,7 +263,7 @@ public enum MemberLeavePhase: String, Sendable { case idle, checkingStatus, bloc
                 let started = generation; let prepared = try await service.prepareMandateSignature(id)
                 guard started == generation, session != nil else { return }
                 preparedMandateChange = prepared; upsert(prepared.change)
-                dialsNotice = "Review this fixed proposal before adding your signature."
+                dialsNotice = ""
             } catch { dialsNotice = dialsMessage(error); throw error }
         }
     }
@@ -284,13 +284,13 @@ public enum MemberLeavePhase: String, Sendable { case idle, checkingStatus, bloc
                     effectiveMandates.removeAll { $0.id == result.mandate.id }
                     effectiveMandates.append(result.mandate)
                     effectiveMandates.sort { $0.id < $1.id }
-                    dialsNotice = "Mandate version \(result.mandate.version) is effective."
+                    dialsNotice = L("The change to your limits is now in effect.")
                 } else {
                     let missing = result.requiredSigners.filter { !result.signedBy.contains($0) }
-                    dialsNotice = "Your signature was recorded. Waiting for \(missing.count) required signer\(missing.count == 1 ? "" : "s")."
+                    dialsNotice = L("Your signature was recorded. Signatures still needed: \(missing.count)")
                 }
             } catch {
-                if error as? MemberFailure == .uncertainVerification { preparedMandateChange = nil; dialsNotice = "The submission result is unconfirmed. Refresh Dials to read the existing change; do not sign a new version yet." }
+                if error as? MemberFailure == .uncertainVerification { preparedMandateChange = nil; dialsNotice = L("We could not confirm the result. Refresh your limits to see the change, and do not sign a new one yet.") }
                 else { dialsNotice = dialsMessage(error) }
             }
         }
@@ -302,7 +302,7 @@ public enum MemberLeavePhase: String, Sendable { case idle, checkingStatus, bloc
             do {
                 let result = try await service.cancelMandateChange(id)
                 upsert(result); if preparedMandateChange?.change.id == id { preparedMandateChange = nil }
-                dialsNotice = "The pending mandate change was cancelled. The effective version was not changed."
+                dialsNotice = L("The change was cancelled. Your current limits are unchanged.")
             } catch { dialsNotice = dialsMessage(error); throw error }
         }
     }
@@ -353,22 +353,22 @@ public enum MemberLeavePhase: String, Sendable { case idle, checkingStatus, bloc
                 try? operations?.removeAll(household: result.household)
                 leavePhase = .done
                 leaveResult = result
-                leaveNotice = "Your account and everything this host holds for it have been deleted. This device is now signed out."
+                leaveNotice = L("Your account and everything stored for it have been deleted. This device is signed out.")
             } catch {
                 guard started == generation, session != nil else { return }
                 if let leaveError = error as? MemberLeaveError, case .blocked(let blockers) = leaveError {
                     leaveBlockers = blockers; leavePhase = .blocked
-                    leaveNotice = "Something is still in progress, so your account was not deleted. Finish the items below, then try again."
+                    leaveNotice = L("Something is still in progress, so your account was not deleted. Finish the items below, then try again.")
                     return
                 }
                 switch error {
                 case is CancellationError, NativePasskeyFailure.cancelled:
                     leavePhase = .ready
-                    leaveNotice = "Passkey confirmation was cancelled. Your account was not deleted."
+                    leaveNotice = L("Passkey cancelled. Your account was not deleted.")
                 default:
                     leavePhase = .failed
-                    leaveNotice = "The deletion result is unconfirmed. Do not repeat this request. Refresh account status before trying again."
-                    notice = "Account deletion could not be confirmed. Check your account status before trying again."
+                    leaveNotice = L("We could not confirm the deletion. Do not repeat it. Refresh the account status first.")
+                    notice = L("We could not confirm the deletion. Check your account status before trying again.")
                 }
             }
         }
@@ -381,7 +381,7 @@ public enum MemberLeavePhase: String, Sendable { case idle, checkingStatus, bloc
             let started = generation; leaveExportNotice = ""
             let value = try await service.exportAccount()
             guard started == generation, session != nil else { return }
-            leaveExport = value; leaveExportNotice = "Export ready to save."
+            leaveExport = value; leaveExportNotice = L("Your copy is ready to save.")
         }
     }
 
@@ -392,11 +392,11 @@ public enum MemberLeavePhase: String, Sendable { case idle, checkingStatus, bloc
     }
     private func dialsMessage(_ error: Error) -> String {
         switch error {
-        case MemberFailure.http(409): return "The effective mandate changed or another proposal is pending. Refresh Dials before editing again."
-        case MemberFailure.http(422): return "These protections or signatures were refused. Review the limits, lapse, cooling period and required signers."
-        case MemberFailure.http(401), MemberFailure.expired: return "Your session expired. Sign in again before changing protections."
-        case is CancellationError, NativePasskeyFailure.cancelled: return "Signing cancelled. The effective mandate was not changed."
-        default: return "Dials could not be refreshed. The effective mandate has not been changed."
+        case MemberFailure.http(409): return L("Your limits changed, or another change is waiting. Refresh before editing again.")
+        case MemberFailure.http(422): return L("This change was refused. Check the amounts, the end date, the time to undo and who must agree.")
+        case MemberFailure.http(401), MemberFailure.expired: return L("Your sign-in expired. Sign in again before changing your limits.")
+        case is CancellationError, NativePasskeyFailure.cancelled: return L("Signing cancelled. Your limits are unchanged.")
+        default: return L("Your limits could not be refreshed. Nothing was changed.")
         }
     }
 

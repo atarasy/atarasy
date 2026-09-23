@@ -74,10 +74,10 @@ public struct MemberOfferDetail: Codable, Equatable, Sendable {
     /// cannot be told apart and the sentence names both. The web hub carries the same words (`src/shared/screen.ts`).
     public static func lostOutcome(_ collectedAs: String?, supplied: Bool) -> String {
         if supplied && collectedAs == "missing" {
-            return "Not in the box: the collection did not find it. Never charged to you, and you can dispute it on the statement if it was there."
+            return L("Not found in the box at collection. You are never charged for it. If it was there, you can say so on the statement.")
         }
-        if supplied && collectedAs == nil { return "Not collected by the deadline. Never charged to you." }
-        return "Not returned: the collection did not find it in the box, or it was not collected by the deadline. Never charged to you."
+        if supplied && collectedAs == nil { return L("Not collected by the deadline. You are never charged for it.") }
+        return L("Not returned: either not found in the box or not collected by the deadline. You are never charged for it.")
     }
 }
 
