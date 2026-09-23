@@ -66,6 +66,7 @@
 "Checking…" = "確認しています…";
 "Choose Atarasy PRF test when asked. Then write down the two values below from each device." = "確認を求められたら「Atarasy PRF test」を選んでください。そのあと、端末ごとに下の 2 つの値を書き留めてください。";
 "Choose Keep or Decline for each item (%lld of %lld)." = "品目ごとに「受け取る」か「見送る」を選んでください（%2$lld 点中 %1$lld 点）。";
+"Choose something from your inbox to see it here." = "届いたものを選ぶと、ここに内容が表示されます。";
 "Close" = "閉じる";
 "Closed" = "締め切り済み";
 "Closed, nothing to pay" = "終了（お支払いなし）";
@@ -165,6 +166,7 @@
 "Not started" = "未開始";
 "Nothing can be bought for you until you do." = "署名するまで、あなたの代わりに何かを買うことはありません。";
 "Nothing is bought unless you choose it and sign." = "選んで署名しない限り、何も買いません。";
+"Nothing selected" = "まだ何も選ばれていません";
 "Nothing was decided or paid. Try again." = "決定も支払いもしていません。もう一度お試しください。";
 "Nothing yet." = "まだありません。";
 "Nothing. You decline every item." = "ありません。全て見送ります。";

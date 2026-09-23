@@ -15,8 +15,14 @@ final class MemberAppUITests: XCTestCase {
     @MainActor private func element(_ id: String, _ app: XCUIApplication) -> XCUIElement { app.descendants(matching: .any).matching(identifier: id).firstMatch }
     @MainActor private func reach(_ id: String, _ app: XCUIApplication, timeout: TimeInterval = 8) -> XCUIElement {
         let e = element(id, app)
-        XCTAssertTrue(e.waitForExistence(timeout: timeout), "missing \(id)")
-        for _ in 0..<10 { if e.isHittable { break }; app.swipeUp() }
+        if !e.waitForExistence(timeout: timeout) {
+            // At an accessibility text size a List can defer a row far below the fold out of
+            // the accessibility tree entirely until scrolled near it, rather than merely draw
+            // it off screen; keep swiping until it is materialised, not just until it is hit.
+            for _ in 0..<15 { app.swipeUp(); if e.waitForExistence(timeout: 1) { break } }
+        }
+        XCTAssertTrue(e.exists, "missing \(id)")
+        for _ in 0..<20 { if e.isHittable { break }; app.swipeUp() }
         return e
     }
     @MainActor private func shot(_ name: String, _ app: XCUIApplication) {
@@ -142,5 +148,68 @@ final class MemberAppUITests: XCTestCase {
         element("memberShowInvitation", app).tap()
         XCTAssertTrue(element("oneDeviceNote", app).waitForExistence(timeout: 3), "vault 81 option A: joining says the pilot is one device")
         shot("entry-en", app)
+    }
+
+    // IOS-17, UX-T11: at an accessibility text size, amounts, terms, dispute toggles, Keep and
+    // Decline and every Sign button must stay reachable and legible rather than truncated or
+    // stranded off the scrollable area (vault `80` §7 Phase 4).
+    @MainActor private func launchAccessibility(_ extra: [String] = [], language: String = "en") -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = ["--showcase", "-AppleLanguages", "(\(language))", "-AppleLocale", language == "ja" ? "ja_JP" : "en_JP",
+                                "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"] + extra
+        app.launch()
+        return app
+    }
+
+    @MainActor func testDigitalDecisionReviewStaysUsableAtAccessibilityTextSize() {
+        for language in ["en", "ja"] {
+            let app = launchAccessibility(language: language)
+            reach("memberProposal-proposal-refill", app, timeout: 10).tap()
+            XCTAssertTrue(element("keep-p1", app).waitForExistence(timeout: 8), language)
+            reach("keep-p1", app).tap(); reach("decline-p2", app).tap()
+            let review = element("openDigitalDecision", app); waitEnabled(review); review.tap()
+            let total = reach("frozenDigitalTotal", app)
+            XCTAssertTrue(total.exists, "\(language): the total must still be on screen, not truncated away")
+            let sign = reach("approveDigitalDecision", app)
+            XCTAssertTrue(sign.isHittable, "\(language): Sign with passkey must stay reachable at an accessibility text size")
+            shot("decision-review-a11y-\(language)", app)
+            app.terminate()
+        }
+    }
+
+    @MainActor func testStatementReviewStaysUsableAtAccessibilityTextSize() {
+        for language in ["en", "ja"] {
+            let app = launchAccessibility(language: language)
+            reach("memberProposal-box-collected", app, timeout: 10).tap()
+            let open = element("openStatementApproval", app); waitEnabled(open)
+            reach("openStatementApproval", app).tap()
+            let total = reach("frozenGoodsTotal", app)
+            XCTAssertTrue(total.exists, "\(language): the goods total must still be on screen, not truncated away")
+            let sign = reach("approveMemberStatement", app)
+            XCTAssertTrue(sign.isHittable, "\(language): Sign with passkey must stay reachable at an accessibility text size")
+            shot("statement-review-a11y-\(language)", app)
+            app.terminate()
+        }
+    }
+
+    // IOS-17: on a regular-width iPad the Inbox is a split layout, the list beside the detail,
+    // collapsing to the stack a phone already had (vault `80` §6.2). Intended for an iPad
+    // destination; on a phone the row is pushed off screen and the geometry check below does
+    // not apply.
+    @MainActor func testIPadInboxShowsListAndDetailSideBySide() {
+        let app = launch()
+        let row = element("memberProposal-proposal-refill", app)
+        XCTAssertTrue(row.waitForExistence(timeout: 10)); row.tap()
+        let keep = element("keep-p1", app)
+        XCTAssertTrue(keep.waitForExistence(timeout: 8))
+        XCTAssertTrue(row.exists, "the list row must still be on screen once its detail is open")
+        XCTAssertLessThan(row.frame.maxX, keep.frame.minX, "the detail must sit beside the list, not replace it")
+        shot("inbox-ipad-split", app)
+        // Rotation must keep the current selection (vault `80` §6.2).
+        XCUIDevice.shared.orientation = .landscapeLeft
+        XCTAssertTrue(keep.waitForExistence(timeout: 5), "the selection must survive a rotation")
+        XCTAssertTrue(row.exists)
+        shot("inbox-ipad-split-landscape", app)
+        XCUIDevice.shared.orientation = .portrait
     }
 }

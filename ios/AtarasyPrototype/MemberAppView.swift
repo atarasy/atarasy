@@ -16,7 +16,7 @@ struct MemberAppView: View {
                 NavigationStack { MemberLockedView(account: account) }
             } else {
                 TabView(selection: $tab) {
-                    NavigationStack { MemberInboxView(account: account, proposals: account.proposals) }
+                    MemberInboxView(account: account, proposals: account.proposals)
                         .tabItem { Label("Inbox", systemImage: "tray") }
                         .tag(MemberTab.inbox)
                     NavigationStack { MemberLimitsView(account: account) }
@@ -48,7 +48,7 @@ struct MemberEntryView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 VStack(alignment: .leading, spacing: 10) {
-                    Image(systemName: "shippingbox").font(.system(size: 40)).foregroundStyle(MemberStyle.accent)
+                    Image(systemName: "shippingbox").font(.system(size: 40)).foregroundStyle(MemberStyle.accent).accessibilityHidden(true)
                     Text("Atarasy").font(.largeTitle.bold())
                     Text("Your own agent for things that arrive to be tried. You pay only for what you keep, and nothing is bought without your signature.")
                         .font(.body).foregroundStyle(.secondary)
@@ -142,10 +142,48 @@ struct MemberLockedView: View {
 /// Overtures (`04b` §1b), called the Inbox on screen. Two sections, each newest arrival first
 /// over every shop (clause 14), and a strip for what is waiting on the member. No price, no
 /// ranking, no count of unread items and nothing that counts down.
+///
+/// On a regular-width iPad this is a split layout, the list beside the detail (vault `80` §6.2,
+/// IOS-17); on a compact width it collapses to the stack a phone already had. Both share one
+/// piece of state, `selectedID`, so rotation keeps the current choice: `navigationDestination`
+/// pushes it on a stack in compact and the split view reads it for the detail column in regular,
+/// and neither reaches for the other's mechanism.
 struct MemberInboxView: View {
     @ObservedObject var account: MemberAccount
     @ObservedObject var proposals: MemberProposals
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @State private var selectedID: String?
+    private var allRows: [MemberOfferSummary] { proposals.rows(binding: "physical") + proposals.rows(binding: "digital") }
+    private var selectedOffer: MemberOfferSummary? { selectedID.flatMap { id in allRows.first { $0.id == id } } }
     var body: some View {
+        if horizontalSizeClass == .regular {
+            NavigationSplitView {
+                NavigationStack { list }
+            } detail: {
+                NavigationStack { detail }
+            }
+            .navigationSplitViewStyle(.balanced)
+        } else {
+            NavigationStack {
+                list.navigationDestination(item: $selectedID) { id in
+                    if let offer = allRows.first(where: { $0.id == id }) {
+                        MemberOfferScreen(account: account, proposals: proposals, selected: offer)
+                    } else {
+                        // The row that opened this can vanish under a refresh mid-navigation; say so rather than show nothing.
+                        ContentUnavailableView("Could not open this", systemImage: "wifi.exclamationmark").accessibilityIdentifier("detailUnavailable")
+                    }
+                }
+            }
+        }
+    }
+    @ViewBuilder private var detail: some View {
+        if let selectedOffer {
+            MemberOfferScreen(account: account, proposals: proposals, selected: selectedOffer)
+        } else {
+            ContentUnavailableView("Nothing selected", systemImage: "tray", description: Text("Choose something from your inbox to see it here.")).accessibilityIdentifier("inboxDetailEmpty")
+        }
+    }
+    private var list: some View {
         List {
             if proposals.incomplete {
                 Section { MemberBanner(text: String(localized: "Some shops could not be reached. This list may be incomplete.")).listRowInsets(EdgeInsets()).listRowBackground(Color.clear) }
@@ -194,7 +232,8 @@ struct MemberInboxView: View {
                 else if !proposals.sources.isEmpty { Text("Could not be checked.").foregroundStyle(.secondary) }
             }
             ForEach(rows, id: \.id) { offer in
-                NavigationLink { MemberOfferScreen(account: account, proposals: proposals, selected: offer) } label: { MemberInboxRow(offer: offer) }
+                Button { selectedID = offer.id } label: { MemberInboxRow(offer: offer, selected: offer.id == selectedID && horizontalSizeClass == .regular) }
+                    .buttonStyle(.plain)
                     .accessibilityIdentifier("memberProposal-" + offer.id)
             }
         } header: {
@@ -208,6 +247,9 @@ struct MemberInboxView: View {
 
 struct MemberInboxRow: View {
     let offer: MemberOfferSummary
+    /// True only in the iPad split layout, for the row currently shown in the detail column
+    /// beside it (vault `80` §6.2, IOS-17). A phone in the stack never has a row selected this way.
+    var selected: Bool = false
     private var lines: [MemberOfferSummary.Line] { offer.candidates ?? [] }
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -220,9 +262,13 @@ struct MemberInboxRow: View {
                 if !offer.merchants.isEmpty { Text(verbatim: offer.merchants.joined(separator: ", ")).font(.subheadline).foregroundStyle(.secondary).lineLimit(1) }
                 status.font(.subheadline).foregroundStyle(offer.needsMember ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
             }
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary).accessibilityHidden(true)
         }
         .padding(.vertical, 4)
+        .listRowBackground(selected ? MemberStyle.accent.opacity(0.12) : nil)
         .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
     private var headline: String {
         guard let first = lines.first else { return offer.binding == "physical" ? String(localized: "Box") : String(localized: "Proposal") }
