@@ -15,12 +15,27 @@ final class AtarasyAppDelegate: NSObject, UIApplicationDelegate {
     }
 }
 
-private func merchantName(_ id: String) -> String { id == "merchant-fixture-a" ? "Pantry Market" : "Neighbourhood Goods" }
-
 @main struct AtarasyPrototypeApp: App {
     @UIApplicationDelegateAdaptor(AtarasyAppDelegate.self) private var delegate
-    var body: some Scene { WindowGroup { InboxView() } }
+    var body: some Scene {
+        WindowGroup {
+            #if ATARASY_RELEASE
+            MemberProductionRootView()
+            #else
+            InboxView()
+            #endif
+        }
+    }
 }
+
+// Everything below is the synthetic design prototype: a fixture-backed inbox with no
+// host, credential or payment behind it. `ATARASY_RELEASE` (the Production build
+// configuration only) excludes it, so App Review never sees it as the submitted app's
+// launch experience; the Production root is `MemberProductionRootView` in
+// MemberAccountView.swift.
+#if !ATARASY_RELEASE
+private func merchantName(_ id: String) -> String { id == "merchant-fixture-a" ? "Pantry Market" : "Neighbourhood Goods" }
+
 struct InboxView: View {
     private let fixtures: DemoFixtures = {
         let url=Bundle.main.url(forResource:"fixtures",withExtension:"json")!
@@ -149,3 +164,4 @@ struct OfferView: View {
         }
     }
 }
+#endif
