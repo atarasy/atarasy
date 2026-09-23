@@ -193,7 +193,14 @@ class MemberPrivateNode(
     }
     suspend fun lock() = mutex.withLock { lockInternal() }
     private fun lockInternal() { session = null; crypto = null; state = MemberPrivateNodeState.LOCKED }
+    // A decrypt/auth failure here means this device's key is not the one that sealed the host's
+    // existing records (a different device, or a reinstall that ended up with a colliding scope),
+    // as opposed to a read that merely failed (network, malformed response). Distinguishing the
+    // two is what lets the locked screen offer a retry for the latter and not for the former.
     private fun verify(records: List<MemberPrivateNodeRecord>, codec: MemberPrivateNodeCrypto, household: String) {
-        records.forEach { record -> val clear = codec.open(record, environment, household); if (record.id == BOOTSTRAP_ID && !clear.contentEquals(BOOTSTRAP)) throw MemberFailure.ScopeMismatch }
+        records.forEach { record ->
+            val clear = try { codec.open(record, environment, household) } catch (failure: MemberFailure.Storage) { throw MemberFailure.KeyMismatch }
+            if (record.id == BOOTSTRAP_ID && !clear.contentEquals(BOOTSTRAP)) throw MemberFailure.KeyMismatch
+        }
     }
 }

@@ -23,6 +23,11 @@ sealed class MemberFailure(message: String) : Exception(message) {
     data object Superseded : MemberFailure("Member request superseded")
     data object Busy : MemberFailure("Member authentication already in progress")
     data object Storage : MemberFailure("Member storage unavailable")
+    /** The private node holds records this device's key cannot open (a decrypt/auth failure while
+     * verifying against an existing key, or a bootstrap content mismatch), as opposed to a read
+     * that merely failed. Mirrors iOS `MemberAccount.openPrivateNode`'s catch of `CryptoKitError`
+     * and `MemberFailure.scopeMismatch`. */
+    data object KeyMismatch : MemberFailure("Member private node key does not match its records")
     data object Unavailable : MemberFailure("Member service unavailable")
     data object UncertainVerification : MemberFailure("Member verification outcome is uncertain")
     data object RemoteLogoutUnconfirmed : MemberFailure("Remote logout unconfirmed")
