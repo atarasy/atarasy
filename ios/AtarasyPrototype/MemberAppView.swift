@@ -88,6 +88,7 @@ struct MemberEntryView: View {
                     }.padding(.top, 8)
                 }
                 .font(.subheadline)
+                MemberPRFMeasurementLink().font(.footnote)
             }
             .padding(24)
         }
@@ -114,6 +115,9 @@ struct MemberLockedView: View {
             Section {
                 Button("Sign out") { Task { await account.signOut() } }.accessibilityIdentifier("memberSignOut")
                 Button("Delete account", role: .destructive) { showingLeaveSheet = true }.accessibilityIdentifier("memberDeleteAccount")
+            }
+            if MemberPRFMeasurementView.isAvailable && MemberPRFMeasurementView.relyingParty != nil {
+                Section("For the team") { MemberPRFMeasurementLink() }
             }
             if let session = account.session {
                 Section {

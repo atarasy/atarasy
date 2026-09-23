@@ -42,6 +42,9 @@ struct MemberPRFMeasurementView: View {
         .navigationTitle("Passkey device check")
     }
 
+    /// The member origin's host, which is the relying party every passkey of this build belongs to.
+    static var relyingParty: String? { (Bundle.main.object(forInfoDictionaryKey: "AtarasyMemberOrigin") as? String).flatMap { URL(string: $0)?.host } }
+
     /// TestFlight installs carry a sandbox receipt; an App Store install does not. Development and
     /// UI-testing builds always show it.
     static var isAvailable: Bool {
@@ -103,6 +106,17 @@ struct MemberPRFMeasurementView: View {
     nonisolated func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
         MainActor.assumeIsolated {
             UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap(\.windows).first { $0.isKeyWindow } ?? ASPresentationAnchor()
+        }
+    }
+}
+
+/// The entrance to the check, on every screen a second device can reach: signed out, the locked
+/// node, and Account. A second device is exactly the one that stops at the locked node.
+struct MemberPRFMeasurementLink: View {
+    var body: some View {
+        if MemberPRFMeasurementView.isAvailable, let host = MemberPRFMeasurementView.relyingParty {
+            NavigationLink { MemberPRFMeasurementView(relyingParty: host) } label: { Label("Passkey device check", systemImage: "stethoscope") }
+                .accessibilityIdentifier("openPRFMeasurement")
         }
     }
 }
