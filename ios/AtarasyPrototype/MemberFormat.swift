@@ -90,15 +90,34 @@ struct MemberTag: View {
     }
 }
 
-/// A row of label and amount, the amount right-aligned in tabular digits.
+/// A leading/trailing pair (a name and its amount, most often) that sits on one line at ordinary
+/// text sizes and stacks the trailing part below the leading part, right-aligned, once Dynamic
+/// Type would otherwise squeeze one side off the screen or force an overlap (IOS-17, UX-T11).
+/// `ViewThatFits` measures both arrangements and keeps whichever is not clipped.
+struct MemberWrappingRow<Leading: View, Trailing: View>: View {
+    @ViewBuilder var leading: Leading
+    @ViewBuilder var trailing: Trailing
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) { leading; Spacer(minLength: 12); trailing }
+            VStack(alignment: .leading, spacing: 2) {
+                leading
+                HStack { Spacer(minLength: 0); trailing }
+            }
+        }
+    }
+}
+
+/// A row of label and amount, the amount right-aligned in tabular digits. Falls back to a
+/// two-line layout at accessibility text sizes rather than truncating either side.
 struct MemberAmountRow: View {
     let label: LocalizedStringKey
     let amount: String
     var emphasised = false
     var body: some View {
-        HStack(alignment: .firstTextBaseline) {
+        MemberWrappingRow {
             Text(label)
-            Spacer(minLength: 12)
+        } trailing: {
             Text(verbatim: amount).monospacedDigit()
         }
         .font(emphasised ? .headline : .body)

@@ -94,12 +94,13 @@ struct MemberBoxContents: View {
                 Text("In the box").font(.headline)
                 ForEach(detail.candidates, id: \.id) { c in
                     VStack(alignment: .leading, spacing: 3) {
-                        HStack(alignment: .firstTextBaseline) {
+                        MemberWrappingRow {
                             Text(verbatim: c.title)
-                            Spacer()
+                        } trailing: {
                             if c.givenBy == nil { Text(verbatim: MemberFormat.money(MemberFormat.lineTotal(c.unitPrice, c.quantity))).monospacedDigit().foregroundStyle(.secondary) }
                             else { Text("Free").foregroundStyle(.secondary) }
                         }
+                        .accessibilityElement(children: .combine)
                         if let giver = c.givenBy { MemberTag(text: "Gift from \(giver)", systemImage: "gift", tint: .pink).accessibilityIdentifier("detailGift") }
                         Group {
                             if c.valence == "lost" { Text(verbatim: MemberOfferDetail.lostOutcome(c.collectedAs, supplied: detail.collectedAsSupplied == true)) }
@@ -150,11 +151,12 @@ struct MemberStatementLines: View {
                 Text(note).font(.footnote).foregroundStyle(.secondary)
                 ForEach(lines, id: \.candidate) { line in
                     VStack(alignment: .leading, spacing: 4) {
-                        HStack(alignment: .firstTextBaseline) {
+                        MemberWrappingRow {
                             Text(verbatim: line.title).strikethrough(disputed.contains(line.candidate) && line.valence == "consumed")
-                            Spacer()
+                        } trailing: {
                             amount(line)
                         }
+                        .accessibilityElement(children: .combine)
                         Text("Sold by \(line.merchant)").font(.caption).foregroundStyle(.secondary)
                         if line.maker != line.merchant { Text("Made by \(line.maker)").font(.caption).foregroundStyle(.secondary) }
                         if let giver = line.givenBy { MemberTag(text: "Gift from \(giver)", systemImage: "gift", tint: .pink) }
@@ -271,7 +273,12 @@ struct MemberSettledView: View {
                 MemberCard {
                     ForEach(Array(settlement.lines.enumerated()), id: \.offset) { _, line in
                         VStack(alignment: .leading, spacing: 2) {
-                            HStack { Text(verbatim: line.title); Spacer(); Text(verbatim: line.valence == "lost" ? String(localized: "Not charged") : MemberFormat.money(line.amount)).monospacedDigit() }
+                            MemberWrappingRow {
+                                Text(verbatim: line.title)
+                            } trailing: {
+                                Text(verbatim: line.valence == "lost" ? String(localized: "Not charged") : MemberFormat.money(line.amount)).monospacedDigit()
+                            }
+                            .accessibilityElement(children: .combine)
                             Group {
                                 if line.valence == "lost" { Text(verbatim: MemberOfferDetail.lostOutcome(nil, supplied: false)) } else { Text(MemberLineStatus.box(line.valence)) }
                             }.font(.caption).foregroundStyle(.secondary)
@@ -289,7 +296,12 @@ struct MemberSettledView: View {
                         Text("Added by the shop beside the settlement. Nothing here is yours to sign.").font(.footnote).foregroundStyle(.secondary)
                         ForEach(Array(corrections.corrections.enumerated()), id: \.offset) { _, c in
                             VStack(alignment: .leading, spacing: 2) {
-                                HStack { Text(c.kind == "refund" ? "Refund from \(c.merchant)" : "Correction from \(c.merchant)"); Spacer(); Text(verbatim: "−" + MemberFormat.money(c.amount)).monospacedDigit() }
+                                MemberWrappingRow {
+                                    Text(c.kind == "refund" ? "Refund from \(c.merchant)" : "Correction from \(c.merchant)")
+                                } trailing: {
+                                    Text(verbatim: "−" + MemberFormat.money(c.amount)).monospacedDigit()
+                                }
+                                .accessibilityElement(children: .combine)
                                 Text(verbatim: c.note).font(.caption).foregroundStyle(.secondary)
                             }.accessibilityIdentifier("correctionLine")
                         }

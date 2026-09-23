@@ -31,7 +31,9 @@ struct MemberOfferScreen: View {
         .navigationTitle(selected.binding == "physical" ? "Box" : "Proposal")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { ToolbarItem(placement: .topBarTrailing) { Button { Task { await proposals.loadReview(selected) } } label: { Image(systemName: "arrow.clockwise") }.accessibilityLabel("Refresh").accessibilityIdentifier("refreshMemberDetail") } }
-        .task(id: proposals.sessionIdentity) { await proposals.loadReview(selected) }
+        // Keyed on the offer too, not only the session: on iPad's split Inbox this same screen
+        // instance is reused across selections, so a session-only key would never reload.
+        .task(id: "\(proposals.sessionIdentity?.uuidString ?? "-")|\(selected.id)") { await proposals.loadReview(selected) }
         .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in proposals.checkExpiry() }
     }
     @ViewBuilder private func content(detail: MemberOfferDetail, review: MemberReview) -> some View {
@@ -129,10 +131,15 @@ struct MemberProposalLine: View {
     @State private var showingWhy = false
     var body: some View {
         MemberCard {
-            HStack(alignment: .firstTextBaseline) {
+            if candidate.givenBy == nil {
+                MemberWrappingRow {
+                    Text(verbatim: candidate.title).font(.headline)
+                } trailing: {
+                    Text(verbatim: MemberFormat.money(MemberFormat.lineTotal(candidate.unitPrice, candidate.quantity))).font(.headline).monospacedDigit()
+                }
+                .accessibilityElement(children: .combine)
+            } else {
                 Text(verbatim: candidate.title).font(.headline)
-                Spacer()
-                if candidate.givenBy == nil { Text(verbatim: MemberFormat.money(MemberFormat.lineTotal(candidate.unitPrice, candidate.quantity))).font(.headline).monospacedDigit() }
             }
             MemberLineParties(merchant: candidate.merchant, maker: candidate.maker, quantity: candidate.quantity, unitPrice: candidate.givenBy == nil ? candidate.unitPrice : nil)
             HStack(spacing: 6) {
@@ -141,9 +148,15 @@ struct MemberProposalLine: View {
             }
             if candidate.givenBy != nil { Text("No goods charge to you for this item.").font(.footnote).foregroundStyle(.secondary) }
             if candidate.valence == "offered" {
-                HStack(spacing: 10) {
-                    choiceButton(.keep, "Keep", "checkmark")
-                    choiceButton(.decline, "Decline", "xmark")
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 10) {
+                        choiceButton(.keep, "Keep", "checkmark")
+                        choiceButton(.decline, "Decline", "xmark")
+                    }
+                    VStack(spacing: 10) {
+                        choiceButton(.keep, "Keep", "checkmark")
+                        choiceButton(.decline, "Decline", "xmark")
+                    }
                 }
             } else {
                 Text(MemberLineStatus.resolved(candidate.valence)).font(.subheadline).foregroundStyle(.secondary)
@@ -328,7 +341,12 @@ struct MemberDecisionReviewScreen: View {
         MemberCard {
             Text("You keep").font(.headline)
             ForEach(candidates.filter { kept.contains($0.id) }, id: \.id) { c in
-                HStack { Text(verbatim: c.title); Spacer(); Text(verbatim: c.givenBy == nil ? MemberFormat.money(MemberFormat.lineTotal(c.unitPrice, c.quantity)) : String(localized: "Free")).monospacedDigit() }
+                MemberWrappingRow {
+                    Text(verbatim: c.title)
+                } trailing: {
+                    Text(verbatim: c.givenBy == nil ? MemberFormat.money(MemberFormat.lineTotal(c.unitPrice, c.quantity)) : String(localized: "Free")).monospacedDigit()
+                }
+                .accessibilityElement(children: .combine)
                 Text("Sold by \(c.merchant)").font(.caption).foregroundStyle(.secondary)
             }
             if kept.isEmpty { Text("Nothing. You decline every item.").foregroundStyle(.secondary) }
@@ -473,7 +491,16 @@ struct MemberDecidedView: View {
                 }
                 ForEach(approval.candidates, id: \.id) { c in
                     MemberCard {
-                        HStack { Text(verbatim: c.title).font(.headline); Spacer(); if c.givenBy == nil { Text(verbatim: MemberFormat.money(MemberFormat.lineTotal(c.unitPrice, c.quantity))).monospacedDigit() } }
+                        if c.givenBy == nil {
+                            MemberWrappingRow {
+                                Text(verbatim: c.title).font(.headline)
+                            } trailing: {
+                                Text(verbatim: MemberFormat.money(MemberFormat.lineTotal(c.unitPrice, c.quantity))).monospacedDigit()
+                            }
+                            .accessibilityElement(children: .combine)
+                        } else {
+                            Text(verbatim: c.title).font(.headline)
+                        }
                         MemberLineParties(merchant: c.merchant, maker: c.maker, quantity: c.quantity, unitPrice: nil)
                         Text(MemberLineStatus.resolved(c.valence)).font(.subheadline).foregroundStyle(.secondary)
                     }

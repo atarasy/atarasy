@@ -66,6 +66,7 @@
 "Checking…" = "Checking…";
 "Choose Atarasy PRF test when asked. Then write down the two values below from each device." = "Choose Atarasy PRF test when asked. Then write down the two values below from each device.";
 "Choose Keep or Decline for each item (%lld of %lld)." = "Choose Keep or Decline for each item (%lld of %lld).";
+"Choose something from your inbox to see it here." = "Choose something from your inbox to see it here.";
 "Close" = "Close";
 "Closed" = "Closed";
 "Closed, nothing to pay" = "Closed, nothing to pay";
@@ -165,6 +166,7 @@
 "Not started" = "Not started";
 "Nothing can be bought for you until you do." = "Nothing can be bought for you until you do.";
 "Nothing is bought unless you choose it and sign." = "Nothing is bought unless you choose it and sign.";
+"Nothing selected" = "Nothing selected";
 "Nothing was decided or paid. Try again." = "Nothing was decided or paid. Try again.";
 "Nothing yet." = "Nothing yet.";
 "Nothing. You decline every item." = "Nothing. You decline every item.";
