@@ -162,6 +162,12 @@ struct MemberInboxView: View {
         .overlay { if proposals.loading && proposals.sources.allSatisfy({ $0.offers.isEmpty }) { ProgressView("Checking your shops").accessibilityIdentifier("memberSourcesLoading") } }
         .refreshable { await proposals.refresh(); await account.refreshMandates() }
         .task(id: proposals.sessionIdentity) { await proposals.refresh(); await account.refreshMandates() }
+        // Signing the limits is what lets a presenter deliver (a review shop presents its proposal in
+        // the same request), so the list is read again when an unsigned version is signed, rather than
+        // waiting for the member to pull. Measured on the founder's iPhone on 2026-09-23.
+        .onChange(of: account.mandates.map(\.id)) { old, new in
+            if new.count < old.count { Task { await proposals.refresh() } }
+        }
         .toolbar {
             ToolbarItem(placement: .status) {
                 if let checked = proposals.sources.compactMap(\.verifiedAt).min() {

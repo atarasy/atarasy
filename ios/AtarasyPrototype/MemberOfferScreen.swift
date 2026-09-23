@@ -38,7 +38,7 @@ struct MemberOfferScreen: View {
         switch review {
         case .approval(let approval):
             if detail.state == "presented", approval.candidates.contains(where: { $0.valence == "offered" }), let decisions = account.decisions {
-                MemberProposalView(detail: detail, approval: approval, decisions: decisions)
+                MemberProposalView(detail: detail, approval: approval, decisions: decisions) { Task { await proposals.loadReview(selected) } }
             } else {
                 MemberDecidedView(detail: detail, approval: approval, decisions: account.decisions, withdrawals: account.withdrawals)
             }
@@ -58,10 +58,11 @@ struct MemberProposalView: View {
     let detail: MemberOfferDetail
     let approval: MemberApproval
     @ObservedObject var decisions: MemberDigitalFlow
+    var reload: () -> Void = {}
     @State private var draft: MemberDigitalDraft
     @State private var now = Date()
-    init(detail: MemberOfferDetail, approval: MemberApproval, decisions: MemberDigitalFlow) {
-        self.detail = detail; self.approval = approval; self.decisions = decisions
+    init(detail: MemberOfferDetail, approval: MemberApproval, decisions: MemberDigitalFlow, reload: @escaping () -> Void = {}) {
+        self.detail = detail; self.approval = approval; self.decisions = decisions; self.reload = reload
         _draft = State(initialValue: MemberDigitalDraft(approval: approval))
     }
     private var nowMs: Int64 { Int64(now.timeIntervalSince1970 * 1000) }
@@ -102,7 +103,7 @@ struct MemberProposalView: View {
                 Text("Choose Keep or Decline for each item (\(answered) of \(open.count)).").font(.footnote)
             }
             Text("Your choices are not sent until you sign.").font(.caption).foregroundStyle(.secondary)
-            NavigationLink { MemberDecisionReviewScreen(flow: decisions, detail: detail, draft: draft) } label: {
+            NavigationLink { MemberDecisionReviewScreen(flow: decisions, detail: detail, draft: draft, done: reload) } label: {
                 Text("Review").frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent).controlSize(.large)
@@ -286,11 +287,20 @@ struct MemberDecisionReviewScreen: View {
     @ObservedObject var flow: MemberDigitalFlow
     let detail: MemberOfferDetail
     let draft: MemberDigitalDraft
+    var done: () -> Void = {}
+    @Environment(\.dismiss) private var dismiss
+    /// What the passkey was asked to sign, kept for the result: the review itself is cleared when it is sent.
+    @State private var signed: FrozenMemberDecision?
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 if let result = flow.result {
                     MemberResultView(result: result, notice: flow.notice, kind: .decision, busy: flow.busy) { if let handle = flow.handle { Task { await flow.check(handle) } } }
+                    if let signed { MemberSignedDecision(frozen: signed) }
+                    if result != .unknown && result != .pending {
+                        Button { dismiss(); done() } label: { Text("Done").frame(maxWidth: .infinity) }
+                            .buttonStyle(.borderedProminent).controlSize(.large).accessibilityIdentifier("resultDone")
+                    }
                 } else if let frozen = flow.review {
                     frozenView(frozen)
                 } else if flow.busy {
@@ -339,11 +349,28 @@ struct MemberDecisionReviewScreen: View {
         MemberLimitsLine(mandate: frozen.mandate)
         MemberTermsSection(blocks: frozen.approval.disclosures, collapsed: false)
         if !flow.notice.isEmpty { MemberBanner(text: flow.notice, systemImage: "info.circle", tint: .blue).accessibilityIdentifier("digitalFlowNotice") }
-        Button { Task { await flow.approve() } } label: { Label("Sign with passkey", systemImage: "person.badge.key").frame(maxWidth: .infinity) }
+        Button { signed = frozen; Task { await flow.approve() } } label: { Label("Sign with passkey", systemImage: "person.badge.key").frame(maxWidth: .infinity) }
             .buttonStyle(.borderedProminent).controlSize(.large)
             .disabled(!flow.canApprove)
             .accessibilityIdentifier("approveDigitalDecision")
         Text("Face ID or Touch ID confirms it is you. It does not replace reading this screen.").font(.caption).foregroundStyle(.secondary)
+    }
+}
+
+/// What the member signed, under its result (`22` UX-07): the goods kept, and the total.
+struct MemberSignedDecision: View {
+    let frozen: FrozenMemberDecision
+    var body: some View {
+        let kept = frozen.decisions.filter { $0.valence == "kept" }.map(\.candidate)
+        MemberCard {
+            Text("What you signed").font(.headline)
+            ForEach(frozen.approval.candidates.filter { kept.contains($0.id) }, id: \.id) { c in
+                HStack { Text(verbatim: c.title); Spacer(); Text(verbatim: c.givenBy == nil ? MemberFormat.money(MemberFormat.lineTotal(c.unitPrice, c.quantity)) : String(localized: "Free")).monospacedDigit() }
+            }
+            if kept.isEmpty { Text("Nothing. You declined every item.").foregroundStyle(.secondary) }
+            Divider()
+            MemberAmountRow(label: "Total", amount: MemberFormat.money(frozen.total), emphasised: true).accessibilityIdentifier("signedDecisionTotal")
+        }
     }
 }
 
