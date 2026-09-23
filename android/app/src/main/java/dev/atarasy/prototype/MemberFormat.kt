@@ -1,5 +1,6 @@
 package dev.atarasy.prototype
 
+import android.icu.text.ListFormatter
 import java.text.NumberFormat
 import java.time.Instant
 import java.time.ZoneId
@@ -73,6 +74,13 @@ object MemberFormat {
     fun goods(name: String?, variant: String?, product: String): String {
         if (name == null) return product
         return if (variant != null) "$name $variant" else name
+    }
+
+    /** Who sells what, said once for the whole offer: one merchant by name, several as a
+     * locale-formatted list (ported from iOS's `MemberParties.sellers`). */
+    fun sellers(merchants: List<String>, locale: Locale = Locale.getDefault()): String {
+        val unique = merchants.distinct()
+        return ListFormatter.getInstance(locale).format(unique)
     }
 }
 
