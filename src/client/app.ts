@@ -17,13 +17,28 @@ import { canonicalMandate, type Mandate } from "../shared/mandate.js";
 import { fromBase64, memberKeyFromHandle, newMemberKey, toBase64, toBase64Url } from "../shared/encoding.js";
 // The rule that sorts a member's own list, in a module the suite can reach:
 // filing a collected box as settled was the worst thing this screen did.
-import { awaitsDecision, awaitsStatement, byArrival, holdsNextBox, type InboxOffer } from "../shared/inbox.js";
+import { awaitsDecision, awaitsStatement, byArrival, rowStatus, type InboxOffer } from "../shared/inbox.js";
 // The sentences a refusal reads as, in a module the suite can reach: four of
 // them directed the member wrongly and nothing here could have said so.
 import { REFUSALS, refusal } from "../shared/refusals.js";
 // The judgements the screens make, separated from the drawing of them: a
 // reviewer reverted five of them at once and the suite stayed green.
 import { blocksFor, decidable, disputable, disputeMovesMoney, lostOutcome, statementTotal, validateCorrections, type Corrections } from "../shared/screen.js";
+// D-1, D-3. What a member reads for money, a date and the goods themselves,
+// mirroring `ios/AtarasyPrototype/MemberFormat.swift` so the two apps say
+// the same thing about the same offer.
+import { formatDay, formatDayTime, formatMoney, goodsTitle } from "../shared/format.js";
+// D-5. The screen's vocabulary in the member's own language, picked once
+// from `navigator.language` and carried for the length of the session; the
+// iOS app's own English and Japanese, not translated again here.
+import { pickLanguage, t, type Lang } from "./copy.js";
+
+const LANG: Lang = pickLanguage(navigator.language);
+/** Short form of `t(LANG, ...)`, used throughout this file. */
+const L = (key: string, ...args: (string | number)[]) => t(LANG, key, ...args);
+// So a screen reader and the browser's own UI (spell-check, form controls)
+// treat the page as what it now shows, not as the document's static markup.
+document.documentElement.lang = LANG;
 
 type Member = {
   /** What the person typed. This browser's own label, and nobody else's business. */
@@ -50,6 +65,15 @@ type Approval = {
   candidates: {
     id: string;
     product: string;
+    /**
+     * D-1, catalogue revision 3. The goods' own name and variant (size or
+     * pack), where the merchant's catalogue entry carries them. Absent is
+     * legitimate: an entry published before revision 3 has neither, and
+     * `goodsTitle()` falls back to `product`, the reference this screen has
+     * always shown.
+     */
+    name?: string | null;
+    variant?: string | null;
     quantity: number;
     unit_price: number;
     merchant: string;
@@ -105,6 +129,9 @@ type Statement = {
   lines: {
     candidate: string;
     product: string;
+    /** D-1, catalogue revision 3. See the same field on `Approval.candidates`. */
+    name?: string | null;
+    variant?: string | null;
     merchant: string;
     maker: string;
     ships: string;
@@ -146,6 +173,13 @@ const RULES: Record<string, string> = {
 };
 
 const STORAGE = "atarasy.member";
+/**
+ * D-3. A host deployment serves one currency (Stage 0 is JPY only), declared
+ * once rather than read per offer, since nothing in the specification carries
+ * a currency field yet (`SPEC.md` §14b). Revisit when a second currency
+ * exists.
+ */
+const CURRENCY = "JPY";
 const app = document.getElementById("app")!;
 
 function load(): Member | null {
@@ -207,14 +241,27 @@ function failure(message: string) {
   return el("div", { class: "card error" }, el("p", {}, message));
 }
 
-const when = (ms: number) => new Date(ms).toLocaleString();
-const yen = (n: number) => `¥${n.toLocaleString()}`;
+/**
+ * D-3. Money is the host's configured currency (JPY by default), grouped and
+ * with no decimal place, through `Intl.NumberFormat` rather than a bare
+ * integer with a symbol glued on.
+ */
+const yen = (n: number) => formatMoney(n, CURRENCY, navigator.language);
+/**
+ * D-3. A day a person reads, weekday first, never the device's raw long
+ * date-and-time format and never an epoch. Used for a close, a swap or an
+ * expiry, which are days rather than moments (clause 30: nothing here counts
+ * down to one).
+ */
+const day = (ms: number) => formatDay(ms, navigator.language);
+/** The same day with a clock time beside it, for a deadline that is also an hour. */
+const when = (ms: number) => formatDayTime(ms, navigator.language);
 
 // ---- setup: a passkey, registered as the mandate's key ----------------------
 
 async function setup(notice?: Node) {
   const input = el("input", { placeholder: "a name for this household", value: `household-${Math.random().toString(36).slice(2, 8)}` }) as HTMLInputElement;
-  const button = el("button", { class: "primary" }, "Create a passkey") as HTMLButtonElement;
+  const button = el("button", { class: "primary" }, L("Create passkey")) as HTMLButtonElement;
   // Not "stays on this device": a platform authenticator may sync the key
   // through the person's own account (iCloud Keychain, Google Password
   // Manager), and telling them otherwise on the screen would be false.
@@ -298,7 +345,7 @@ async function setup(notice?: Node) {
    * this host (clause 52) arrives with its rows and without its key, and the
    * same key under the name it has is not a conflict (§13.2).
    */
-  const again = el("button", {}, "Use a passkey I already have") as HTMLButtonElement;
+  const again = el("button", {}, L("Sign in with passkey")) as HTMLButtonElement;
   again.onclick = async () => {
     again.disabled = true;
     status.textContent = "";
@@ -343,7 +390,10 @@ async function setup(notice?: Node) {
   show(
     el("h1", {}, "Atarasy"),
     ...(notice ? [notice] : []),
-    el("p", {}, "Nothing is offered to you until you have a key to answer with."),
+    // The entry sentence the iOS app opens with (vault `80` §6.2 E), the
+    // one used here because nothing is offered until a key exists to
+    // answer with, which is exactly what that sentence says.
+    el("p", {}, L("Your own agent for things that arrive to be tried. You pay only for what you keep, and nothing is bought without your signature.")),
     el("div", { class: "card" }, el("div", { class: "row" }, input, button), note, status),
     el("div", { class: "card" },
       el("p", {}, "Already have one, on this device or another?"),
@@ -352,8 +402,53 @@ async function setup(notice?: Node) {
   );
 }
 
-// ---- the offers waiting on the person ---------------------------------------
+// ---- persistent navigation: Inbox, Limits, Account (vault `80` §6.1) --------
 
+type Tab = "inbox" | "limits" | "account";
+
+/**
+ * Three destinations reachable from anywhere while signed in, the ones the
+ * iOS `TabView` names in `MemberAppView.swift` (`MemberTab`: `.inbox`,
+ * `.limits`, `.account`). Before this, a signed-in member's only screen was
+ * a single scroll stacking the inbox above the household's own protections
+ * and its account controls (vault `80` finding S1); every one of those now
+ * has its own destination, and none of them is the first thing a new member
+ * has to read past.
+ */
+function nav(member: Member, active: Tab): Node {
+  const items: [Tab, string, () => void][] = [
+    ["inbox", L("Inbox"), () => offers(member)],
+    ["limits", L("Limits"), () => protections(member)],
+    ["account", L("Account"), () => account(member)],
+  ];
+  return el("nav", { class: "tabs" }, ...items.map(([id, label, go]) => {
+    const b = el("button", { class: id === active ? "tab active" : "tab" }, label) as HTMLButtonElement;
+    b.disabled = id === active;
+    b.onclick = go;
+    return b;
+  }));
+}
+
+/** Every top-level screen (as opposed to one pushed from a card) draws through here. */
+function shell(member: Member, active: Tab, ...content: (string | Node)[]) {
+  show(el("h1", {}, "Atarasy"), nav(member, active), ...content);
+}
+
+// ---- the offers waiting on the person (Inbox) --------------------------------
+
+/**
+ * `04b` §1b, vault `80` §6.2 I. Two sections, "At home" and "Proposals",
+ * each newest arrival first over every presenter (clause 14), plus the
+ * waiting statements above both: a household that does nothing there is one
+ * whose next box will not come, which is the one thing on this screen with
+ * a consequence attached to leaving it unread.
+ *
+ * A box the route has already resolved, and a proposal the household has
+ * already decided, stay in the section they belong to rather than moving to
+ * a list of their own (vault `80` finding S2's guardrail, `04b` §1b.2): the
+ * binding is what a row's status line is about, and splitting bindings
+ * apart is the one grouping clause 14 does not forbid.
+ */
 async function offers(member: Member) {
   let presenters: string[] = [];
   try {
@@ -361,7 +456,7 @@ async function offers(member: Member) {
   } catch {
     // It is this hub that did not answer, not an engine: `/config` is served
     // here. Saying "the engine" sent the member looking in the wrong place.
-    show(el("h1", {}, "Atarasy"), failure("This page could not reach the service that serves it, so nothing could be listed. Nothing was sent."), retry(member));
+    shell(member, "inbox", failure("This page could not reach the service that serves it, so nothing could be listed. Nothing was sent."), retry(member));
     return;
   }
   const waiting: InboxOffer[] = [];
@@ -402,41 +497,48 @@ async function offers(member: Member) {
   decided.sort(byArrival);
   unsigned.sort(byArrival);
 
+  /**
+   * `04b` §1b.3, §2.2b, vault `80` §6.2 I. **One status line, in the
+   * member's own words rather than a protocol state**, from `rowStatus()`
+   * (`shared/inbox.ts`) so the case a row falls into is decided once, in a
+   * module the suite can hold to the same case table the plan does. This
+   * used to be a longer sentence explaining what doing nothing means for a
+   * box; that consequence is still said, once, at the top of the box itself
+   * (`approval()`), and repeating it on every row was the noise finding S1
+   * named.
+   */
+  const statusLine = (o: InboxOffer): string => {
+    const status = rowStatus(o);
+    switch (status.kind) {
+      case "box-waiting":
+        return L("Next swap %@", day(status.nextSwap));
+      case "box-statement-ready":
+        return status.holdsNext ? L("Confirm the statement to receive the next box") : L("Statement ready to confirm");
+      case "proposal-undecided":
+        return L("Closes %@. Nothing is bought if you do nothing.", day(status.closes));
+      case "proposal-decided":
+        return L("You decided");
+    }
+  };
   const card = (o: InboxOffer) => {
-    const open = el("button", { class: "primary" }, "Open") as HTMLButtonElement;
-    open.onclick = () => approval(member, o.id, o.binding);
+    const open = el("button", { class: "primary" }, L("Open")) as HTMLButtonElement;
+    open.onclick = () => (awaitsStatement(o) ? statement(member, o.id) : approval(member, o.id, o.binding));
     return el("div", { class: "card" },
       el("div", { class: "row" },
-        el("span", { class: "grow" }, o.giver ? `A gift from ${o.giver}, offered by ${o.presenter}` : `From ${o.presenter}`),
+        el("span", { class: "grow" }, o.giver ? L("Gift from %@", o.giver) + `, ${o.presenter}` : o.presenter),
         open),
-      // §11, `04b` §1b.3. **The two bindings say different things and one
-      // sentence used to cover both.** A digital offer expires and nothing is
-      // ordered if the person does nothing. A physical box is already in the
-      // home, and what is used is bought whether or not this screen is ever
-      // opened, so telling its owner that doing nothing orders nothing is
-      // false about the one row where it matters.
-      // `04b` §1b.3, §2.2b, question 44 decided 2026-09-13. **The date a box's
-      // owner needs is the swap, and it is the offer's expiry.** The engine
-      // opens the recovery with the offer's own expiry as its due date, so the
-      // two are one number wearing two names; what §2.2b asks for is not a
-      // second figure but a second sentence, the route coming rather than a
-      // deadline the person loses something by missing. The row had the
-      // sentence and no date at all.
-      el("p", { class: "muted" },
-        o.binding === "physical"
-          ? `This box is with you. What you use is bought; what you send back is not. It was offered until ${when(o.expires_at)}, and the route comes for it around then.`
-          : `Waiting until ${when(o.expires_at)}. Nothing is ordered if you do nothing.`)
+      el("p", { class: "muted" }, statusLine(o))
     );
   };
   // `04b` §1b.2. The two bindings are separated, and each is newest first.
-  const boxes = waiting.filter((o) => o.binding === "physical").map(card);
+  const boxes = [...waiting.filter((o) => o.binding === "physical"), ...unsigned].sort(byArrival).map(card);
   const cards = waiting.filter((o) => o.binding === "digital").map(card);
 
   // §16.5. A decided set waits out its cooling window before it can settle,
   // and the person can take it back while it does. Without a cooling window
   // there is no window to take it back into, which is what the protections
   // screen is for.
-  const decidedCards = decided.map((o) => {
+  const decidedCard = (o: InboxOffer): Node => {
     // `04b` §1b.2 separates the bindings, and this was the one section that
     // did not: a digital set the household signed sat beside a box the
     // collection resolved, under one sentence about a window closing.
@@ -482,7 +584,7 @@ async function offers(member: Member) {
         el("div", { class: "row" }, el("span", { class: "grow" }, `From ${o.presenter}`)),
         said);
     }
-    const undo = el("button", {}, "Take it back") as HTMLButtonElement;
+    const undo = el("button", {}, L("Undo this decision")) as HTMLButtonElement;
     undo.onclick = async () => {
       undo.disabled = true;
       try {
@@ -499,77 +601,79 @@ async function offers(member: Member) {
     return el("div", { class: "card" },
       el("div", { class: "row" }, el("span", { class: "grow" }, `From ${o.presenter}`), undo),
       said);
-  });
-  // §6.5. The waiting statements, above everything else on this screen: a
-  // household that does nothing here is one whose next box will not come, and
-  // that is the one thing on this surface with a consequence attached.
-  const unsignedCards = unsigned.map((o) => {
-    const open = el("button", { class: "primary" }, "See what came back") as HTMLButtonElement;
-    open.onclick = () => statement(member, o.id);
-    return el("div", { class: "card" },
-      el("div", { class: "row" }, el("span", { class: "grow" }, `From ${o.presenter}`), open),
-      // Clause 11. **The presenter is not the seller.** A box is one
-      // presenter's and several merchants', and §6.5 blocks the next box of
-      // the presenter this one came from. Saying "this seller" told the
-      // household that the wrong party had stopped delivering.
-      // §6.5, question 46. Only goods used hold the next box; a box whose
-      // collection recorded only missing items owes nothing and holds nothing.
-      el("p", { class: "muted" }, holdsNextBox(o)
-        ? `The route found something used. Nothing is charged until you sign, and no further box comes from ${o.presenter} while it waits.`
-        : "The route wrote down what came back. Nothing on it is charged to you; sign it, or say where it is wrong.")
-    );
-  });
-  const settings = el("button", {}, "What you have set") as HTMLButtonElement;
-  settings.onclick = () => protections(member);
-  // §14.3. Near the protections a person sets for themselves, because it is
-  // the same kind of decision: what this host holds of the household's, and
-  // what to do about it.
-  const leaveHost = el("button", {}, "Leave this host") as HTMLButtonElement;
-  leaveHost.onclick = () => leave(member);
-  const forget = el("button", {}, "Forget this device") as HTMLButtonElement;
-  // §16.1. It forgets the browser's copy and not the household, which lives in
-  // the passkey. The setup screen takes that passkey back, and this used to
-  // be a one-way door with nothing on the screen saying so.
-  forget.onclick = () => { localStorage.removeItem(STORAGE); setup(); };
+  };
+  // `04b` §1b.2. A decided set stays with the binding it belongs to rather
+  // than moving to a section of its own (vault `80` finding S2's guardrail).
+  const decidedBoxes = decided.filter((o) => o.binding === "physical").map(decidedCard);
+  const decidedProposals = decided.filter((o) => o.binding === "digital").map(decidedCard);
   // **Nothing waiting and nothing answering are different things**, and one
   // screen used to draw them together: a presenter that failed put a card at
   // the foot of the page while "Nothing is waiting for you." stood above it.
   // A member cannot act on a list that is silent about how much of it is
   // missing.
   const partial = problems.length > 0;
-  const empty = !boxes.length && !cards.length;
-  show(
-    el("h1", {}, "Atarasy"),
-    el("p", { class: "muted" }, `${member.label}. Decisions are confirmed with this browser's passkey.`),
-    // An offer names the household it is placed with and the mandate it is
-    // made under, and how a presenter comes to know either is between the
-    // household and the presenter. So the person is shown both rather than
-    // left to find them. Neither is a secret and neither is guessable.
-    el("p", { class: "muted" }, "What a shop needs before it can offer you anything."),
-    el("ul", {},
-      el("li", {}, "household ", el("code", {}, member.household)),
-      el("li", {}, "mandate ", el("code", {}, member.mandate))),
+  const atHome = [...boxes, ...decidedBoxes];
+  const proposals = [...cards, ...decidedProposals];
+  const emptyText = (kind: "boxes" | "proposals") => {
+    if (partial) return "This list may be incomplete: not every shop answered.";
+    return kind === "boxes" ? L("No boxes at home.") : L("No proposals here.");
+  };
+  shell(member, "inbox",
     ...problems.map((p) => failure(p)),
-    ...(unsignedCards.length ? [el("h2", {}, "Waiting for your signature"), ...unsignedCards] : []),
-    ...(boxes.length ? [el("h2", {}, "Boxes with you now"), ...boxes] : []),
-    ...(cards.length ? [el("h2", {}, "Offered to you"), ...cards] : []),
-    ...(empty
-      ? [el("p", {}, partial
-          ? "Nothing is waiting for you from the shops that answered. What the card above names did not answer, so this list is not the whole of it."
-          : "Nothing is waiting for you.")]
-      : []),
-    ...(decidedCards.length ? [el("h2", {}, "Decided, and not yet settled"), ...decidedCards] : []),
-    el("div", { class: "row" }, settings, leaveHost, forget)
+    el("h2", {}, L("At home")),
+    el("p", { class: "muted" }, L("Boxes delivered to you. Use what you like; you pay only for what you use.")),
+    ...atHome,
+    ...(atHome.length ? [] : [el("p", { class: "muted" }, emptyText("boxes"))]),
+    el("h2", {}, L("Proposals")),
+    el("p", { class: "muted" }, L("Nothing is bought unless you choose it and sign.")),
+    ...proposals,
+    ...(proposals.length ? [] : [el("p", { class: "muted" }, emptyText("proposals"))])
   );
 }
 
 /** When nothing answered at all, the one thing left to offer is another try. */
 function retry(member: Member) {
-  const b = el("button", { class: "primary" }, "Try again") as HTMLButtonElement;
+  const b = el("button", { class: "primary" }, L("Try again")) as HTMLButtonElement;
   b.onclick = () => offers(member);
   return b;
 }
 
+// ---- the Account tab --------------------------------------------------------
+
+/**
+ * Vault `80` §6.2 A. Who is signed in, and the controls that were sitting on
+ * the Inbox screen before every other decision on it (finding S1, S3): the
+ * household and mandate identifiers a shop needs move here, under "About
+ * this account", never the first line a member reads (guardrail: no raw
+ * identifier on a primary screen).
+ */
+async function account(member: Member) {
+  const forget = el("button", {}, L("Sign out")) as HTMLButtonElement;
+  // §16.1. It forgets the browser's copy and not the household, which lives
+  // in the passkey. The setup screen takes that passkey back, and this used
+  // to be a one-way door with nothing on the screen saying so.
+  forget.onclick = () => { localStorage.removeItem(STORAGE); setup(); };
+  const leaveHost = el("button", {}, L("Delete account")) as HTMLButtonElement;
+  leaveHost.onclick = () => leave(member);
+  shell(member, "account",
+    el("p", {}, member.label),
+    el("div", { class: "row" }, forget),
+    el("details", {},
+      el("summary", {}, L("About this account")),
+      // An offer names the household it is placed with and the mandate it is
+      // made under, and how a presenter comes to know either is between the
+      // household and the presenter. Neither is a secret and neither is
+      // guessable, so support may ask for it; nothing else on this screen
+      // reads it.
+      el("p", { class: "muted" }, L("Support may ask you for the account reference shown under Account on a device where you are signed in. It does not sign you in by itself.")),
+      el("ul", {},
+        el("li", {}, "household ", el("code", {}, member.household)),
+        el("li", {}, "mandate ", el("code", {}, member.mandate)))),
+    el("h2", {}, L("Delete account")),
+    el("p", { class: "muted" }, L("Deleting removes your account and everything this host holds for it. Shops keep their own records of sales. Gifts you shared with other households stay in their records, showing you as a member who has left.")),
+    el("div", { class: "row" }, leaveHost)
+  );
+}
 
 /**
  * §10a, §10a.5. The block a line is governed by, drawn beside that line and
@@ -657,7 +761,7 @@ async function approval(member: Member, offerId: string, binding?: "digital" | "
   }
   const a = got.body;
   const choices = new Map<string, "kept" | "returned">();
-  const confirm = el("button", { class: "primary" }, "Confirm with your passkey") as HTMLButtonElement;
+  const confirm = el("button", { class: "primary" }, L("Sign with passkey")) as HTMLButtonElement;
   confirm.disabled = true;
   const status = el("p", {});
   // §10 step 3c. **Only the lines still waiting on this household are asked
@@ -672,8 +776,8 @@ async function approval(member: Member, offerId: string, binding?: "digital" | "
 
   const cards = a.candidates.map((c) => {
     const decidable = c.valence === "offered";
-    const keep = el("button", {}, "Keep") as HTMLButtonElement;
-    const ret = el("button", {}, "Return") as HTMLButtonElement;
+    const keep = el("button", {}, L("Keep")) as HTMLButtonElement;
+    const ret = el("button", {}, L("Decline")) as HTMLButtonElement;
     const pick = (v: "kept" | "returned") => {
       choices.set(c.id, v);
       keep.className = v === "kept" ? "chosen" : "";
@@ -684,16 +788,16 @@ async function approval(member: Member, offerId: string, binding?: "digital" | "
     ret.onclick = () => pick("returned");
     return el("div", { class: "card" },
       el("div", { class: "row" },
-        el("strong", { class: "grow" }, `${c.product} × ${c.quantity}`),
+        el("strong", { class: "grow" }, `${goodsTitle(c)} × ${c.quantity}`),
         // Clause 10, §6.2. A gift arrives at its price and is never billed, so
         // the card says so instead of printing a figure nobody will be charged.
-        el("span", {}, c.given_by ? "a gift" : yen(c.unit_price * c.quantity))),
+        el("span", {}, c.given_by ? L("Free") : yen(c.unit_price * c.quantity))),
       // Clause 12. The maker and the carrier are on the screen the person
       // signs from, and the maker is not the merchant.
       el("p", { class: "muted" },
         c.given_by
-          ? `Given by ${c.given_by}. Never billed to you (clause 10). Made by ${c.maker}, carried by ${c.ships}.`
-          : `Sold by ${c.merchant}, made by ${c.maker}. Carried by ${c.ships}.`),
+          ? `${L("Gift from %@", c.given_by)}. Never billed to you (clause 10). ${L("Made by %@", c.maker)}. Carried by ${c.ships}.`
+          : `${L("Sold by %@", c.merchant)}. ${L("Made by %@", c.maker)}. Carried by ${c.ships}.`),
       ...(decidable ? [] : [el("p", { class: "muted" },
         c.valence === "consumed"
           ? "The route found this used, so it is not yours to decide here. It comes back on the statement you sign."
@@ -751,7 +855,9 @@ async function approval(member: Member, offerId: string, binding?: "digital" | "
       show(
         el("h1", {}, "Atarasy"),
         el("div", { class: "card" },
-          el("p", {}, `Decided. ${decisions.filter((d) => d.valence === "kept").length} kept, ${decisions.filter((d) => d.valence === "returned").length} returned.`),
+          el("p", {}, LANG === "ja"
+            ? `${L("Decision recorded")}。${decisions.filter((d) => d.valence === "kept").length} 点を受け取り、${decisions.filter((d) => d.valence === "returned").length} 点を見送りました。`
+            : `${L("Decision recorded")}. ${decisions.filter((d) => d.valence === "kept").length} kept, ${decisions.filter((d) => d.valence === "returned").length} declined.`),
           el("p", { class: "muted" }, "What you returned is recorded as a decision of yours, not as nothing (clause 8).")),
         back(member)
       );
@@ -775,11 +881,11 @@ async function approval(member: Member, offerId: string, binding?: "digital" | "
          // `lost` at once. The date is when the offer was open until and when
          // the route is due; what happens at it is the deployment's grace, and
          // the screen does not know that number.
-         el("p", { class: "muted" }, `It was offered until ${when(a.expires_at)}, and the route comes for it around then.`)]
-      : [el("p", {}, `Offered by ${a.presenter}. Open until ${when(a.expires_at)}.`)]),
+         el("p", { class: "muted" }, `It was offered until ${day(a.expires_at)}, and the route comes for it around then.`)]
+      : [el("p", {}, `Offered by ${a.presenter}. ${L("Closes %@.", day(a.expires_at))}`)]),
     el("p", { class: "muted" },
       a.mandate.kind === "standing"
-        ? `Under a standing mandate: ${a.mandate.scope}, lapsing ${a.mandate.lapses_at ? when(a.mandate.lapses_at) : "never"} (clause 58).`
+        ? `Under a standing mandate: ${a.mandate.scope}, lapsing ${a.mandate.lapses_at ? day(a.mandate.lapses_at) : "never"} (clause 58).`
         : `Under an individual mandate: ${a.mandate.scope}.`),
     ...(a.price_band ? [el("p", { class: "muted" }, `The giver chose a band of ${yen(a.price_band.min)} to ${yen(a.price_band.max)} (clause 23).`)] : []),
     // Clause 33. Whether the one reminder has gone, never how many remain.
@@ -851,7 +957,7 @@ async function statement(member: Member, offerId: string) {
   }
   const disputed = new Set<string>();
   const status = el("p", {});
-  const sign = el("button", { class: "primary" }, "Confirm with your passkey") as HTMLButtonElement;
+  const sign = el("button", { class: "primary" }, L("Sign with passkey")) as HTMLButtonElement;
 
   const total = () => statementTotal(st.lines, disputed);
   const totalLine = el("p", {});
@@ -899,16 +1005,16 @@ async function statement(member: Member, offerId: string) {
     const wasKept = !disputable(l);
     return el("div", { class: "card" },
       el("div", { class: "row" },
-        el("strong", { class: "grow" }, `${l.product} × ${l.quantity}`),
-        el("span", {}, missing ? "not charged" : l.given_by ? "a gift" : yen(l.amount))),
+        el("strong", { class: "grow" }, `${goodsTitle(l)} × ${l.quantity}`),
+        el("span", {}, missing ? L("Not charged") : l.given_by ? L("Free") : yen(l.amount))),
       // Clause 10. A gift arrives at its price and is never billed, and the
       // screen says who gave it rather than leaving a zero to be read as luck.
       el("p", { class: "muted" },
         l.given_by
-          ? `Given by ${l.given_by}. Never billed to you (clause 10).`
+          ? `${L("Gift from %@", l.given_by)}. Never billed to you (clause 10).`
           : missing
-            ? `Sold by ${l.merchant}, made by ${l.maker}.`
-            : `${yen(l.unit_price)} each. Sold by ${l.merchant}, made by ${l.maker}.`),
+            ? `${L("Sold by %@", l.merchant)}. ${L("Made by %@", l.maker)}.`
+            : `${yen(l.unit_price)} ${l.quantity > 1 ? `× ${l.quantity}` : "each"}. ${L("Sold by %@", l.merchant)}. ${L("Made by %@", l.maker)}.`),
       el("p", { class: "muted" },
         wasKept
           ? "You kept this when you decided. It is here because it is on the same bill."
@@ -987,6 +1093,13 @@ async function statement(member: Member, offerId: string) {
             await showReceipt(member, st.offer, stood.body, mine, st.disclosures);
             return;
           }
+          // Requirement 5. Neither the signature nor the read that was meant
+          // to explain it answered: this screen genuinely does not know
+          // whether the box settled, and re-signing here would risk a second
+          // attempt over a statement that may already have. The one honest
+          // move is to offer to ask again, not a fresh act.
+          unknownResult(member, st.offer, st.disclosures, refusal(settled.body, settled.status));
+          return;
         }
         throw new Error(refusal(settled.body, settled.status));
       }
@@ -1020,7 +1133,7 @@ async function statement(member: Member, offerId: string) {
     // engine has carried it since this route was written and this screen
     // dropped it, so a block reading "apply within 7 days of the offer" stood
     // beside no date at all.
-    el("p", { class: "muted" }, `This box was offered until ${when(st.expires_at)}.`),
+    el("p", { class: "muted" }, `This box was offered until ${day(st.expires_at)}.`),
     el("p", { class: "muted" },
       st.carriage === null
         ? "Carriage: not recorded."
@@ -1076,7 +1189,7 @@ function receipt(r: Receipt, path: ReceiptPath): Node {
   return el("div", { class: "card" },
     el("p", {},
       stood
-        ? `This box has settled${r.settled_at ? `, on ${when(r.settled_at)}` : ""}.`
+        ? `This box has settled${r.settled_at ? `, on ${day(r.settled_at)}` : ""}.`
         : "Signed."),
     el("p", {},
       amount === null
@@ -1100,6 +1213,39 @@ function receipt(r: Receipt, path: ReceiptPath): Node {
     ...(r.disputed_amount
       ? [el("p", { class: "muted" }, `${yen(r.disputed_amount)} was disputed and is not charged here. What is owed for it, if anything, is between you and the seller.`)]
       : []));
+}
+
+/**
+ * Requirement 5, IOS-10, COPY-04. **An unknown result offers only "Check
+ * result", never a fresh act.** This is the one case `showReceipt`'s own
+ * retries cannot resolve: the signature never answered, and the settlement
+ * read that was meant to say whether it went through failed too, so this
+ * screen genuinely does not know. Re-signing here would risk a second
+ * settlement attempt over a statement that may have already settled; the
+ * only safe move is to ask the engine again, which is what the one button
+ * does.
+ */
+function unknownResult(member: Member, offerId: string, disclosures: Statement["disclosures"], notice: string) {
+  const busy = { current: false };
+  const card = el("div", { class: "card" },
+    el("p", {}, L("Result not known yet")),
+    el("p", { class: "muted" }, notice),
+    el("p", { class: "muted" }, L("Payment status is not available here."))
+  );
+  const check = el("button", { class: "primary" }, L("Check result")) as HTMLButtonElement;
+  check.onclick = async () => {
+    if (busy.current) return;
+    busy.current = true;
+    check.disabled = true;
+    const stood = await api<Receipt & { error?: string }>("GET", `/offers/${encodeURIComponent(offerId)}/settlement`);
+    if (stood.status === 200) {
+      await showReceipt(member, offerId, stood.body, "unanswered-unknown", disclosures);
+      return;
+    }
+    busy.current = false;
+    check.disabled = false;
+  };
+  show(el("h1", {}, "Atarasy"), card, el("div", { class: "row" }, check, back(member)));
 }
 
 /**
@@ -1131,7 +1277,7 @@ function correctionsCard(c: Corrections | null, disclosures: Statement["disclosu
     el("p", {}, "The merchant of record has appended the following to the settlement above. There is nothing here for you to sign or dispute."),
     ...c.corrections.map((line) =>
       el("div", {},
-        el("p", {}, `${line.kind === "refund" ? "Refund" : "Collection"} from ${line.merchant}: −${yen(line.amount)}, ${when(line.corrected_at)}.`),
+        el("p", {}, `${line.kind === "refund" ? "Refund" : "Collection"} from ${line.merchant}: −${yen(line.amount)}, ${day(line.corrected_at)}.`),
         el("p", { class: "muted" }, line.note))
     ),
     el("p", {}, `Net after corrections: ${yen(c.net)}.`),
@@ -1232,10 +1378,10 @@ async function protections(member: Member) {
   // at version 4.
   const readable = read.status === 200 && typeof read.body.version === "number";
   if (read.status !== 404 && !readable) {
-    show(el("h1", {}, "Atarasy"), failure(
+    shell(member, "limits", failure(
       read.status === 200
         ? "What you have set came back in a form this screen could not read. Nothing here has changed."
-        : refusal(read.body, read.status)), back(member));
+        : refusal(read.body, read.status)));
     return;
   }
   const current: Mandate | null = readable ? read.body : null;
@@ -1301,12 +1447,26 @@ async function protections(member: Member) {
     }
   }
 
+  // The picker labels this screen already had, translated where the
+  // dictionary has a matching iOS element and left as plain, short English
+  // (with an inline Japanese equivalent) where it has none: iOS reads this
+  // same picker through `Stepper` and a free-form hour count rather than a
+  // fixed set of choices, so there is no exact string to copy for "an hour"
+  // or "a day" here.
+  const coolingLabel = (label: string, seconds: number | null): string => {
+    if (seconds === null) return L("No time to undo");
+    if (LANG !== "ja") return label;
+    return seconds === 3600 ? "1 時間" : seconds === 86400 ? "1 日" : label;
+  };
+  const dailyLabel = (label: string, perDay: number | null): string =>
+    perDay === null ? L("No daily limit") : yen(perDay);
+
   // §16.5. How long a decided set waits before it can settle, and can be taken
   // back while it waits.
   const coolingRow: Node[] = [];
   for (const [label, seconds] of COOLING) {
     const chosen = current?.cooling_seconds === seconds || (current === null && seconds === null);
-    const b = el("button", { class: chosen ? "chosen" : "" }, label);
+    const b = el("button", { class: chosen ? "chosen" : "" }, coolingLabel(label, seconds));
     b.onclick = () =>
       write(
         { cooling_seconds: seconds },
@@ -1323,7 +1483,7 @@ async function protections(member: Member) {
   const dailyRow: Node[] = [];
   for (const [label, yenPerDay] of DAILY) {
     const chosen = current?.ceiling_daily === yenPerDay || (current === null && yenPerDay === null);
-    const b = el("button", { class: chosen ? "chosen" : "" }, label);
+    const b = el("button", { class: chosen ? "chosen" : "" }, dailyLabel(label, yenPerDay));
     b.onclick = () =>
       write(
         { ceiling_daily: yenPerDay },
@@ -1334,9 +1494,8 @@ async function protections(member: Member) {
     dailyRow.push(b);
   }
 
-  show(
-    el("h1", {}, "Atarasy"),
-    el("h2", {}, "What you have set for yourself"),
+  shell(member, "limits",
+    el("p", { class: "muted" }, L("These are the limits your agent works within. Nothing outside them can be bought for you, and loosening them needs the people you name here.")),
     el("p", { class: "muted" },
       current && current.co_signers.length > 0
         ? `Version ${current.version}. Tightening is yours alone; loosening needs everyone you named: ${current.co_signers.join(", ")} (clause 47).`
@@ -1366,10 +1525,9 @@ async function protections(member: Member) {
     // over things the person never saw.
     ...(current
       ? [el("p", { class: "muted" },
-          `Also in what you signed: nothing offered to you may cost more than ${yen(current.ceiling_out_of_network)} at a shop outside the network, and this lapses on ${new Date(current.lapses_at).toDateString()} unless you set something again.`)]
+          `Also in what you signed: nothing offered to you may cost more than ${yen(current.ceiling_out_of_network)} at a shop outside the network, and this lapses on ${day(current.lapses_at)} unless you set something again.`)]
       : [el("p", { class: "muted" }, "Setting one of these also records a ceiling of ¥100,000 on an offer from outside the network, and a lapse a year from now.")]),
-    status,
-    back(member)
+    status
   );
 }
 // ---- leaving this host (§14.3) -----------------------------------------------
@@ -1401,7 +1559,7 @@ async function leave(member: Member) {
     show(el("h1", {}, "Atarasy"), failure(
       got.status === 200
         ? "What is holding you here came back in a form this screen could not read. Nothing was deleted."
-        : refusal(got.body, got.status)), back(member));
+        : refusal(got.body, got.status)), backTo(member, "account"));
     return;
   }
   renderLeave(member, got.body.blockers);
@@ -1419,16 +1577,15 @@ function renderLeave(member: Member, blockers: LeaveBlocker[], notice?: string) 
   if (blockers.length > 0) {
     show(
       el("h1", {}, "Atarasy"),
-      el("h2", {}, "Leave this host"),
-      el("p", {}, "This host cannot delete your account yet."),
+      el("h2", {}, L("This account cannot be deleted yet")),
       el("ul", {}, ...blockers.map((b) => el("li", {}, BLOCKERS[b.kind] ?? `${b.kind} (${b.id})`))),
       status,
-      back(member)
+      backTo(member, "account")
     );
     return;
   }
 
-  const save = el("button", {}, "Save a copy of my records") as HTMLButtonElement;
+  const save = el("button", {}, L("Save a copy of my records")) as HTMLButtonElement;
   save.onclick = async () => {
     save.disabled = true;
     status.textContent = "";
@@ -1459,10 +1616,13 @@ function renderLeave(member: Member, blockers: LeaveBlocker[], notice?: string) 
     save.disabled = false;
   };
 
-  const understood = el("input", { type: "checkbox", id: "leave-confirm" }) as HTMLInputElement;
-  const del = el("button", {}, "Delete my account") as HTMLButtonElement;
-  del.disabled = true;
-  understood.onchange = () => { del.disabled = !understood.checked; };
+  // D-6, requirement 4: one review screen per act, with the WebAuthn
+  // assertion below as the one explicit gesture. An "I understand this
+  // deletes my account" checkbox used to gate this button, duplicating the
+  // confirmation the passkey prompt itself already asks for; the review
+  // text above (what is kept, what is not) is the review, and the passkey
+  // call is the act, exactly as it is for a decision or a statement.
+  const del = el("button", {}, L("Delete account")) as HTMLButtonElement;
 
   del.onclick = async () => {
     del.disabled = true;
@@ -1498,7 +1658,7 @@ function renderLeave(member: Member, blockers: LeaveBlocker[], notice?: string) 
       // itself is the authenticator's to discard, which this screen cannot do.
       localStorage.removeItem(STORAGE);
       await setup(el("div", { class: "card" },
-        el("p", {}, "Deleted. This host no longer holds anything for your household."),
+        el("p", {}, L("Account deleted")),
         el("p", { class: "muted" }, `${count} record${count === 1 ? "" : "s"} removed.`)));
     } catch (e) {
       status.textContent = (e as Error).message;
@@ -1508,12 +1668,10 @@ function renderLeave(member: Member, blockers: LeaveBlocker[], notice?: string) 
 
   show(
     el("h1", {}, "Atarasy"),
-    el("h2", {}, "Leave this host"),
-    el("p", {}, "Deleting your account removes everything this host holds for your household: every offer, decision, statement, mandate and protection."),
-    el("p", { class: "muted" }, "A shop keeps its own record of what it sold you. A gift you gave stays in the other household's records, with you shown as a member who has left."),
+    el("h2", {}, L("Delete account")),
+    el("p", {}, L("Deleting removes your account and everything this host holds for it. Shops keep their own records of sales. Gifts you shared with other households stay in their records, showing you as a member who has left.")),
     el("div", { class: "row" }, save),
-    el("div", { class: "row" }, understood, el("label", { for: "leave-confirm" }, "I understand this deletes my account from this host and cannot be undone.")),
-    el("div", { class: "row" }, del, back(member)),
+    el("div", { class: "row" }, del, backTo(member, "account")),
     status
   );
 }
@@ -1532,8 +1690,15 @@ const lower = (before: number | null, after: number | null) =>
   after !== null && (before === null || after < before);
 
 function back(member: Member) {
-  const b = el("button", {}, "Back") as HTMLButtonElement;
+  const b = el("button", {}, L("Back")) as HTMLButtonElement;
   b.onclick = () => offers(member);
+  return b;
+}
+
+/** As `back`, but to a named tab rather than always to the Inbox. */
+function backTo(member: Member, tab: Tab) {
+  const b = el("button", {}, L("Back")) as HTMLButtonElement;
+  b.onclick = () => (tab === "limits" ? protections(member) : tab === "account" ? account(member) : offers(member));
   return b;
 }
 
