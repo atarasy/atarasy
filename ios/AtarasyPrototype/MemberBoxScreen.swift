@@ -33,7 +33,7 @@ struct MemberBoxView: View {
                             MemberBanner(text: String(localized: "This box has settled."), systemImage: "checkmark.circle", tint: .green).accessibilityIdentifier("statementSettled")
                             Button("Show the settlement", action: reload).buttonStyle(.bordered)
                         } else {
-                            NavigationLink { MemberStatementReviewScreen(flow: flow, detail: detail, statement: statement, disputed: Array(disputed)) } label: {
+                            NavigationLink { MemberStatementReviewScreen(flow: flow, detail: detail, statement: statement, disputed: Array(disputed), done: reload) } label: {
                                 Text("Review and sign").frame(maxWidth: .infinity)
                             }
                             .buttonStyle(.borderedProminent).controlSize(.large)
@@ -186,6 +186,9 @@ struct MemberStatementReviewScreen: View {
     let detail: MemberOfferDetail
     let statement: MemberStatement
     let disputed: [String]
+    var done: () -> Void = {}
+    @Environment(\.dismiss) private var dismiss
+    @State private var signed: FrozenMemberStatement?
     /// Question 46: what a signature over missing lines attests, beside the button that makes it.
     static let missingAttestation = String(localized: "Signing shows you were told which items the collection did not find. It is not you agreeing they are missing or taking responsibility for them; you are never charged for them, and you can say any of them was there.")
     var body: some View {
@@ -193,6 +196,18 @@ struct MemberStatementReviewScreen: View {
             VStack(alignment: .leading, spacing: 16) {
                 if let result = flow.result {
                     MemberResultView(result: result, notice: flow.notice, kind: .statement, busy: flow.busy) { if let handle = flow.handle { Task { await flow.check(handle) } } }
+                    if let signed {
+                        MemberCard {
+                            Text("What you signed").font(.headline)
+                            MemberAmountRow(label: "Goods", amount: MemberFormat.money(signed.goodsCharged))
+                            MemberAmountRow(label: "Delivery", amount: MemberFormat.money(signed.statement.carriage ?? 0))
+                            if signed.disputedAmount > 0 { MemberAmountRow(label: "Marked as not right, not charged here", amount: MemberFormat.money(signed.disputedAmount)) }
+                        }
+                    }
+                    if result != .unknown && result != .pending {
+                        Button { dismiss(); done() } label: { Text("Done").frame(maxWidth: .infinity) }
+                            .buttonStyle(.borderedProminent).controlSize(.large).accessibilityIdentifier("resultDone")
+                    }
                 } else if let frozen = flow.review {
                     frozenView(frozen)
                 } else if flow.busy {
@@ -229,7 +244,7 @@ struct MemberStatementReviewScreen: View {
             Text(verbatim: Self.missingAttestation).font(.footnote).foregroundStyle(.secondary).accessibilityIdentifier("missingAttestation")
         }
         if !flow.notice.isEmpty { MemberBanner(text: flow.notice, systemImage: "info.circle", tint: .blue).accessibilityIdentifier("statementFlowNotice") }
-        Button { Task { await flow.approve() } } label: { Label("Sign with passkey", systemImage: "person.badge.key").frame(maxWidth: .infinity) }
+        Button { signed = frozen; Task { await flow.approve() } } label: { Label("Sign with passkey", systemImage: "person.badge.key").frame(maxWidth: .infinity) }
             .buttonStyle(.borderedProminent).controlSize(.large)
             .disabled(!flow.canApprove)
             .accessibilityIdentifier("approveMemberStatement")

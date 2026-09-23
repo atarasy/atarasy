@@ -81,7 +81,10 @@ final class MemberAppUITests: XCTestCase {
         waitEnabled(sign); sign.tap()
         XCTAssertTrue(app.staticTexts["Decision recorded"].waitForExistence(timeout: 8))
         XCTAssertTrue(app.staticTexts["Payment status is not available here."].exists)
+        XCTAssertTrue(element("signedDecisionTotal", app).label.contains("898"), "the result shows what was signed")
         shot("decision-result-en", app)
+        element("resultDone", app).tap()
+        XCTAssertTrue(app.staticTexts["You decided on this proposal."].waitForExistence(timeout: 8), "Done returns to the decided proposal")
     }
 
     // UX-05, IOS-08, IOS-10: dispute a used line, sign, lose the reply, and read the result back.
@@ -109,6 +112,7 @@ final class MemberAppUITests: XCTestCase {
         check.tap()
         XCTAssertTrue(app.staticTexts["Statement signed"].waitForExistence(timeout: 8))
         XCTAssertTrue(element("resultGoods", app).label.contains("880"))
+        XCTAssertTrue(element("resultDone", app).exists)
         shot("statement-result-en", app)
     }
 
