@@ -24,10 +24,17 @@ python3 ios/development/verify.py --profile-dir ios/production --app /absolute/p
 
 The second form compares a signed build's exported entitlements (`codesign -d --entitlements :- <app>`) with this directory.
 
+## Signed build, 2026-09-23
+
+An `app-store-connect` export of the `AtarasyProduction` archive, signed `Apple Distribution: Vox Japan K.K. (83W4J65UE6)`, carries `application-identifier` `83W4J65UE6.com.vox.atarasy`, `aps-environment` `production` and `webcredentials:members.vox.delivery`, and `verify.py --signed-entitlements` reports both comparisons matching. Archive with `-allowProvisioningUpdates`:
+
+```sh
+xcodebuild -project ios/AtarasyPrototype.xcodeproj -scheme AtarasyProduction -configuration Production -destination 'generic/platform=iOS' -archivePath <new path>/Atarasy.xcarchive -allowProvisioningUpdates archive
+```
+
+**The first archive was unsigned and its export had lost both capabilities.** The project turns signing off for simulator runs, the Production configuration inherited that, and exporting re-signed the app with only the base entitlements. `verify.py` refused it; the Production configuration now allows signing.
+
 ## Not done yet
 
-- The App ID `com.vox.atarasy` is not registered. It needs the Associated Domains and Push Notifications capabilities, and an App Store Connect record.
-- `members.vox.delivery` does not exist. The production member service must serve [apple-app-site-association](.well-known/apple-app-site-association) at `/.well-known/apple-app-site-association` over HTTPS, status 200, `application/json`, with no redirect and no authentication. Apple's CDN fetches it, not the device, within 24 hours of install.
-- `signedApplicationIdentifierVerified` in [identity.json](identity.json) stays `false` until a signed build's entitlements have been compared.
-- **App Review guideline 5.1.1(v) requires in-app account deletion for an app that supports account creation**, and the hub has none. Its design is open (vault `77`).
-- App Review needs a way in for the reviewer (guideline 2.1(a)), which an invitation-only passkey app has to provide deliberately.
+- `members.vox.delivery` must serve [apple-app-site-association](.well-known/apple-app-site-association) at `/.well-known/apple-app-site-association` over HTTPS, status 200, `application/json`, with no redirect and no authentication. Apple's CDN fetches it, not the device, within 24 hours of install. `domainAssociationVerified` stays `false` until it does.
+- App Review needs a way in for the reviewer (guideline 2.1(a)), which an invitation-only passkey app has to provide deliberately (vault `77`, decided as a single-use review invitation).
