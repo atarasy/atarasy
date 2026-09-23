@@ -26,11 +26,16 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -203,7 +208,7 @@ class MainActivity : ComponentActivity() {
 fun AtarasyApp(
     onSignIn: suspend () -> MemberAuthenticationResult = { MemberAuthenticationResult.Failed(MemberFailure.Unavailable) },
     onRegister: suspend (String) -> MemberAuthenticationResult = { MemberAuthenticationResult.Failed(MemberFailure.Unavailable) },
-    onLoadOffers: suspend (MemberSessionInfo) -> List<MemberOfferSummary> = { throw MemberFailure.Unavailable },
+    onLoadOffers: suspend (MemberSessionInfo) -> MemberOfferListResult = { throw MemberFailure.Unavailable },
     onLoadDetail: suspend (MemberOfferSummary) -> MemberOfferDetail = { throw MemberFailure.Unavailable },
     onLoadReview: suspend (MemberOfferDetail) -> MemberReview = { throw MemberFailure.Unavailable },
     onPrepareDecision: suspend (MemberSessionInfo, MemberOfferDetail, MemberApproval, Map<String, MemberDigitalChoice>) -> MemberDecisionReview = { _, _, _, _ -> throw MemberFailure.Unavailable },
@@ -249,6 +254,7 @@ fun AtarasyApp(
     var session by remember { mutableStateOf<MemberSessionInfo?>(null) }
     var offers by remember { mutableStateOf<List<MemberOfferSummary>?>(null) }
     var offerFailure by remember { mutableStateOf(false) }
+    var sourcesIncomplete by remember { mutableStateOf(false) }
     var selectedOffer by remember { mutableStateOf<MemberOfferSummary?>(null) }
     var detail by remember { mutableStateOf<MemberOfferDetail?>(null) }
     var detailFailure by remember { mutableStateOf(false) }
@@ -263,7 +269,7 @@ fun AtarasyApp(
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_STOP) {
-                session = null; privateNodeState = MemberPrivateNodeState.LOCKED; offers = null; selectedOffer = null; detail = null; review = null
+                session = null; privateNodeState = MemberPrivateNodeState.LOCKED; offers = null; sourcesIncomplete = false; selectedOffer = null; detail = null; review = null
                 onSetHostMoveSession(null)
             }
         }
@@ -274,9 +280,10 @@ fun AtarasyApp(
         val current = accessSession ?: run { offers = null; return@LaunchedEffect }
         val retained = offers; val hinted = hintedRefresh
         if (!hinted) offers = null
-        offerFailure = false; selectedOffer = null; detail = null
+        offerFailure = false; sourcesIncomplete = false; selectedOffer = null; detail = null
         try {
-            offers = onLoadOffers(current)
+            val result = onLoadOffers(current)
+            offers = result.offers; sourcesIncomplete = result.incomplete
             if (hinted) refreshNotice = "Configured sources were refreshed."
         } catch (failure: Exception) {
             if (failure is CancellationException) throw failure
@@ -313,7 +320,7 @@ fun AtarasyApp(
                     modifier = Modifier.widthIn(max = 840.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(24.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
-                    Text("Atarasy", style = MaterialTheme.typography.headlineLarge, modifier = Modifier.semantics { heading() })
+                    Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineLarge, modifier = Modifier.semantics { heading() })
                     Text("Your household", style = MaterialTheme.typography.titleMedium)
                     if (session != null && privateNodeState != MemberPrivateNodeState.READY) {
                         MemberCard(
@@ -352,7 +359,7 @@ fun AtarasyApp(
                                 },
                             )
                             accountSection == "Saved" -> MemberAccountSubScreen(title = stringResource(R.string.account_my_records), onBack = { accountSection = "Home" }) {
-                                MemberSavedOperationsCard(accessSession, onLoadSaved, onCheckSaved, onPrepareWithdrawal, onApproveWithdrawal, onCancelOperation)
+                                MemberSavedOperationsCard(accessSession, offers, onLoadSaved, onCheckSaved, onPrepareWithdrawal, onApproveWithdrawal, onCancelOperation)
                             }
                             accountSection == "Access" -> MemberAccountSubScreen(title = stringResource(R.string.account_sharing), onBack = { accountSection = "Home" }) {
                                 MemberPermissionsCard(accessSession, onLoadPermissions, onRevokePermission, onLoadPermissionRequests, onReadPermissionRequest, onDecidePermissionRequest)
@@ -408,6 +415,7 @@ fun AtarasyApp(
                             connected = accessSession != null,
                             offers = offers,
                             failed = offerFailure,
+                            incomplete = sourcesIncomplete,
                             selectedOffer = selectedOffer,
                             detail = detail,
                             detailFailed = detailFailure,
@@ -453,10 +461,10 @@ private fun MemberHostMoveCard(
         session == null -> MemberCard("Host move is locked", "Sign in and open the encrypted private records before moving hosts.")
         else -> Card(modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Move Host", style = MaterialTheme.typography.titleLarge)
+                Text(stringResource(R.string.account_move_host), style = MaterialTheme.typography.titleLarge)
                 Text("Target", fontWeight = FontWeight.SemiBold)
                 Text("The configured target host is trusted by this build. You will sign in there before anything is copied.")
-                Text(state.phase.name.lowercase().replace('_', ' '), fontWeight = FontWeight.SemiBold)
+                Text(memberHostMovePhaseText(state.phase), fontWeight = FontWeight.SemiBold)
                 Text("Coverage", fontWeight = FontWeight.SemiBold)
                 Text(state.coverage.ifEmpty { "Coverage has not been verified on the target host." })
                 state.receipt?.let { Text("Receipt: ${it.archiveDigest}") }
@@ -475,19 +483,42 @@ private fun MemberHostMoveCard(
     }
 }
 
-private fun describeLeaveBlocker(blocker: MemberLeaveBlocker) = when (blocker.kind) {
-    "offer_in_progress" -> "An offer is still being decided."
-    "statement_unsigned" -> "A statement is waiting for your signature."
-    "reservation_held" -> "A reservation is still held."
-    "gift_in_flight" -> "A gift you sent or received is still in transit."
-    "co_signer" -> "You are a required co-signer on another household's mandate."
-    "recoverer" -> "You are set as another household's recovery contact."
-    "host_move_pending" -> "A move to another host is in progress."
-    "operation_pending" -> "An operation is still awaiting its outcome."
-    "mandate_change_pending" -> "A change to your protections is still pending."
-    "recovery_request_pending" -> "A recovery request is still pending."
-    else -> "Something with an unrecognised kind (\"${blocker.kind}\") is still in progress."
-}
+/** Ported from ios/AtarasyPrototype/MemberAccountView.swift at 34cde26's `MemberHostMoveView.phase`. */
+@Composable
+private fun memberHostMovePhaseText(phase: MemberHostMovePhase) = stringResource(
+    when (phase) {
+        MemberHostMovePhase.IDLE -> R.string.host_move_phase_idle
+        MemberHostMovePhase.SIGNING_INTO_TARGET -> R.string.host_move_phase_signing_into_target
+        MemberHostMovePhase.EXPORTING -> R.string.host_move_phase_exporting
+        MemberHostMovePhase.IMPORTING -> R.string.host_move_phase_importing
+        MemberHostMovePhase.VERIFYING -> R.string.host_move_phase_verifying
+        MemberHostMovePhase.READY_TO_RETIRE -> R.string.host_move_phase_ready_to_retire
+        MemberHostMovePhase.RETIRING -> R.string.host_move_phase_retiring
+        MemberHostMovePhase.COMPLETED -> R.string.host_move_phase_completed
+        MemberHostMovePhase.SOURCE_RETAINED -> R.string.host_move_phase_source_retained
+        MemberHostMovePhase.UNRESOLVED -> R.string.host_move_phase_unresolved
+    },
+)
+
+/** Ported from ios/AtarasyPrototype/MemberAccountView.swift at 34cde26's `MemberLeaveSheet.blockerDescription`. */
+@Composable
+private fun describeLeaveBlocker(blocker: MemberLeaveBlocker) = stringResource(
+    when (blocker.kind) {
+        "offer_in_progress" -> R.string.leave_blocker_offer_in_progress
+        "statement_unsigned" -> R.string.leave_blocker_statement_unsigned
+        "reservation_held" -> R.string.leave_blocker_reservation_held
+        "gift_in_flight" -> R.string.leave_blocker_gift_in_flight
+        "permission_action_pending" -> R.string.leave_blocker_permission_action_pending
+        "co_signer" -> R.string.leave_blocker_co_signer
+        "recoverer" -> R.string.leave_blocker_recoverer
+        "host_move_pending" -> R.string.leave_blocker_host_move_pending
+        "operation_pending" -> R.string.leave_blocker_operation_pending
+        "mandate_change_pending" -> R.string.leave_blocker_mandate_change_pending
+        "recovery_request_pending" -> R.string.leave_blocker_recovery_request_pending
+        "permission_request_pending" -> R.string.leave_blocker_permission_request_pending
+        else -> R.string.leave_blocker_default
+    },
+)
 
 /** §14.3. Shows what would block deletion, offers to save a copy of the member's records
  * first, and only then asks for a passkey to confirm. `session` gates on the same
@@ -692,6 +723,7 @@ private fun MemberRecoveryCard(
 @Composable
 private fun MemberSavedOperationsCard(
     session: MemberSessionInfo?,
+    offers: List<MemberOfferSummary>?,
     onLoad: suspend (MemberSessionInfo) -> List<MemberOperationHandle>,
     onCheck: suspend (MemberOperationHandle) -> MemberSavedResult,
     onPrepareWithdrawal: suspend (MemberSessionInfo, MemberOperationHandle) -> MemberWithdrawalReview,
@@ -747,24 +779,23 @@ private fun MemberSavedOperationsCard(
                     }
                 }
                 handles!!.forEach { handle ->
-                    val label = when (handle.operationProfile) {
-                        MEMBER_DECISION_PROFILE -> "Digital decision"
-                        MEMBER_STATEMENT_PROFILE -> "Box statement"
-                        else -> "Decision withdrawal"
-                    }
+                    val label = memberRecordGoodsTitle(handle, offers)
                     Card(modifier = Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text(label, fontWeight = FontWeight.SemiBold)
-                            Text(if (handle.attempted) "Submission attempted" else "Prepared, not submitted")
+                            Text(if (handle.attempted) stringResource(R.string.signed_and_sent) else stringResource(R.string.prepared_not_signed))
+                            val checkingText = stringResource(R.string.label_checking)
+                            val actionCheckResultText = stringResource(R.string.action_check_result)
+                            val unreadableText = "The result could not be read. Check later and do not resubmit."
                             Button(enabled = checking == null, onClick = {
                                 checking = handle.id; scope.launch {
                                     notices = notices + (handle.id to try { describeSaved(onCheck(handle)) } catch (failureValue: Exception) {
                                         if (failureValue is CancellationException) throw failureValue
-                                        "The result could not be read. Check later and do not resubmit."
+                                        unreadableText
                                     })
                                     checking = null
                                 }
-                            }) { Text(if (checking == handle.id) "Checking…" else "Check result") }
+                            }) { Text(if (checking == handle.id) checkingText else actionCheckResultText) }
                             if (handle.operationProfile == MEMBER_DECISION_PROFILE && handle.attempted) {
                                 Button(enabled = checking == null, onClick = {
                                     checking = handle.id; scope.launch {
@@ -799,6 +830,22 @@ private fun MemberSavedOperationsCard(
                 }
             }
         }
+    }
+}
+
+/**
+ * The goods on the offer, where the Inbox still lists it (`offers` is the same union
+ * `MemberInboxCard` already loaded); a generic noun otherwise, never the raw operation or
+ * offer id. Ported from iOS's `MemberRecordText.goods`.
+ */
+@Composable
+private fun memberRecordGoodsTitle(handle: MemberOperationHandle, offers: List<MemberOfferSummary>?): String {
+    val lines = offers?.firstOrNull { it.id == handle.offer }?.candidates
+    val first = lines?.firstOrNull()
+    return when {
+        first == null -> stringResource(if (handle.operationProfile.contains("statement")) R.string.a_box else R.string.a_proposal)
+        lines.size == 1 -> first.title
+        else -> stringResource(R.string.inbox_row_and_more, first.title, lines.size - 1)
     }
 }
 
@@ -951,9 +998,12 @@ private fun MemberDialsCard(
     var editing by remember(session) { mutableStateOf<Mandate?>(null) }
     var prepared by remember(session) { mutableStateOf<PreparedMemberMandateChange?>(null) }
     var outOfNetwork by remember(session) { mutableStateOf("") }
+    var hasDaily by remember(session) { mutableStateOf(false) }
     var daily by remember(session) { mutableStateOf("") }
-    var cooling by remember(session) { mutableStateOf("") }
-    var lapses by remember(session) { mutableStateOf("") }
+    var hasCooling by remember(session) { mutableStateOf(false) }
+    var coolingHours by remember(session) { mutableStateOf(0) }
+    var lapse by remember(session) { mutableStateOf(0L) }
+    var showLapsePicker by remember(session) { mutableStateOf(false) }
     var coSigners by remember(session) { mutableStateOf("") }
     var busy by remember(session) { mutableStateOf(false) }
     var failed by remember(session) { mutableStateOf(false) }
@@ -964,9 +1014,12 @@ private fun MemberDialsCard(
     val recordedText = stringResource(R.string.notice_decision_recorded)
     val cancelledText = stringResource(R.string.notice_signing_cancelled)
     val noCredentialText = stringResource(R.string.notice_no_credential)
+    val validationText = stringResource(R.string.mandate_validation_message)
     fun begin(value: Mandate) {
-        editing = value; prepared = null; outOfNetwork = value.ceilingOutOfNetwork.toString(); daily = value.ceilingDaily?.toString().orEmpty()
-        cooling = value.coolingSeconds?.toString().orEmpty(); lapses = value.lapsesAt.toString(); coSigners = value.coSigners.joinToString(",")
+        editing = value; prepared = null; outOfNetwork = value.ceilingOutOfNetwork.toString()
+        hasDaily = value.ceilingDaily != null; daily = value.ceilingDaily?.toString().orEmpty()
+        hasCooling = value.coolingSeconds != null; coolingHours = ((value.coolingSeconds ?: 0L) / 3_600L).toInt()
+        lapse = value.lapsesAt; coSigners = value.coSigners.joinToString("\n")
     }
     LaunchedEffect(session, refresh) {
         if (session == null) return@LaunchedEffect
@@ -994,20 +1047,50 @@ private fun MemberDialsCard(
                 editing?.let { base ->
                     Card(modifier = Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("Proposed version ${base.version + 1}", fontWeight = FontWeight.SemiBold)
-                            OutlinedTextField(outOfNetwork, { outOfNetwork = it }, label = { Text("Out-of-network ceiling") }, singleLine = true)
-                            OutlinedTextField(daily, { daily = it }, label = { Text("Daily ceiling (blank means none)") }, singleLine = true)
-                            OutlinedTextField(cooling, { cooling = it }, label = { Text("Cooling seconds (blank means none)") }, singleLine = true)
-                            OutlinedTextField(lapses, { lapses = it }, label = { Text("Lapses at") }, singleLine = true)
-                            OutlinedTextField(coSigners, { coSigners = it }, label = { Text("Co-signers, comma separated") }, singleLine = true)
+                            Text(stringResource(R.string.mandate_new_limits_header), fontWeight = FontWeight.SemiBold)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Checkbox(checked = hasDaily, onCheckedChange = { hasDaily = it })
+                                Text(stringResource(R.string.mandate_daily_limit_label))
+                            }
+                            if (hasDaily) OutlinedTextField(daily, { daily = it }, label = { Text(stringResource(R.string.mandate_daily_amount_label)) }, singleLine = true)
+                            OutlinedTextField(outOfNetwork, { outOfNetwork = it }, label = { Text(stringResource(R.string.mandate_outside_amount_label)) }, singleLine = true)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Checkbox(checked = hasCooling, onCheckedChange = { hasCooling = it })
+                                Text(stringResource(R.string.mandate_time_to_undo_label))
+                            }
+                            if (hasCooling) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    TextButton(enabled = coolingHours > 0, onClick = { coolingHours-- }) { Text("−") }
+                                    Text(if (coolingHours == 0) stringResource(R.string.limits_no_cooling) else MemberFormat.duration(coolingHours.toLong() * 3_600L))
+                                    TextButton(enabled = coolingHours < 720, onClick = { coolingHours++ }) { Text("+") }
+                                }
+                            }
+                            Text(stringResource(R.string.mandate_amounts_in, MemberFormat.currencyCode), style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                            TextButton(onClick = { showLapsePicker = true }) { Text(stringResource(R.string.mandate_ends_on_label) + ": " + MemberFormat.day(lapse)) }
+                            Text(stringResource(R.string.mandate_cosigners_header), fontWeight = FontWeight.SemiBold)
+                            OutlinedTextField(coSigners, { coSigners = it }, label = { Text(stringResource(R.string.mandate_cosigners_hint)) })
+                            Text(stringResource(R.string.mandate_cosigners_footer), style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                            Text(stringResource(R.string.mandate_change_note), style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                             Button(enabled = !busy, onClick = {
                                 val proposal = try {
-                                    val signers = coSigners.split(',').map { it.trim() }.filter { it.isNotEmpty() }
-                                    Mandate(base.id, base.household, checkNotNull(outOfNetwork.toLongOrNull()), daily.takeIf { it.isNotBlank() }?.toLong(),
-                                        cooling.takeIf { it.isNotBlank() }?.toLong(), signers, checkNotNull(lapses.toLongOrNull()), base.version + 1).also {
-                                        Canonical.validateMandate(it); require(signers.distinct().size == signers.size)
-                                    }
-                                } catch (_: Exception) { notice = "Enter valid safe integer limits and unique co-signers."; null }
+                                    val signers = coSigners.split('\n').map { it.trim() }.filter { it.isNotEmpty() }
+                                    val outside = checkNotNull(outOfNetwork.toLongOrNull())
+                                    val dailyValue = if (hasDaily) checkNotNull(daily.toLongOrNull()) else null
+                                    require(coolingHours in 0..720)
+                                    // A cooling period that was not a whole number of hours keeps its exact
+                                    // value unless the member moved it (matches iOS's MemberMandateEditor).
+                                    val originalCooling = base.coolingSeconds
+                                    val cooling = if (hasCooling) {
+                                        if (originalCooling != null && originalCooling / 3_600L == coolingHours.toLong()) originalCooling else coolingHours.toLong() * 3_600L
+                                    } else null
+                                    val candidate = Mandate(base.id, base.household, outside, dailyValue, cooling, signers, lapse, base.version + 1)
+                                    Canonical.validateMandate(candidate); require(signers.distinct().size == signers.size)
+                                    require(
+                                        candidate.ceilingOutOfNetwork != base.ceilingOutOfNetwork || candidate.ceilingDaily != base.ceilingDaily ||
+                                            candidate.coolingSeconds != base.coolingSeconds || candidate.coSigners != base.coSigners || candidate.lapsesAt != base.lapsesAt,
+                                    )
+                                    candidate
+                                } catch (_: Exception) { notice = validationText; null }
                                 if (proposal != null) {
                                     busy = true; scope.launch {
                                         try { prepared = onPrepare(proposal); notice = "Review every before/after protection and required signer before signing." }
@@ -1015,8 +1098,11 @@ private fun MemberDialsCard(
                                         busy = false
                                     }
                                 }
-                            }) { Text(stringResource(R.string.limits_review_proposal)) }
+                            }) { Text(stringResource(R.string.mandate_review_change)) }
                         }
+                    }
+                    if (showLapsePicker) {
+                        MemberDatePickerDialog(initialMillis = lapse, onDismiss = { showLapsePicker = false }, onConfirm = { lapse = it; showLapsePicker = false })
                     }
                 }
                 Text(stringResource(R.string.limits_pending_changes_title), fontWeight = FontWeight.SemiBold)
@@ -1024,11 +1110,9 @@ private fun MemberDialsCard(
                 changes!!.forEach { change ->
                     Card(modifier = Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text("${change.state.replaceFirstChar { it.uppercase() }} · version ${change.mandate.version}", fontWeight = FontWeight.SemiBold)
-                            Text("Before: ${describeMandate(change.before)}")
-                            Text("After: ${describeMandate(change.mandate)}")
-                            Text("Required: ${change.requiredSigners.joinToString()}")
-                            Text("Signed: ${change.signedBy.joinToString().ifEmpty { "None" }}")
+                            Text(stringResource(R.string.mandate_who_must_sign_header) + ": " + stringResource(R.string.mandate_signatures_count, change.signedBy.size, change.requiredSigners.size), fontWeight = FontWeight.SemiBold)
+                            Text(stringResource(R.string.mandate_now_header) + ": " + describeMandate(change.before))
+                            Text(stringResource(R.string.mandate_after_change_header) + ": " + describeMandate(change.mandate))
                             if (change.state == "pending" && session.household in change.requiredSigners && session.household !in change.signedBy) {
                                 Button(enabled = !busy, onClick = { busy = true; scope.launch {
                                     try { prepared = onPrepareSignature(change.id); notice = "Review this fixed proposal before adding your signature." }
@@ -1048,9 +1132,9 @@ private fun MemberDialsCard(
                     Card(modifier = Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text(stringResource(R.string.limits_signature_review), fontWeight = FontWeight.SemiBold)
-                            Text("Before: ${describeMandate(fixed.change.before)}")
-                            Text("After: ${describeMandate(fixed.change.mandate)}")
-                            Text("Required signers: ${fixed.change.requiredSigners.joinToString()}")
+                            Text(stringResource(R.string.mandate_now_header) + ": " + describeMandate(fixed.change.before))
+                            Text(stringResource(R.string.mandate_after_change_header) + ": " + describeMandate(fixed.change.mandate))
+                            Text(stringResource(R.string.mandate_who_must_sign_header) + ": " + fixed.change.requiredSigners.size)
                             Button(enabled = !busy, onClick = { busy = true; scope.launch {
                                 notice = when (val result = onApprove(fixed)) {
                                     is MemberDialsActionResult.Recorded -> if (result.change.state == "effective") recordedText else "Signature recorded. Waiting for required signers."
@@ -1222,6 +1306,7 @@ private fun MemberInboxCard(
     connected: Boolean,
     offers: List<MemberOfferSummary>?,
     failed: Boolean,
+    incomplete: Boolean,
     selectedOffer: MemberOfferSummary?,
     detail: MemberOfferDetail?,
     detailFailed: Boolean,
@@ -1244,21 +1329,25 @@ private fun MemberInboxCard(
         offers == null -> MemberCard(stringResource(R.string.inbox_loading), "")
         selectedOffer != null -> MemberOfferDetailCard(detail, detailFailed, review, reviewFailed, session, onPrepareDecision, onApproveDecision, onPrepareStatement, onApproveStatement, onRecorded) { onSelect(null) }
         else -> Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            // COPY-11: an empty section is never claimed as "nothing waiting" when every
+            // source failed to answer at all (vault `80` §6.2 I).
+            val nothingCouldBeChecked = incomplete && offers.isEmpty()
+            if (incomplete) MemberCard(stringResource(R.string.inbox_sources_incomplete), "")
             MemberInboxSection(
                 title = stringResource(R.string.inbox_section_at_home_title),
                 subtitle = stringResource(R.string.inbox_section_at_home_subtitle),
                 rows = offers.inboxRows("physical"),
-                empty = stringResource(R.string.inbox_empty_at_home),
+                empty = if (nothingCouldBeChecked) stringResource(R.string.could_not_be_checked) else stringResource(R.string.inbox_empty_at_home),
                 onSelect = onSelect,
             )
             MemberInboxSection(
                 title = stringResource(R.string.inbox_section_proposals_title),
                 subtitle = stringResource(R.string.inbox_section_proposals_subtitle),
                 rows = offers.inboxRows("digital"),
-                empty = stringResource(R.string.inbox_empty_proposals),
+                empty = if (nothingCouldBeChecked) stringResource(R.string.could_not_be_checked) else stringResource(R.string.inbox_empty_proposals),
                 onSelect = onSelect,
             )
-            if (offers.isEmpty()) MemberCard(stringResource(R.string.inbox_no_sources), "")
+            if (offers.isEmpty() && !incomplete) MemberCard(stringResource(R.string.inbox_no_sources), "")
         }
     }
 }
@@ -1324,95 +1413,401 @@ private fun MemberOfferDetailCard(
             when {
                 failed -> { Text("Offer unavailable", style = MaterialTheme.typography.titleLarge); Text("This offer could not be loaded.") }
                 detail == null -> { Text("Loading offer…", style = MaterialTheme.typography.titleLarge) }
-                else -> {
-                    Text(
-                        stringResource(if (detail.binding == "digital") R.string.inbox_row_proposal_generic else R.string.inbox_row_box_generic),
-                        style = MaterialTheme.typography.titleLarge,
-                    )
-                    detail.candidates.forEach { candidate ->
-                        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                            Text(candidate.title, fontWeight = FontWeight.SemiBold)
-                            Text("${candidate.quantity} × " + MemberFormat.money(candidate.unitPrice))
-                            Text(stringResource(R.string.label_sold_by, candidate.merchant), style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                            Text(stringResource(R.string.label_made_by, candidate.maker), style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                            candidate.givenBy?.let { Text(stringResource(R.string.label_gift_from, it), style = MaterialTheme.typography.bodySmall, color = Color.Gray) }
-                        }
+                detail.binding == "physical" -> MemberBoxDetail(detail, review, reviewFailed, session, onPrepareStatement, onApproveStatement, onRecorded)
+                else -> MemberProposalDetail(detail, review, reviewFailed, session, onPrepareDecision, onApproveDecision, onRecorded)
+            }
+        }
+    }
+}
+
+/** A digital proposal (`22` UX-03). Ported from ios/AtarasyPrototype/MemberOfferScreen.swift's `MemberProposalView`. */
+@Composable
+private fun MemberProposalDetail(
+    detail: MemberOfferDetail,
+    review: MemberReview?,
+    reviewFailed: Boolean,
+    session: MemberSessionInfo?,
+    onPrepareDecision: suspend (MemberSessionInfo, MemberOfferDetail, MemberApproval, Map<String, MemberDigitalChoice>) -> MemberDecisionReview,
+    onApproveDecision: suspend (MemberDecisionReview) -> MemberDecisionActionResult,
+    onRecorded: () -> Unit,
+) {
+    Text(MemberFormat.sellers(detail.candidates.map { it.merchant }), style = MaterialTheme.typography.titleLarge)
+    detail.candidates.forEach { candidate ->
+        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(candidate.title, fontWeight = FontWeight.SemiBold)
+            Text("${candidate.quantity} × " + MemberFormat.money(candidate.unitPrice))
+            Text(stringResource(R.string.label_sold_by, candidate.merchant), style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+            Text(stringResource(R.string.label_made_by, candidate.maker), style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+            candidate.givenBy?.let { Text(stringResource(R.string.label_gift_from, it), style = MaterialTheme.typography.bodySmall, color = Color.Gray) }
+            // Once the proposal has closed, each line says what became of it in the member's
+            // own words rather than a raw protocol state (`MemberLineStatus.resolved`).
+            if (detail.state != "presented") Text(memberDigitalResolvedStatus(candidate.valence), style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+        }
+    }
+    MemberTermsSection(detail.disclosures, collapsed = true)
+    when {
+        reviewFailed -> Text("The decision review is unavailable.")
+        review == null -> Text("Loading decision review…")
+        review is MemberReview.Approval -> {
+            Text(stringResource(R.string.why_this_and_why_not), style = MaterialTheme.typography.titleMedium)
+            review.value.candidates.forEach { candidate ->
+                Text(candidate.argumentAgainst)
+                candidate.alternatives.forEach { Text("• $it") }
+                if (candidate.isExploration) Text(stringResource(R.string.label_new_to_you), style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+            }
+            Text(review.value.carriage?.let { stringResource(R.string.label_delivery) + ": " + MemberFormat.money(it) } ?: stringResource(R.string.label_delivery_unknown))
+            if (session != null && detail.state == "presented") MemberDigitalDecisionControls(session, detail, review.value, onPrepareDecision, onApproveDecision, onRecorded)
+        }
+        else -> {}
+    }
+}
+
+/**
+ * A box in the home (`22` UX-04, UX-05). Ported from
+ * ios/AtarasyPrototype/MemberBoxScreen.swift at 34cde26: the collection records what
+ * happened to each line, the member confirms that record or says a line is wrong, and
+ * never picks "used" themselves (§11.2).
+ */
+@Composable
+private fun MemberBoxDetail(
+    detail: MemberOfferDetail,
+    review: MemberReview?,
+    reviewFailed: Boolean,
+    session: MemberSessionInfo?,
+    onPrepareStatement: suspend (MemberSessionInfo, MemberOfferDetail, MemberStatement, List<String>) -> MemberStatementReview,
+    onApproveStatement: suspend (MemberStatementReview) -> MemberStatementActionResult,
+    onRecorded: () -> Unit,
+) {
+    Text(MemberFormat.sellers(detail.candidates.map { it.merchant }), style = MaterialTheme.typography.titleLarge)
+    if (detail.state == "presented") {
+        Text(stringResource(R.string.status_next_swap, MemberFormat.day(detail.expiresAt)), style = MaterialTheme.typography.bodyMedium)
+        Text(stringResource(R.string.box_at_home_note), style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+    } else {
+        // §2.2b, §10a.5: the date is on the screen, and it is not the member's deadline.
+        Text(stringResource(R.string.box_offered_until, MemberFormat.day(detail.expiresAt)), style = MaterialTheme.typography.bodyMedium)
+        Text(stringResource(R.string.box_collected_note), style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+    }
+    when {
+        // A box the collection has not reached yet has no statement; its contents still show.
+        reviewFailed -> MemberBoxContents(detail)
+        review == null -> Text("Loading…")
+        review is MemberReview.Statement -> {
+            if (session != null) MemberBoxStatement(detail, review.value, session, onPrepareStatement, onApproveStatement, onRecorded)
+            else MemberBoxContents(detail)
+        }
+        review is MemberReview.Settlement -> MemberBoxSettled(review.value, review.corrections, review.disclosures)
+        else -> {}
+    }
+}
+
+/** The box's lines from the offer itself, for a box the collection has not finished with. */
+@Composable
+private fun MemberBoxContents(detail: MemberOfferDetail) {
+    Text(stringResource(R.string.box_in_the_box_title), style = MaterialTheme.typography.titleMedium)
+    detail.candidates.forEach { candidate ->
+        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                Text(candidate.title)
+                Text(if (candidate.givenBy == null) MemberFormat.money(MemberFormat.lineTotal(candidate.unitPrice, candidate.quantity)) else stringResource(R.string.box_free), color = Color.Gray)
+            }
+            candidate.givenBy?.let { Text(stringResource(R.string.label_gift_from, it), style = MaterialTheme.typography.bodySmall, color = Color.Gray) }
+            Text(memberLineStatusWord(candidate.valence, candidate.collectedAs, detail.collectedAsSupplied), style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+        }
+    }
+    Text(stringResource(R.string.box_prices_note), style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+}
+
+/** Question 3, 48: what a `lost` line says, and the box's other line-status words. */
+@Composable
+private fun memberLineStatusWord(valence: String, collectedAs: String?, collectedAsSupplied: Boolean): String {
+    if (valence == "lost") return memberLostOutcome(collectedAs, collectedAsSupplied)
+    return stringResource(
+        when (valence) {
+            "offered" -> R.string.line_status_with_you_not_collected
+            "returned" -> R.string.line_status_went_back
+            "consumed" -> R.string.line_status_used
+            "kept" -> R.string.line_status_kept
+            "defaulted" -> R.string.line_status_defaulted
+            else -> R.string.line_status_with_you
+        },
+    )
+}
+
+/** A digital line once its proposal has closed (`MemberLineStatus.resolved`). */
+@Composable
+private fun memberDigitalResolvedStatus(valence: String): String = stringResource(
+    when (valence) {
+        "kept" -> R.string.line_status_kept
+        "returned" -> R.string.line_status_declined
+        "consumed" -> R.string.line_status_used
+        "defaulted" -> R.string.line_status_defaulted
+        else -> R.string.line_status_waiting
+    },
+)
+
+@Composable
+private fun memberLostOutcome(collectedAs: String?, supplied: Boolean): String = when {
+    supplied && collectedAs == "missing" -> stringResource(R.string.lost_outcome_missing)
+    supplied && collectedAs == null -> stringResource(R.string.lost_outcome_deadline)
+    else -> stringResource(R.string.lost_outcome_unknown)
+}
+
+/**
+ * The proposed statement, grouped by what the collection recorded (Used / Kept / Not found
+ * in the box). Only a line recorded as used or missing can be marked, and a gift is free
+ * whatever the collection recorded, so there is nothing on it to dispute.
+ */
+@Composable
+private fun MemberBoxStatement(
+    detail: MemberOfferDetail,
+    statement: MemberStatement,
+    session: MemberSessionInfo,
+    onPrepare: suspend (MemberSessionInfo, MemberOfferDetail, MemberStatement, List<String>) -> MemberStatementReview,
+    onApprove: suspend (MemberStatementReview) -> MemberStatementActionResult,
+    onRecorded: () -> Unit,
+) {
+    var disputed by remember(detail.id) { mutableStateOf<Set<String>>(emptySet()) }
+    var frozen by remember(detail.id) { mutableStateOf<MemberStatementReview?>(null) }
+    var busy by remember(detail.id) { mutableStateOf(false) }
+    var notice by remember(detail.id) { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
+    // Read once per composition: never call stringResource() from inside a launched coroutine.
+    val disputeConsumedText = stringResource(R.string.action_dispute)
+    val disputeMissingText = stringResource(R.string.dispute_missing)
+    val disputedText = stringResource(R.string.action_disputed)
+    val notPreparedText = "The statement could not be prepared. Refresh the offer before trying again."
+    val recordedText = stringResource(R.string.notice_statement_recorded)
+    val cancelledText = stringResource(R.string.notice_signing_cancelled)
+    val noCredentialText = stringResource(R.string.notice_no_credential)
+    val unresolvedText = stringResource(R.string.notice_unresolved)
+    val checkRecordsText = "Check your records before another action."
+
+    val holdsNextBox = statement.lines.any { it.valence == "consumed" } ||
+        (statement.lines.any { it.valence == "lost" } && statement.lines.any { it.valence == "kept" || it.valence == "defaulted" })
+    if (frozen == null && holdsNextBox) MemberCard(stringResource(R.string.box_unsigned_hold), "")
+
+    val activeStatement = frozen?.local?.statement ?: statement
+    val activeDisputed = frozen?.local?.disputed?.toSet() ?: disputed
+    MemberStatementGroup(
+        stringResource(R.string.box_used), stringResource(R.string.statement_used_note),
+        activeStatement.lines.filter { it.valence == "consumed" }, activeDisputed, frozen == null,
+        disputable = { it.givenBy == null }, disputeLabel = disputeConsumedText, disputedLabel = disputedText,
+        onToggle = { id -> disputed = if (id in disputed) disputed - id else disputed + id },
+    )
+    MemberStatementGroup(
+        stringResource(R.string.box_kept), stringResource(R.string.statement_kept_note),
+        activeStatement.lines.filter { it.valence == "kept" || it.valence == "defaulted" }, activeDisputed, editable = false,
+        disputable = { false }, disputeLabel = "", disputedLabel = "", onToggle = {},
+    )
+    MemberStatementGroup(
+        stringResource(R.string.box_missing), stringResource(R.string.statement_missing_note),
+        activeStatement.lines.filter { it.valence == "lost" }, activeDisputed, frozen == null,
+        disputable = { true }, disputeLabel = disputeMissingText, disputedLabel = disputedText,
+        onToggle = { id -> disputed = if (id in disputed) disputed - id else disputed + id },
+    )
+
+    if (frozen == null) {
+        val goodsLive = statement.lines.filter { it.valence != "lost" && it.candidate !in disputed }.sumOf { it.amount }
+        MemberCard(stringResource(R.string.label_goods), "") {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                MemberAmountRow(stringResource(R.string.label_goods), MemberFormat.money(goodsLive))
+                if (statement.carriage != null) {
+                    MemberAmountRow(stringResource(R.string.label_delivery), MemberFormat.money(statement.carriage))
+                    MemberAmountRow(stringResource(R.string.label_goods_and_delivery), MemberFormat.money(goodsLive + statement.carriage), emphasised = true)
+                } else {
+                    Text(stringResource(R.string.statement_not_ready_note), style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                }
+                if (disputed.isNotEmpty()) Text(stringResource(R.string.notice_disputed_lines_note), style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+            }
+        }
+        Button(enabled = !busy && statement.carriage != null, onClick = {
+            busy = true; notice = ""; scope.launch {
+                try { frozen = onPrepare(session, detail, statement, disputed.sorted()); notice = "" }
+                catch (_: Exception) { notice = notPreparedText }
+                busy = false
+            }
+        }) { Text(if (busy) stringResource(R.string.label_preparing) else stringResource(R.string.box_review_and_sign)) }
+    } else {
+        val value = frozen!!
+        Text(stringResource(R.string.sign_this_statement_title), style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.statement_signing_confirms, MemberFormat.sellers(activeStatement.lines.map { it.merchant })), style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+        MemberCard(stringResource(R.string.label_goods), "") {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                MemberAmountRow(stringResource(R.string.label_goods), MemberFormat.money(value.local.goodsCharged))
+                MemberAmountRow(stringResource(R.string.label_delivery), MemberFormat.money(value.local.carriage))
+                MemberAmountRow(stringResource(R.string.label_goods_and_delivery), MemberFormat.money(value.local.goodsCharged + value.local.carriage), emphasised = true)
+                if (value.local.disputedGoods > 0) MemberAmountRow(stringResource(R.string.marked_not_right_not_charged), MemberFormat.money(value.local.disputedGoods))
+            }
+        }
+        MemberTermsSection(activeStatement.disclosures, collapsed = false)
+        if (activeStatement.lines.any { it.valence == "lost" }) {
+            Text(stringResource(R.string.missing_attestation), style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+        }
+        if (notice.isNotEmpty()) Text(notice)
+        Button(enabled = !busy, onClick = {
+            busy = true; notice = ""; scope.launch {
+                when (val result = onApprove(value)) {
+                    is MemberStatementActionResult.Outcome -> when (result.value) {
+                        is MemberStatementOutcome.Committed -> { notice = recordedText; onRecorded() }
+                        is MemberStatementOutcome.SettledElsewhere -> { frozen = null; notice = "This box was settled by another confirmation. Check your records." }
+                        is MemberStatementOutcome.Pending -> { frozen = null; notice = checkRecordsText }
+                        MemberStatementOutcome.Unresolved -> { frozen = null; notice = unresolvedText }
                     }
-                    detail.disclosures.forEach { block ->
-                        block.items.forEach { item ->
-                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                Text(item.label, fontWeight = FontWeight.SemiBold)
-                                Text(item.value)
-                            }
-                        }
-                        // Question 72. Beside this block's own terms, and only where
-                        // this merchant signed one. Tapping is the household's own
-                        // act; nothing here sends anything on its behalf.
-                        block.contact?.let { ContactLink(it) }
+                    MemberStatementActionResult.Cancelled -> notice = cancelledText
+                    MemberStatementActionResult.NoCredential -> notice = noCredentialText
+                    is MemberStatementActionResult.Failed -> { frozen = null; notice = checkRecordsText }
+                }
+                busy = false
+            }
+        }) { Text(if (busy) stringResource(R.string.label_signing) else stringResource(R.string.action_sign_with_passkey)) }
+    }
+    if (frozen == null && notice.isNotEmpty()) Text(notice)
+}
+
+@Composable
+private fun MemberStatementGroup(
+    title: String,
+    note: String,
+    lines: List<MemberStatementLine>,
+    disputedSet: Set<String>,
+    editable: Boolean,
+    disputable: (MemberStatementLine) -> Boolean,
+    disputeLabel: String,
+    disputedLabel: String,
+    onToggle: (String) -> Unit,
+) {
+    if (lines.isEmpty()) return
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            Text(note, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+            lines.forEach { line ->
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                        Text(line.title)
+                        Text(
+                            when { line.valence == "lost" -> stringResource(R.string.amount_not_charged); line.givenBy != null -> stringResource(R.string.box_free); else -> MemberFormat.money(line.amount) },
+                            color = Color.Gray,
+                        )
                     }
-                    when {
-                        reviewFailed -> Text("The decision review is unavailable.")
-                        review == null -> Text("Loading decision review…")
-                        review is MemberReview.Approval -> {
-                            Text(stringResource(R.string.why_this_and_why_not), style = MaterialTheme.typography.titleMedium)
-                            review.value.candidates.forEach { candidate ->
-                                Text(candidate.argumentAgainst)
-                                candidate.alternatives.forEach { Text("• $it") }
-                                if (candidate.isExploration) Text(stringResource(R.string.label_new_to_you), style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-                            }
-                            Text(review.value.carriage?.let { stringResource(R.string.label_delivery) + ": " + MemberFormat.money(it) } ?: stringResource(R.string.label_delivery_unknown))
-                            if (session != null && detail.state == "presented") MemberDigitalDecisionControls(session, detail, review.value, onPrepareDecision, onApproveDecision, onRecorded)
-                        }
-                        review is MemberReview.Statement -> {
-                            Text(stringResource(R.string.statement_title), style = MaterialTheme.typography.titleMedium)
-                            review.value.lines.forEach { line ->
-                                Text(line.title + ": " + (if (line.givenBy != null) stringResource(R.string.label_gift_from, line.givenBy) else MemberFormat.money(line.amount)))
-                            }
-                            Text(review.value.carriage?.let { stringResource(R.string.label_delivery) + ": " + MemberFormat.money(it) } ?: stringResource(R.string.label_delivery_unknown))
-                            if (session != null && detail.state in setOf("decided", "expired")) MemberStatementControls(session, detail, review.value, onPrepareStatement, onApproveStatement, onRecorded)
-                        }
-                        review is MemberReview.Settlement -> {
-                            Text(stringResource(R.string.settled_title), style = MaterialTheme.typography.titleMedium)
-                            Text(stringResource(R.string.label_total) + ": " + MemberFormat.money(review.value.charged))
-                            if (review.value.disputedAmount > 0) Text(stringResource(R.string.action_disputed) + ": " + MemberFormat.money(review.value.disputedAmount))
-                            Text("This settlement is signed and is never rewritten.")
-                            // §6.6, question 70. A correction only ever lowers what was
-                            // signed, appended beside it. Nothing here is the household's
-                            // to sign or dispute (clause 54): no refund request, no
-                            // dispute control, no messaging.
-                            review.corrections?.corrections?.takeIf { it.isNotEmpty() }?.let { rows ->
-                                Text("Corrections", style = MaterialTheme.typography.titleMedium)
-                                Text("The merchant of record has appended these to the settlement above.")
-                                rows.forEach { correction ->
-                                    Text("${if (correction.kind == "refund") "Refund" else "Collection"} from ${correction.merchant}: -${correction.amount}")
-                                    // The merchant's own words, as plain text and never as markup.
-                                    Text(correction.note)
-                                }
-                                Text("Net after corrections: ${review.corrections.net}")
-                            }
-                            // SPEC §6.6a. A refund the issuer returned, or the shop's own
-                            // repayment. This platform moved no money either time and
-                            // moves none now: the shop reaches the household by its own
-                            // signed contact, or, where it signed none, by the return
-                            // terms already beside its disclosure. Nothing here is sent
-                            // to the merchant, and there is no refund action (clause 54).
-                            review.corrections?.returns?.takeIf { it.isNotEmpty() }?.let { rows ->
-                                Text("Returns", style = MaterialTheme.typography.titleMedium)
-                                rows.forEach { ret ->
-                                    if (ret.state == "returned") {
-                                        Text("The refund from ${ret.merchant} did not reach you. The shop still owes it to you, off this platform.")
-                                    } else {
-                                        Text("${ret.merchant} reports it repaid this another way.")
-                                    }
-                                    Text(ret.note)
-                                    MerchantContactOrTerms(review.disclosures, ret.merchant)
-                                }
-                            }
+                    Text(stringResource(R.string.label_sold_by, line.merchant), style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                    if (line.maker != line.merchant) Text(stringResource(R.string.label_made_by, line.maker), style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                    line.givenBy?.let { Text(stringResource(R.string.label_gift_from, it), style = MaterialTheme.typography.bodySmall, color = Color.Gray) }
+                    line.note?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Color.Gray) }
+                    if (editable && disputable(line)) {
+                        TextButton(onClick = { onToggle(line.candidate) }) {
+                            Text(if (line.candidate in disputedSet) "$disputedLabel: ${line.title}" else disputeLabel)
                         }
                     }
                 }
             }
         }
+    }
+}
+
+/** A settled box. The signed settlement is never rewritten; a correction is appended
+ * beside it (§6.6) and a returned refund is the shop's to repay off this platform (§6.6a). */
+@Composable
+private fun MemberBoxSettled(settlement: ProtocolSettlement, corrections: MemberCorrections?, disclosures: List<MemberDisclosure>) {
+    Text(stringResource(R.string.settled_on, MemberFormat.day(settlement.settledAt)), style = MaterialTheme.typography.titleMedium)
+    Text(stringResource(R.string.nothing_left_to_sign_box), style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+    MemberCard(stringResource(R.string.settled_goods_charged), "") {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            settlement.lines.forEach { line ->
+                Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                    Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                        Text(line.title)
+                        Text(if (line.valence == "lost") stringResource(R.string.amount_not_charged) else MemberFormat.money(line.amount), color = Color.Gray)
+                    }
+                    Text(memberLineStatusWord(line.valence, null, false), style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                    if (line.disputed) {
+                        Text(
+                            if (line.valence == "lost") stringResource(R.string.said_in_box_note) else stringResource(R.string.marked_not_right_here_note),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+            }
+            MemberAmountRow(stringResource(R.string.settled_goods_charged), MemberFormat.money(settlement.charged), emphasised = true)
+            if (settlement.disputedAmount > 0) MemberAmountRow(stringResource(R.string.marked_not_right_not_charged), MemberFormat.money(settlement.disputedAmount))
+            Text(stringResource(R.string.payment_status_unavailable), style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+        }
+    }
+    corrections?.corrections?.takeIf { it.isNotEmpty() }?.let { rows ->
+        MemberCard(stringResource(R.string.corrections_from_shop), stringResource(R.string.corrections_added_note)) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                rows.forEach { correction ->
+                    Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                        Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                            Text(stringResource(if (correction.kind == "refund") R.string.refund_from else R.string.correction_from, correction.merchant))
+                            Text("−" + MemberFormat.money(correction.amount), color = Color.Gray)
+                        }
+                        // The merchant's own words, as plain text and never as markup.
+                        Text(correction.note, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                    }
+                }
+                MemberAmountRow(stringResource(R.string.after_corrections), MemberFormat.money(corrections.net), emphasised = true)
+            }
+        }
+    }
+    // SPEC §6.6a. A refund the issuer returned, or the shop's own repayment. This platform
+    // moved no money either time and moves none now: the shop reaches the household by its
+    // own signed contact, or, where it signed none, by the return terms already beside its
+    // disclosure. Nothing here is sent to the merchant, and there is no refund action.
+    corrections?.returns?.takeIf { it.isNotEmpty() }?.let { rows ->
+        rows.forEach { ret ->
+            Text(
+                if (ret.state == "returned") "The refund from ${ret.merchant} did not reach you. The shop still owes it to you, off this platform." else "${ret.merchant} reports it repaid this another way.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(ret.note, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+            MerchantContactOrTerms(disclosures, ret.merchant)
+        }
+    }
+    MemberTermsSection(disclosures, collapsed = true)
+}
+
+/**
+ * `SPEC.md` §10a. Each merchant's signed text, as composed: never summarised, reordered or
+ * translated. Collapsed per merchant while browsing, drawn open on a signing screen
+ * (vault `80` D-7). Ported from ios/AtarasyPrototype/MemberOfferScreen.swift's `MemberTermsSection`.
+ */
+@Composable
+private fun MemberTermsSection(blocks: List<MemberDisclosure>, collapsed: Boolean) {
+    if (blocks.isEmpty()) return
+    val merchants = remember(blocks) { blocks.map { it.merchant }.distinct() }
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(stringResource(R.string.shop_terms_title), style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.shop_terms_subtitle), style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+        merchants.forEach { merchant ->
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (collapsed) {
+                        var expanded by rememberSaveable(merchant) { mutableStateOf(false) }
+                        TextButton(onClick = { expanded = !expanded }) { Text(stringResource(R.string.terms_from, merchant)) }
+                        if (expanded) MemberTermsBlocks(blocks.filter { it.merchant == merchant })
+                    } else {
+                        Text(stringResource(R.string.terms_from, merchant), fontWeight = FontWeight.SemiBold)
+                        MemberTermsBlocks(blocks.filter { it.merchant == merchant })
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MemberTermsBlocks(blocks: List<MemberDisclosure>) {
+    blocks.forEach { block ->
+        block.product?.let { Text(stringResource(R.string.for_product_only, it), style = MaterialTheme.typography.labelSmall, color = Color.Gray) }
+        block.items.forEach { item ->
+            Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                Text(item.label, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                Text(item.value, style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+        // Question 72. Only where this merchant signed one; tapping is the member's own act.
+        block.contact?.let { ContactLink(it) }
     }
 }
 
@@ -1465,71 +1860,6 @@ private fun MerchantContactOrTerms(blocks: List<MemberDisclosure>, merchant: Str
 }
 
 @Composable
-private fun MemberStatementControls(
-    session: MemberSessionInfo,
-    detail: MemberOfferDetail,
-    statement: MemberStatement,
-    onPrepare: suspend (MemberSessionInfo, MemberOfferDetail, MemberStatement, List<String>) -> MemberStatementReview,
-    onApprove: suspend (MemberStatementReview) -> MemberStatementActionResult,
-    onRecorded: () -> Unit,
-) {
-    var disputed by remember(detail.id) { mutableStateOf<Set<String>>(emptySet()) }
-    var frozen by remember(detail.id) { mutableStateOf<MemberStatementReview?>(null) }
-    var busy by remember(detail.id) { mutableStateOf(false) }
-    var notice by remember(detail.id) { mutableStateOf("") }
-    val scope = rememberCoroutineScope()
-    // Read once per composition: never call stringResource() from inside a launched coroutine.
-    val disputeText = stringResource(R.string.action_dispute)
-    val disputedText = stringResource(R.string.action_disputed)
-    val deliveryText = stringResource(R.string.label_delivery)
-    val notPreparedText = "The statement could not be prepared. Refresh the offer before trying again."
-    val recordedText = stringResource(R.string.notice_statement_recorded)
-    val cancelledText = stringResource(R.string.notice_signing_cancelled)
-    val noCredentialText = stringResource(R.string.notice_no_credential)
-    val unresolvedText = stringResource(R.string.notice_unresolved)
-    val checkRecordsText = "Check your records before another action."
-    statement.lines.filter { it.valence in setOf("consumed", "lost") }.forEach { line ->
-        TextButton(enabled = !busy && frozen == null, onClick = { disputed = if (line.candidate in disputed) disputed - line.candidate else disputed + line.candidate }) {
-            Text((if (line.candidate in disputed) disputedText else disputeText) + ": " + line.title)
-        }
-    }
-    if (frozen == null) {
-        Button(enabled = !busy && statement.carriage != null, onClick = {
-            busy = true; notice = ""; scope.launch {
-                try { frozen = onPrepare(session, detail, statement, disputed.sorted()); notice = "" }
-                catch (_: Exception) { notice = notPreparedText }
-                busy = false
-            }
-        }) { Text(if (busy) stringResource(R.string.label_preparing) else stringResource(R.string.action_review_statement)) }
-    } else {
-        val value = frozen!!
-        Text(
-            MemberFormat.money(value.local.goodsCharged) +
-                (if (value.local.disputedGoods > 0) " · $disputedText " + MemberFormat.money(value.local.disputedGoods) else "") +
-                " · $deliveryText " + MemberFormat.money(value.local.carriage),
-            fontWeight = FontWeight.SemiBold,
-        )
-        Button(enabled = !busy, onClick = {
-            busy = true; notice = ""; scope.launch {
-                when (val result = onApprove(value)) {
-                    is MemberStatementActionResult.Outcome -> when (result.value) {
-                        is MemberStatementOutcome.Committed -> { notice = recordedText; onRecorded() }
-                        is MemberStatementOutcome.SettledElsewhere -> { frozen = null; notice = "This box was settled by another confirmation. Check your records." }
-                        is MemberStatementOutcome.Pending -> { frozen = null; notice = checkRecordsText }
-                        MemberStatementOutcome.Unresolved -> { frozen = null; notice = unresolvedText }
-                    }
-                    MemberStatementActionResult.Cancelled -> notice = cancelledText
-                    MemberStatementActionResult.NoCredential -> notice = noCredentialText
-                    is MemberStatementActionResult.Failed -> { frozen = null; notice = checkRecordsText }
-                }
-                busy = false
-            }
-        }) { Text(if (busy) stringResource(R.string.label_signing) else stringResource(R.string.action_sign_statement)) }
-    }
-    if (notice.isNotEmpty()) Text(notice)
-}
-
-@Composable
 private fun MemberDigitalDecisionControls(
     session: MemberSessionInfo,
     detail: MemberOfferDetail,
@@ -1565,6 +1895,8 @@ private fun MemberDigitalDecisionControls(
     }
     val complete = approval.candidates.isNotEmpty() && approval.candidates.all { choices[it.id] in setOf(MemberDigitalChoice.KEEP, MemberDigitalChoice.DECLINE) }
     if (frozen == null) {
+        // `04b` §2.2c: the loss must be visible. Nothing is sent by choosing; only by signing.
+        Text(stringResource(R.string.notice_choices_not_sent), style = MaterialTheme.typography.bodySmall, color = Color.Gray)
         Button(enabled = !busy && complete && approval.carriage != null, onClick = {
             busy = true; notice = ""
             scope.launch {
@@ -1579,6 +1911,7 @@ private fun MemberDigitalDecisionControls(
             MemberFormat.money(value.frozen.goods) + " · $deliveryText " + MemberFormat.money(value.frozen.carriage) + " · $totalText " + MemberFormat.money(value.frozen.total),
             fontWeight = FontWeight.SemiBold,
         )
+        MemberTermsSection(value.frozen.approval.disclosures, collapsed = false)
         Button(enabled = !busy, onClick = {
             busy = true; notice = ""
             scope.launch {
@@ -1599,6 +1932,15 @@ private fun MemberDigitalDecisionControls(
     if (notice.isNotEmpty()) Text(notice)
 }
 
+/** A row of label and amount, ported from iOS's `MemberAmountRow`. */
+@Composable
+private fun MemberAmountRow(label: String, amount: String, emphasised: Boolean = false) {
+    Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+        Text(label, fontWeight = if (emphasised) FontWeight.Bold else FontWeight.Normal)
+        Text(amount, fontWeight = if (emphasised) FontWeight.Bold else FontWeight.Normal)
+    }
+}
+
 @Composable
 private fun MemberCard(title: String, detail: String, content: @Composable (() -> Unit)? = null) {
     Card(modifier = Modifier.fillMaxWidth()) {
@@ -1608,4 +1950,16 @@ private fun MemberCard(title: String, detail: String, content: @Composable (() -
             content?.invoke()
         }
     }
+}
+
+/** The mandate editor's end date, as a calendar picker rather than a raw epoch text field. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MemberDatePickerDialog(initialMillis: Long, onDismiss: () -> Unit, onConfirm: (Long) -> Unit) {
+    val state = rememberDatePickerState(initialSelectedDateMillis = initialMillis)
+    DatePickerDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { TextButton(onClick = { state.selectedDateMillis?.let(onConfirm) ?: onDismiss() }) { Text(stringResource(android.R.string.ok)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(android.R.string.cancel)) } },
+    ) { DatePicker(state = state) }
 }
