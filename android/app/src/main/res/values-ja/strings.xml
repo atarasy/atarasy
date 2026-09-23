@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Atarasy</string>
+
+    <string name="tab_inbox">届いたもの</string>
+    <string name="tab_limits">見守り設定</string>
+    <string name="tab_account">アカウント</string>
+
+    <!-- Inbox -->
+    <string name="inbox_section_at_home_title">お手元の箱</string>
+    <string name="inbox_section_at_home_subtitle">ご自宅に届いている箱です。気になるものを使い、使った分だけお支払いください。</string>
+    <string name="inbox_section_proposals_title">ご提案</string>
+    <string name="inbox_section_proposals_subtitle">選んで署名しない限り、何も買いません。</string>
+    <string name="inbox_empty_at_home">お手元に箱はありません。</string>
+    <string name="inbox_empty_proposals">ご提案はありません。</string>
+    <string name="inbox_sources_incomplete">確認できなかったショップがあります。一覧がすべてではない可能性があります。</string>
+    <string name="inbox_no_sources">このアカウントにつながっているショップはまだありません。</string>
+    <string name="inbox_row_and_more">%1$s ほか %2$d 点</string>
+    <string name="inbox_row_box_generic">お届け箱</string>
+    <string name="inbox_row_proposal_generic">ご提案</string>
+    <string name="inbox_loading">ショップを確認しています</string>
+    <string name="inbox_refresh">更新</string>
+
+    <!-- Row status lines -->
+    <string name="status_next_swap">次の入れ替え %1$s</string>
+    <string name="status_at_home">お手元の箱</string>
+    <string name="status_statement_ready">明細を確認できます</string>
+    <string name="status_statement_ready_holds_next">明細を確認すると次の箱が届きます</string>
+    <string name="status_box_closed_settled">精算済み</string>
+    <string name="status_box_closed_not_settled">終了（お支払いなし）</string>
+    <string name="status_proposal_closes">%1$s に締め切り。何もしなければ何も買いません。</string>
+    <string name="status_proposal_waiting">選択を待っています</string>
+    <string name="status_proposal_decided">決定済み</string>
+    <string name="status_proposal_closed">締め切り済み</string>
+
+    <!-- Proposal / offer detail -->
+    <string name="label_sold_by">販売: %1$s</string>
+    <string name="label_made_by">メーカー・生産者: %1$s</string>
+    <string name="label_gift_from">%1$s からの贈り物</string>
+    <string name="action_keep">受け取る</string>
+    <string name="action_decline">見送る</string>
+    <string name="action_keeping">受け取ります</string>
+    <string name="action_declining">見送ります</string>
+    <string name="label_delivery">送料</string>
+    <string name="label_delivery_unknown">送料はまだわかりません。</string>
+    <string name="label_total">合計</string>
+    <string name="why_this_and_why_not">この品目を勧める理由と、選ばない理由</string>
+    <string name="label_new_to_you">はじめての品</string>
+    <string name="terms_from">%1$s の規約</string>
+    <string name="action_review">確認へ進む</string>
+    <string name="action_sign_with_passkey">パスキーで署名</string>
+    <string name="label_preparing">準備しています…</string>
+    <string name="label_signing">署名しています…</string>
+    <string name="notice_signing_cancelled">署名を取り消しました。何も送信していません。</string>
+    <string name="notice_no_credential">必要なパスキーが利用できません。</string>
+    <string name="notice_choices_not_sent">署名するまで、選んだ内容は送信されません。</string>
+    <string name="notice_decision_recorded">決定を記録しました</string>
+    <string name="notice_unresolved">結果を確認できませんでした。記録を確認し、もう一度送信しないでください。</string>
+
+    <!-- Box / statement -->
+    <string name="box_used">使ったもの</string>
+    <string name="box_missing">箱に見当たらなかったもの</string>
+    <string name="box_kept">手元に残したもの</string>
+    <string name="statement_title">ご利用明細</string>
+    <string name="action_review_statement">明細を確認へ進む</string>
+    <string name="action_sign_statement">明細に署名して送信</string>
+    <string name="action_dispute">内容が違う</string>
+    <string name="action_disputed">内容が違うと報告済み</string>
+    <string name="notice_statement_recorded">明細を記録しました。</string>
+    <string name="settled_title">精算済み</string>
+
+    <!-- Limits -->
+    <string name="limits_intro">あなたの代わりに買うときの範囲です。この範囲の外で何かを買うことはありません。ゆるめるには、ここで指定した人の同意が必要です。</string>
+    <string name="limits_daily_sentence">1 日 %1$s まで</string>
+    <string name="limits_out_of_network_sentence">登録外のお店では %1$s まで</string>
+    <string name="limits_cooling_sentence">%1$s 取り消せる</string>
+    <string name="limits_no_cooling">取り消せる期間なし</string>
+    <string name="limits_no_cosigners">ゆるめるときにほかの人の同意は不要</string>
+    <string name="limits_cosigners_sentence">ゆるめるには %1$d 人の同意が必要</string>
+    <string name="limits_ends_sentence">%1$s まで有効</string>
+    <string name="limits_edit_button">この設定を変える</string>
+    <string name="limits_pending_changes_title">署名待ちの変更</string>
+    <string name="limits_no_pending">保留中・過去の変更はありません。</string>
+    <string name="limits_no_limits">このアカウントの見守り設定はまだありません。</string>
+    <string name="limits_your_limits">見守り設定</string>
+    <string name="limits_signature_review">署名の確認</string>
+    <string name="limits_sign_proposal">確定した変更案に署名</string>
+    <string name="limits_review_proposal">確定した変更案を確認</string>
+
+    <!-- Account -->
+    <string name="account_signed_in_with_passkey">パスキーでサインイン中</string>
+    <string name="account_signed_in_until">%1$s まで</string>
+    <string name="account_my_records">記録</string>
+    <string name="account_sharing">情報の提供</string>
+    <string name="account_your_data">データ</string>
+    <string name="account_sign_out">サインアウト</string>
+    <string name="account_delete_account">アカウントを削除</string>
+    <string name="account_about_this_account">このアカウントについて</string>
+    <string name="account_reference_label">アカウント番号（サポート用）</string>
+    <string name="account_sign_in_with_passkey">パスキーでサインイン</string>
+    <string name="account_connect_device">この端末をつなぐ</string>
+    <string name="account_device_invitation">招待コード</string>
+    <string name="account_access_requests">アクセス依頼</string>
+    <string name="account_shared">共有している情報</string>
+    <string name="account_recovery">復旧</string>
+    <string name="account_move_host">別のホストへ移す</string>
+
+    <string name="signed_and_sent">署名して送信済み</string>
+    <string name="prepared_not_signed">準備のみ（署名していません）</string>
+</resources>

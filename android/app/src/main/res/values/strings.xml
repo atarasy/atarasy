@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Member-facing vocabulary (vault Atarasy 80 §6.3), the same English wording as
+  ios/AtarasyPrototype/Resources/en.lproj/Localizable.strings. A screen reaches these
+  through string resources rather than a literal so raw protocol words never sit on
+  the primary path (Inbox, a proposal, a box, Limits, Account).
+-->
+<resources>
+    <string name="app_name">Atarasy</string>
+
+    <string name="tab_inbox">Inbox</string>
+    <string name="tab_limits">Limits</string>
+    <string name="tab_account">Account</string>
+
+    <!-- Inbox -->
+    <string name="inbox_section_at_home_title">At home</string>
+    <string name="inbox_section_at_home_subtitle">Boxes delivered to you. Use what you like; you pay only for what you use.</string>
+    <string name="inbox_section_proposals_title">Proposals</string>
+    <string name="inbox_section_proposals_subtitle">Nothing is bought unless you choose it and sign.</string>
+    <string name="inbox_empty_at_home">No boxes at home.</string>
+    <string name="inbox_empty_proposals">No proposals here.</string>
+    <string name="inbox_sources_incomplete">Some shops could not be reached. This list may be incomplete.</string>
+    <string name="inbox_no_sources">No shops are connected to this account yet.</string>
+    <string name="inbox_row_and_more">%1$s and %2$d more</string>
+    <string name="inbox_row_box_generic">Box</string>
+    <string name="inbox_row_proposal_generic">Proposal</string>
+    <string name="inbox_loading">Checking your shops</string>
+    <string name="inbox_refresh">Refresh</string>
+
+    <!-- Row status lines -->
+    <string name="status_next_swap">Next swap %1$s</string>
+    <string name="status_at_home">At home</string>
+    <string name="status_statement_ready">Statement ready to confirm</string>
+    <string name="status_statement_ready_holds_next">Confirm the statement to receive the next box</string>
+    <string name="status_box_closed_settled">Settled</string>
+    <string name="status_box_closed_not_settled">Closed, nothing to pay</string>
+    <string name="status_proposal_closes">Closes %1$s. Nothing is bought if you do nothing.</string>
+    <string name="status_proposal_waiting">Waiting for your choice</string>
+    <string name="status_proposal_decided">You decided</string>
+    <string name="status_proposal_closed">Closed</string>
+
+    <!-- Proposal / offer detail -->
+    <string name="label_sold_by">Sold by %1$s</string>
+    <string name="label_made_by">Made by %1$s</string>
+    <string name="label_gift_from">Gift from %1$s</string>
+    <string name="action_keep">Keep</string>
+    <string name="action_decline">Decline</string>
+    <string name="action_keeping">Keeping</string>
+    <string name="action_declining">Declining</string>
+    <string name="label_delivery">Delivery</string>
+    <string name="label_delivery_unknown">Delivery amount is not known yet.</string>
+    <string name="label_total">Total</string>
+    <string name="why_this_and_why_not">Why this, and why not</string>
+    <string name="label_new_to_you">New to you</string>
+    <string name="terms_from">Terms from %1$s</string>
+    <string name="action_review">Review</string>
+    <string name="action_sign_with_passkey">Sign with passkey</string>
+    <string name="label_preparing">Preparing…</string>
+    <string name="label_signing">Signing…</string>
+    <string name="notice_signing_cancelled">Signing cancelled. Nothing was submitted.</string>
+    <string name="notice_no_credential">The required passkey is unavailable.</string>
+    <string name="notice_choices_not_sent">Your choices are not sent until you sign.</string>
+    <string name="notice_decision_recorded">Decision recorded</string>
+    <string name="notice_unresolved">The result is unresolved. Check your records; do not submit again.</string>
+
+    <!-- Box / statement -->
+    <string name="box_used">Used</string>
+    <string name="box_missing">Not found in the box</string>
+    <string name="box_kept">Kept</string>
+    <string name="statement_title">Statement</string>
+    <string name="action_review_statement">Review statement</string>
+    <string name="action_sign_statement">Sign and submit statement</string>
+    <string name="action_dispute">This isn\'t right</string>
+    <string name="action_disputed">Disputed</string>
+    <string name="notice_statement_recorded">Your statement was recorded.</string>
+    <string name="settled_title">Settled</string>
+
+    <!-- Limits -->
+    <string name="limits_intro">These are the limits your agent works within. Nothing outside them can be bought for you, and loosening them needs the people you name here.</string>
+    <string name="limits_daily_sentence">Up to %1$s a day</string>
+    <string name="limits_out_of_network_sentence">Up to %1$s at a shop outside your network</string>
+    <string name="limits_cooling_sentence">%1$s to undo</string>
+    <string name="limits_no_cooling">No time to undo</string>
+    <string name="limits_no_cosigners">Nobody else needs to agree to loosen these</string>
+    <string name="limits_cosigners_sentence">%1$d people must agree to loosen these</string>
+    <string name="limits_ends_sentence">Ends on %1$s</string>
+    <string name="limits_edit_button">Change these limits</string>
+    <string name="limits_pending_changes_title">Changes waiting for signatures</string>
+    <string name="limits_no_pending">No pending or historical changes.</string>
+    <string name="limits_no_limits">No limits are recorded for this account yet.</string>
+    <string name="limits_your_limits">Your limits</string>
+    <string name="limits_signature_review">Signature review</string>
+    <string name="limits_sign_proposal">Sign fixed proposal</string>
+    <string name="limits_review_proposal">Review fixed proposal</string>
+
+    <!-- Account -->
+    <string name="account_signed_in_with_passkey">Signed in with your passkey</string>
+    <string name="account_signed_in_until">Until %1$s</string>
+    <string name="account_my_records">My records</string>
+    <string name="account_sharing">Sharing</string>
+    <string name="account_your_data">Your data</string>
+    <string name="account_sign_out">Sign out</string>
+    <string name="account_delete_account">Delete account</string>
+    <string name="account_about_this_account">About this account</string>
+    <string name="account_reference_label">Account reference, for support</string>
+    <string name="account_sign_in_with_passkey">Sign in with passkey</string>
+    <string name="account_connect_device">Connect this device</string>
+    <string name="account_device_invitation">Invitation code</string>
+    <string name="account_access_requests">Access requests</string>
+    <string name="account_shared">What you have shared</string>
+    <string name="account_recovery">Recovery</string>
+    <string name="account_move_host">Move to another host</string>
+
+    <string name="signed_and_sent">Signed and sent</string>
+    <string name="prepared_not_signed">Prepared, not signed</string>
+</resources>
