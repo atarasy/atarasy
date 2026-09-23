@@ -47,6 +47,11 @@ targets:
           GENERATE_INFOPLIST_FILE: NO
           INFOPLIST_FILE: production/Info.plist
           CODE_SIGN_ENTITLEMENTS: production/Atarasy.entitlements
+          # The project turns signing off for simulator runs; an archive
+          # built without it is unsigned, and exporting it re-signs with no
+          # entitlements, dropping Associated Domains and Push.
+          CODE_SIGNING_ALLOWED: YES
+          CODE_SIGN_STYLE: Automatic
           TARGETED_DEVICE_FAMILY: '1'
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.atarasy.prototype
