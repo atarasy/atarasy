@@ -27,7 +27,7 @@ import { blocksFor, decidable, decisionGoodsTotal, decisionOutcome, disputable, 
 // D-1, D-3. What a member reads for money, a date and the goods themselves,
 // mirroring `ios/AtarasyPrototype/MemberFormat.swift` so the two apps say
 // the same thing about the same offer.
-import { formatDay, formatDayTime, formatMoney, goodsTitle, sellers } from "../shared/format.js";
+import { formatDay, formatDayTime, formatDuration, formatMoney, goodsTitle, sellers } from "../shared/format.js";
 // D-5. The screen's vocabulary in the member's own language, picked once
 // from `navigator.language` and carried for the length of the session; the
 // iOS app's own English and Japanese, not translated again here.
@@ -162,15 +162,39 @@ type Statement = {
   carriage: number | null;
 };
 
-/** Clause 36, §10 step 3. The published rules, in words a person reads. */
-const RULES: Record<string, string> = {
-  auto_renewal: "it carries an auto-renewing subscription",
-  obstructed_cancellation: "cancelling it is harder than buying it",
-  manufactured_scarcity: "the offer manufactures urgency or scarcity",
-  late_price: "the price rises at checkout",
-  outside_mandate: "it falls outside the mandate you gave",
-  declined_before: "you returned this before",
-};
+/**
+ * Clause 36, §10 step 3. The published rules, in the iOS app's own words for
+ * each reason (`MemberExcludedView.reason`, `MemberOfferScreen.swift`, vault
+ * `80` §6.3): a code this screen does not recognise reads as "Excluded"
+ * rather than as the code itself, which is what iOS falls back to too.
+ */
+function ruleText(reason: string): string {
+  switch (reason) {
+    case "auto_renewal": return L("Renews automatically");
+    case "obstructed_cancellation": return L("Hard to cancel");
+    case "manufactured_scarcity": return L("Uses scarcity pressure");
+    case "late_price": return L("Price shown too late");
+    case "outside_mandate": return L("Outside your limits");
+    case "declined_before": return L("You declined it before");
+    default: return L("Excluded");
+  }
+}
+
+/**
+ * iOS's own words for a resolved line (`MemberLineStatus.resolved`,
+ * `MemberOfferScreen.swift`), used wherever this screen would otherwise print
+ * a raw valence: a protocol word, and English even in a Japanese session.
+ */
+function lineStatusText(valence: string): string {
+  switch (valence) {
+    case "kept": return L("You kept this.");
+    case "returned": return L("Declined.");
+    case "consumed": return L("Used.");
+    case "defaulted": return L("Sent because nothing was chosen.");
+    case "lost": return L("Not returned. You are never charged for it.");
+    default: return L("Waiting for your choice.");
+  }
+}
 
 const STORAGE = "atarasy.member";
 /**
@@ -257,20 +281,34 @@ const day = (ms: number) => formatDay(ms, navigator.language);
 /** The same day with a clock time beside it, for a deadline that is also an hour. */
 const when = (ms: number) => formatDayTime(ms, navigator.language);
 
+/**
+ * The review step's "Your limits" line (iOS's own `MemberLimitsLine`,
+ * `MemberOfferScreen.swift`): the daily ceiling and the time to undo, the
+ * same two sentences `protections()` below draws, joined the way
+ * `MemberLimitsText.summary` joins them. Never a mandate's scope or its
+ * lapse date, which the approval used to print under a "standing mandate" /
+ * "individual mandate" label neither app carries anywhere else.
+ */
+function limitsSummary(m: Pick<Mandate, "ceiling_daily" | "cooling_seconds">): string {
+  const daily = m.ceiling_daily === null ? L("No daily limit") : L("Up to %@ a day", yen(m.ceiling_daily));
+  const cooling = !m.cooling_seconds ? L("No time to undo") : L("%@ to undo", formatDuration(m.cooling_seconds, LANG));
+  return `${daily} · ${cooling}`;
+}
+
 // ---- setup: a passkey, registered as the mandate's key ----------------------
 
 async function setup(notice?: Node) {
-  const input = el("input", { placeholder: "a name for this household", value: `household-${Math.random().toString(36).slice(2, 8)}` }) as HTMLInputElement;
+  const input = el("input", { placeholder: L("a name for this household"), value: `household-${Math.random().toString(36).slice(2, 8)}` }) as HTMLInputElement;
   const button = el("button", { class: "primary" }, L("Create passkey")) as HTMLButtonElement;
   // Not "stays on this device": a platform authenticator may sync the key
   // through the person's own account (iCloud Keychain, Google Password
   // Manager), and telling them otherwise on the screen would be false.
-  const note = el("p", { class: "muted" }, "The passkey is held by this browser's authenticator and never leaves it for us. Its public half is registered as the key that confirms your decisions (clause 35).");
+  const note = el("p", { class: "muted" }, L("The passkey is held by this browser's authenticator and never leaves it for us. Its public half confirms your decisions."));
   const status = el("p", {});
   button.onclick = async () => {
     button.disabled = true;
     const label = input.value.trim();
-    if (!label) { status.textContent = "The household needs a name."; button.disabled = false; return; }
+    if (!label) { status.textContent = L("The household needs a name."); button.disabled = false; return; }
     try {
       // §13.2, question 55. The household is the name of a key, and a `get`
       // never hands the public key back, so the key is made here and its
@@ -308,7 +346,7 @@ async function setup(notice?: Node) {
           attestation: "none",
         },
       })) as PublicKeyCredential | null;
-      if (!credential) throw new Error("no credential was created");
+      if (!credential) throw new Error(L("no credential was created"));
       const credentialId = toBase64Url(credential.rawId);
       // §13.2, question 55. One registration, under the name the key has, and
       // nothing under the mandate's: a mandate has no key of its own, and its
@@ -357,14 +395,14 @@ async function setup(notice?: Node) {
           userVerification: "required",
         },
       })) as PublicKeyCredential | null;
-      if (!credential) throw new Error("no passkey was offered");
+      if (!credential) throw new Error(L("no passkey was offered"));
       const credentialId = toBase64Url(credential.rawId);
       // §13.2, question 55. The household is the name of a key, and the key
       // is in the handle the authenticator just returned. A passkey made
       // elsewhere carries a handle of another length and is refused here
       // rather than becoming a household nothing answers for.
       const handle = (credential.response as AuthenticatorAssertionResponse).userHandle;
-      if (!handle) throw new Error("this passkey carries no household");
+      if (!handle) throw new Error(L("this passkey carries no household"));
       const known = await memberKeyFromHandle(handle);
       // Clause 52. A household that moved arrives at a host that holds its
       // rows and not its key, and this flow registered nothing on the reasoning
@@ -396,8 +434,8 @@ async function setup(notice?: Node) {
     el("p", {}, L("Your own agent for things that arrive to be tried. You pay only for what you keep, and nothing is bought without your signature.")),
     el("div", { class: "card" }, el("div", { class: "row" }, input, button), note, status),
     el("div", { class: "card" },
-      el("p", {}, "Already have one, on this device or another?"),
-      el("p", { class: "muted" }, "Your passkey is your household. Answering with it here brings back everything placed with it, wherever you last used it."),
+      el("p", {}, L("Already have one, on this device or another?")),
+      el("p", { class: "muted" }, L("Your passkey is your household. Answering with it here brings back everything placed with it, wherever you last used it.")),
       el("div", { class: "row" }, again))
   );
 }
@@ -456,7 +494,7 @@ async function offers(member: Member) {
   } catch {
     // It is this hub that did not answer, not an engine: `/config` is served
     // here. Saying "the engine" sent the member looking in the wrong place.
-    shell(member, "inbox", failure("This page could not reach the service that serves it, so nothing could be listed. Nothing was sent."), retry(member));
+    shell(member, "inbox", failure(L("This page could not reach the service that serves it, so nothing could be listed. Nothing was sent.")), retry(member));
     return;
   }
   const waiting: InboxOffer[] = [];
@@ -476,7 +514,7 @@ async function offers(member: Member) {
     // refutation round on 2026-09-13, which measured it on four screens.
     if (list.status !== 200 || !Array.isArray(list.body.offers)) {
       problems.push(`${presenter}: ${list.status === 200
-        ? "answered in a form this screen could not read, so what is waiting there is not on this list"
+        ? L("answered in a form this screen could not read, so what is waiting there is not on this list")
         : refusal(list.body, list.status)}`);
       continue;
     }
@@ -600,15 +638,15 @@ async function offers(member: Member) {
     const deadline = undoDeadline(o.decided_at, coolingSeconds);
     const said = el("p", { class: "muted" },
       box
-        ? "The route has resolved this box. Nothing here is waiting on you."
+        ? L("The route has resolved this box. Nothing here is waiting on you.")
         : deadline !== null && Date.now() < deadline
-          ? `Decided. It is the shop's to settle now; you can undo until ${when(deadline)}.`
+          ? L("Decided. It is the shop's to settle now; you can undo until %@.", when(deadline))
           // **Nothing settles when a window closes.** The engine has no
           // scheduler: a digital set settles when the presenter asks it to, and
           // a cooling window only stops that happening sooner. This was the
           // sentence family refuted in `mandate_cooling` the day before, sitting
           // one screen over where the module's own test cannot see it.
-          : "Decided. It is the shop's to settle now; what you can still do is take it back.");
+          : L("Decided. It is the shop's to settle now; what you can still do is take it back."));
     if (box) {
       return el("div", { class: "card" },
         el("div", { class: "row" }, el("span", { class: "grow" }, `From ${o.presenter}`)),
@@ -618,7 +656,7 @@ async function offers(member: Member) {
     // expiry stands: withdrawing it would leave the kept goods to go `lost`,
     // which is never billed. The engine refuses, so the button is not offered.
     if (o.binding === "physical" && Date.now() >= o.expires_at) {
-      said.textContent = "Decided. This box is past its expiry, so what you signed stands and it is the shop's to settle.";
+      said.textContent = L("Decided. This box is past its expiry, so what you signed stands and it is the shop's to settle.");
       return el("div", { class: "card" },
         el("div", { class: "row" }, el("span", { class: "grow" }, `From ${o.presenter}`)),
         said);
@@ -627,7 +665,7 @@ async function offers(member: Member) {
     undo.onclick = async () => {
       undo.disabled = true;
       try {
-        if (o.decided_at === null) throw new Error("This decision has no recorded decision time, so it cannot be taken back safely.");
+        if (o.decided_at === null) throw new Error(L("This decision has no recorded decision time, so it cannot be taken back safely."));
         const signature = await signOver(member, new TextEncoder().encode(canonicalWithdrawal(o.id, o.decided_at)));
         const taken = await api<{ error?: string; message?: string }>("DELETE", `/offers/${encodeURIComponent(o.id)}/decisions`, { signature });
         if (taken.status === 200) { await offers(member); return; }
@@ -654,7 +692,7 @@ async function offers(member: Member) {
   const atHome = [...boxes, ...decidedBoxes];
   const proposals = [...cards, ...decidedProposals];
   const emptyText = (kind: "boxes" | "proposals") => {
-    if (partial) return "This list may be incomplete: not every shop answered.";
+    if (partial) return L("This list may be incomplete: not every shop answered.");
     return kind === "boxes" ? L("No boxes at home.") : L("No proposals here.");
   };
   shell(member, "inbox",
@@ -699,15 +737,15 @@ async function account(member: Member) {
     el("div", { class: "row" }, forget),
     el("details", {},
       el("summary", {}, L("About this account")),
-      // An offer names the household it is placed with and the mandate it is
-      // made under, and how a presenter comes to know either is between the
-      // household and the presenter. Neither is a secret and neither is
-      // guessable, so support may ask for it; nothing else on this screen
-      // reads it.
+      // An offer names the household it is placed with and how a presenter
+      // comes to know it is between the household and the presenter. It is
+      // not a secret and it is not guessable, so support may ask for it;
+      // nothing else on this screen reads it. Shown the way iOS shows it
+      // (`MemberAccountTab.swift`): one reference, under its own label, never
+      // the field name it comes from.
       el("p", { class: "muted" }, L("Support may ask you for the account reference shown under Account on a device where you are signed in. It does not sign you in by itself.")),
-      el("ul", {},
-        el("li", {}, "household ", el("code", {}, member.household)),
-        el("li", {}, "mandate ", el("code", {}, member.mandate)))),
+      el("p", { class: "muted" }, L("Account reference, for support")),
+      el("p", {}, el("code", {}, member.household))),
     el("h2", {}, L("Delete account")),
     el("p", { class: "muted" }, L("Deleting removes your account and everything this host holds for it. Shops keep their own records of sales. Gifts you shared with other households stay in their records, showing you as a member who has left.")),
     el("div", { class: "row" }, leaveHost)
@@ -770,8 +808,8 @@ function contactLink(contact: { kind: "email" | "tel" | "url"; value: string }):
     contact.kind === "email" ? `mailto:${contact.value}`
     : contact.kind === "tel" ? `tel:${contact.value}`
     : https ? contact.value : null;
-  if (href === null) return el("p", { class: "muted" }, "Contact: ", contact.value);
-  return el("p", { class: "muted" }, "Contact: ", el("a", { href, rel: "noopener noreferrer" }, contact.value));
+  if (href === null) return el("p", { class: "muted" }, `${L("Contact")}: `, contact.value);
+  return el("p", { class: "muted" }, `${L("Contact")}: `, el("a", { href, rel: "noopener noreferrer" }, contact.value));
 }
 
 // ---- the approval screen (§10 step 3 and 4) ---------------------------------
@@ -804,11 +842,20 @@ async function approval(member: Member, offerId: string, binding?: "digital" | "
   if (got.status !== 200 || !Array.isArray(got.body.candidates)) {
     show(el("h1", {}, "Atarasy"), failure(
       got.status === 200
-        ? "This offer came back in a form this screen could not read. Nothing was decided."
+        ? L("This offer came back in a form this screen could not read. Nothing was decided.")
         : refusal(got.body, got.status)), back(member));
     return;
   }
   const a = got.body;
+  // The review step's "Your limits" line (`limitsSummary()`) needs the daily
+  // ceiling and the cooling window, and the approval contract carries only
+  // the mandate's kind, scope and lapse: a full read, the same carried route
+  // `protections()` already uses. Fetched once, here, and carried down to
+  // `approvalReview()` rather than re-read on "Review". `null` drops the
+  // line rather than guessing: a mandate this screen could not read is not
+  // one it prints numbers for.
+  const mandateRead = await api<Mandate & { error?: string }>("GET", `/_node/mandates/${encodeURIComponent(member.mandate)}`);
+  const limits: Mandate | null = mandateRead.status === 200 && typeof mandateRead.body.version === "number" ? mandateRead.body : null;
   const choices = new Map<string, "kept" | "returned">();
   // D-6, D-7. This screen is the browsing step: it picks, it does not sign.
   // "Review" (iOS's own label for the same button, `MemberOfferScreen.swift`)
@@ -848,17 +895,21 @@ async function approval(member: Member, offerId: string, binding?: "digital" | "
       // signs from, and the maker is not the merchant.
       el("p", { class: "muted" },
         c.given_by
-          ? `${L("Gift from %@", c.given_by)}. Never billed to you (clause 10). ${L("Made by %@", c.maker)}. Carried by ${c.ships}.`
-          : `${L("Sold by %@", c.merchant)}. ${L("Made by %@", c.maker)}. Carried by ${c.ships}.`),
+          ? `${L("Gift from %@", c.given_by)}. ${L("No goods charge to you for this item.")} ${L("Made by %@", c.maker)}. ${L("Carried by %@", c.ships)}.`
+          : `${L("Sold by %@", c.merchant)}. ${L("Made by %@", c.maker)}. ${L("Carried by %@", c.ships)}.`),
       ...(decidable ? [] : [el("p", { class: "muted" },
         c.valence === "consumed"
-          ? "The route found this used, so it is not yours to decide here. It comes back on the statement you sign."
+          ? L("The route found this used, so it is not yours to decide here. It comes back on the statement you sign.")
           : c.valence === "lost"
             // Questions 46 and 48. Which kind of loss this is comes from what
             // the collection named the line.
             ? lostOutcome(c.collected_as)
-            : `Already ${c.valence}. Nothing on this screen changes it.`)]),
-      ...(c.is_exploration ? [el("p", { class: "exploration" }, "Something you have not been offered before (§5).")] : []),
+            // iOS's own words for a resolved line, in its own vocabulary
+            // (`MemberLineStatus.resolved`, vault `80` §6.3), never the raw
+            // state word: "kept" read as English even in a Japanese session.
+            : lineStatusText(c.valence))]),
+      // "New to you" is iOS's own tag for this (`MemberProposalLine`, vault `80` §6.3).
+      ...(c.is_exploration ? [el("p", { class: "exploration" }, L("New to you"))] : []),
       // Clauses 54 and 59. **These are the presenter's words, and the screen
       // says so.** The alternatives and the argument against are free text the
       // presenter's agent supplied, rendered here under headings this hub
@@ -880,8 +931,9 @@ async function approval(member: Member, offerId: string, binding?: "digital" | "
   });
 
   const excluded = a.excluded.length
-    ? [el("h2", {}, "Left out, and why (clause 36)"),
-       el("ul", {}, ...a.excluded.map((x) => el("li", {}, `${x.product}: ${RULES[x.reason] ?? x.reason}`)))]
+    ? [el("h2", {}, L("Left out by your agent")),
+       el("p", { class: "muted" }, L("Your agent does not propose these, and says why.")),
+       el("ul", {}, ...a.excluded.map((x) => el("li", {}, `${x.product}: ${ruleText(x.reason)}`)))]
     : [];
 
   // D-6, D-7. Picking is done; what is signed is frozen and shown with its
@@ -891,13 +943,13 @@ async function approval(member: Member, offerId: string, binding?: "digital" | "
       const valence = choices.get(c.id)!;
       return valence === "kept" ? { candidate: c.id, valence, kept_as: "self" } : { candidate: c.id, valence };
     });
-    approvalReview(member, a, decisions, binding);
+    approvalReview(member, a, decisions, binding, limits);
   };
 
   show(
     el("h1", {}, "Atarasy"),
     ...(binding === "physical"
-      ? [el("p", {}, `Offered by ${a.presenter}. This box is with you: what you use is bought, and what you send back is not.`),
+      ? [el("p", {}, `${L("Offered by %@.", a.presenter)} ${L("This box is with you: what you use is bought, and what you send back is not.")}`),
          // §10a.5 counts the expiry among the facts of the sale, because a
          // merchant's stated application period is measured against it, and
          // §2.2b says a box's owner should not read it as their deadline. One
@@ -908,33 +960,32 @@ async function approval(member: Member, offerId: string, binding?: "digital" | "
          // `lost` at once. The date is when the offer was open until and when
          // the route is due; what happens at it is the deployment's grace, and
          // the screen does not know that number.
-         el("p", { class: "muted" }, `It was offered until ${day(a.expires_at)}, and the route comes for it around then.`)]
-      : [el("p", {}, `Offered by ${a.presenter}. ${L("Closes %@.", day(a.expires_at))}`)]),
-    el("p", { class: "muted" },
-      a.mandate.kind === "standing"
-        ? `Under a standing mandate: ${a.mandate.scope}, lapsing ${a.mandate.lapses_at ? day(a.mandate.lapses_at) : "never"} (clause 58).`
-        : `Under an individual mandate: ${a.mandate.scope}.`),
-    ...(a.price_band ? [el("p", { class: "muted" }, `The giver chose a band of ${yen(a.price_band.min)} to ${yen(a.price_band.max)} (clause 23).`)] : []),
+         el("p", { class: "muted" }, L("It was offered until %@, and the route comes for it around then.", day(a.expires_at)))]
+      : [el("p", {}, `${L("Offered by %@.", a.presenter)} ${L("Closes %@.", day(a.expires_at))}`)]),
+    // The review step's "Your limits" line (iOS's own `MemberLimitsLine`),
+    // dropped rather than guessed where the full mandate could not be read.
+    ...(limits ? [el("p", { class: "muted" }, el("strong", {}, L("Your limits")), ": ", limitsSummary(limits))] : []),
+    ...(a.price_band ? [el("p", { class: "muted" }, L("The giver set a price range of %@ to %@.", yen(a.price_band.min), yen(a.price_band.max)))] : []),
     // Clause 33. Whether the one reminder has gone, never how many remain.
-    ...(a.reminded ? [el("p", { class: "muted" }, "You were reminded once. There will be no second reminder.")] : []),
+    ...(a.reminded ? [el("p", { class: "muted" }, L("You were reminded once. There will be no second reminder."))] : []),
     // §10a.5, 法11条1号. The carriage is a line of its own beside the goods,
     // never folded into a price and never the word "free". Nothing recorded
     // is said as nothing recorded, because a screen that showed no carriage
     // would say the price includes it.
     el("p", { class: "muted" },
       a.carriage === null
-        ? "Carriage: not recorded yet."
+        ? L("Carriage: not recorded yet.")
         : a.carriage === 0
-          ? "Carriage: nothing to pay on this delivery."
-          : `Carriage: ${yen(a.carriage)}.`),
+          ? L("Carriage: nothing to pay on this delivery.")
+          : L("Carriage: %@.", yen(a.carriage))),
     // §10 step 3c. Where the route has already resolved part of the box, the
     // screen says which part is still the person's rather than offering a
     // button that can never be pressed.
     ...(settled.length
       ? [el("p", { class: "muted" },
           open.length
-            ? `${settled.length} of these ${settled.length === 1 ? "line is" : "lines are"} already resolved by what the route found. ${open.length} ${open.length === 1 ? "is" : "are"} still yours to decide.`
-            : "Nothing on this screen is still yours to decide. Every line has already been resolved, by you, by the route, or by the deadline passing.")]
+            ? L("%lld already resolved by what the route found. %lld left for you to decide.", settled.length, open.length)
+            : L("Nothing on this screen is still yours to decide. Every line has already been resolved, by you, by the route, or by the deadline passing."))]
       : []),
     ...cards,
     ...excluded,
@@ -951,7 +1002,7 @@ async function approval(member: Member, offerId: string, binding?: "digital" | "
  * with an empty `decisions` array, since that button is disabled until every
  * open line has a choice.
  */
-function approvalReview(member: Member, a: Approval, decisions: Decision[], binding?: "digital" | "physical") {
+function approvalReview(member: Member, a: Approval, decisions: Decision[], binding?: "digital" | "physical", limits: Mandate | null = null) {
   const byId = new Map(a.candidates.map((c) => [c.id, c]));
   const kept = decisions.filter((d) => d.valence === "kept").map((d) => byId.get(d.candidate)!);
   const declined = decisions.filter((d) => d.valence === "returned").map((d) => byId.get(d.candidate)!);
@@ -984,7 +1035,7 @@ function approvalReview(member: Member, a: Approval, decisions: Decision[], bind
       // The count below is this screen's own, so a `200` that carried no state
       // would have been reported as a decision the engine never recorded.
       if (typeof decided.body.state !== "string") {
-        throw new Error("The answer came back in a form this screen could not read, so it cannot say whether this was recorded. Go back and open it again.");
+        throw new Error(L("The answer came back in a form this screen could not read, so it cannot say whether this was recorded. Go back and open it again."));
       }
       show(el("h1", {}, "Atarasy"), decisionRecordedCard(kept.length, declined.length), back(member));
     } catch (e) {
@@ -1013,10 +1064,11 @@ function approvalReview(member: Member, a: Approval, decisions: Decision[], bind
       el("div", { class: "row" }, el("span", { class: "grow" }, L("Goods")), el("span", {}, yen(goods))),
       el("div", { class: "row" }, el("span", { class: "grow" }, L("Delivery")), el("span", {}, yen(carriage))),
       el("div", { class: "row" }, el("strong", { class: "grow" }, L("Total")), el("strong", {}, yen(goods + carriage)))),
-    el("p", { class: "muted" },
-      a.mandate.kind === "standing"
-        ? `Under a standing mandate: ${a.mandate.scope}, lapsing ${a.mandate.lapses_at ? day(a.mandate.lapses_at) : "never"} (clause 58).`
-        : `Under an individual mandate: ${a.mandate.scope}.`),
+    // iOS's own "Your limits" line (`MemberLimitsLine`), the daily ceiling and
+    // the time to undo this signature falls under; dropped where the full
+    // mandate could not be read, rather than printing a scope and a lapse
+    // date neither app shows anywhere else.
+    ...(limits ? [el("p", { class: "muted" }, el("strong", {}, L("Your limits")), ": ", limitsSummary(limits))] : []),
     // D-7. Open, one details-free block per decided line's governing terms:
     // this is the step §10a.4 asks the disclosure to be seen on, before the
     // signature below it.
@@ -1033,7 +1085,7 @@ function decisionRecordedCard(kept: number, returned: number): Node {
     el("p", {}, LANG === "ja"
       ? `${L("Decision recorded")}。${kept} 点を受け取り、${returned} 点を見送りました。`
       : `${L("Decision recorded")}. ${kept} kept, ${returned} declined.`),
-    el("p", { class: "muted" }, "What you returned is recorded as a decision of yours, not as nothing (clause 8)."));
+    el("p", { class: "muted" }, L("What you returned is recorded as a decision of yours, not as nothing.")));
 }
 
 /**
@@ -1097,7 +1149,7 @@ async function statement(member: Member, offerId: string) {
   if (got.status !== 200 || !Array.isArray(got.body.lines)) {
     show(el("h1", {}, "Atarasy"), failure(
       got.status === 200
-        ? "What came back with this box came back in a form this screen could not read. Nothing was signed."
+        ? L("What came back with this box came back in a form this screen could not read. Nothing was signed.")
         : refusal(got.body, got.status)), back(member));
     return;
   }
@@ -1108,8 +1160,8 @@ async function statement(member: Member, offerId: string) {
   // confirm a document with no line on it.
   if (st.lines.length === 0) {
     show(el("h1", {}, "Atarasy"),
-      el("h2", {}, "What the box came back with"),
-      el("p", { class: "muted" }, "Nothing on this box needs your signature. Anything not collected by the deadline is never charged to you."),
+      el("h2", {}, L("What the box came back with")),
+      el("p", { class: "muted" }, L("Nothing on this box needs your signature. Anything not collected by the deadline is never charged to you.")),
       back(member));
     return;
   }
@@ -1133,10 +1185,10 @@ async function statement(member: Member, offerId: string) {
     // apart: saying it is "not charged here" would imply it otherwise was.
     const charges = st.lines.filter((l) => disputeMovesMoney(l) && disputed.has(l.candidate)).length;
     const losses = st.lines.filter((l) => !disputeMovesMoney(l) && disputed.has(l.candidate)).length;
-    totalLine.textContent = `To be charged for the goods: ${yen(total())}.` +
-      (st.carriage ? ` The carriage above is not in this figure.` : "") +
-      (charges ? ` ${charges} line${charges === 1 ? "" : "s"} disputed and not charged here.` : "") +
-      (losses ? ` ${losses} missing item${losses === 1 ? "" : "s"} disputed.` : "");
+    totalLine.textContent = L("To be charged for the goods: %@.", yen(total())) +
+      (st.carriage ? ` ${L("The carriage above is not in this figure.")}` : "") +
+      (charges ? ` ${L("Disputed and not charged here: %lld.", charges)}` : "") +
+      (losses ? ` ${L("Disputed as missing: %lld.", losses)}` : "");
   };
 
   const cards = st.lines.map((l) => {
@@ -1145,18 +1197,20 @@ async function statement(member: Member, offerId: string) {
     // was there. "Borne by the merchant" is not said: the stock holder may be
     // the maker.
     const missing = l.valence === "lost";
-    const idle = missing ? "It was in the box" : "I did not use this";
+    // "It was in the box" and "This isn't right" are iOS's own labels for
+    // this toggle (`MemberBoxScreen.swift`'s `MemberStatementLines`).
+    const idle = missing ? L("It was in the box") : L("This isn't right");
     const mark = el("button", {}, idle) as HTMLButtonElement;
     const note = el("p", { class: "muted" }, "");
     const paint = () => {
       const isDisputed = disputed.has(l.candidate);
       mark.className = isDisputed ? "chosen" : "";
-      mark.textContent = isDisputed ? "Disputed" : idle;
+      mark.textContent = isDisputed ? L("Disputed") : idle;
       note.textContent = !isDisputed
         ? ""
         : missing
-          ? "You say this was in the box. Nothing moves either way; your signature records that you dispute it."
-          : "Not charged here. What is owed for it, if anything, is between you and the seller.";
+          ? L("You say this was in the box. Nothing moves either way; your signature records that you dispute it.")
+          : L("Not charged here. What is owed for it, if anything, is between you and the seller.");
       refreshTotal();
     };
     mark.onclick = () => {
@@ -1173,18 +1227,18 @@ async function statement(member: Member, offerId: string) {
       // screen says who gave it rather than leaving a zero to be read as luck.
       el("p", { class: "muted" },
         l.given_by
-          ? `${L("Gift from %@", l.given_by)}. Never billed to you (clause 10).`
+          ? `${L("Gift from %@", l.given_by)}. ${L("No goods charge to you for this item.")}`
           : missing
             ? `${L("Sold by %@", l.merchant)}. ${L("Made by %@", l.maker)}.`
-            : `${yen(l.unit_price)} ${l.quantity > 1 ? `× ${l.quantity}` : "each"}. ${L("Sold by %@", l.merchant)}. ${L("Made by %@", l.maker)}.`),
+            : `${yen(l.unit_price)} ${l.quantity > 1 ? `× ${l.quantity}` : L("each")}. ${L("Sold by %@", l.merchant)}. ${L("Made by %@", l.maker)}.`),
       el("p", { class: "muted" },
         wasKept
-          ? "You kept this when you decided. It is here because it is on the same bill."
+          ? L("You kept this when you decided. It is here because it is on the same bill.")
           : missing
-            ? "The collection says this was not in the box. You are never charged for it and it is no claim against you. If it was there, dispute it."
-            : "The collection found this used."),
+            ? L("The collection says this was not in the box. You are never charged for it and it is no claim against you. If it was there, dispute it.")
+            : L("The collection found this used.")),
       // Question 46. The collection's own words, as text (clause 54).
-      ...(missing && l.note ? [el("p", { class: "muted" }, `The collection's note: ${l.note}`)] : []),
+      ...(missing && l.note ? [el("p", { class: "muted" }, L("The collection's note: %@", l.note))] : []),
       // D-7. Collapsed on this browsing view; open on `statementReview()`.
       ...blockFor(st.disclosures ?? [], l.disclosure, true),
       // §6.5, §11.2. Only a consumed or missing line can be disputed: a kept
@@ -1200,7 +1254,7 @@ async function statement(member: Member, offerId: string) {
 
   show(
     el("h1", {}, "Atarasy"),
-    el("h2", {}, "What the box came back with"),
+    el("h2", {}, L("What the box came back with")),
     // Clause 11. Whoever sent the box is the presenter, and a presenter is not
     // the seller: this box is one presenter's and several merchants'. The
     // statement names the merchants line by line and carries no presenter, so
@@ -1209,25 +1263,25 @@ async function statement(member: Member, offerId: string) {
     // line beside a kept or defaulted one (question 46, decided 2026-09-14).
     el("p", { class: "muted" }, st.lines.some((l) => l.valence === "consumed") ||
       (st.lines.some((l) => l.valence === "lost") && st.lines.some((l) => l.valence === "kept" || l.valence === "defaulted"))
-      ? "The route wrote this down. Nothing is charged until you sign it, and no further box comes from whoever sent this one while it waits."
-      : "The route wrote this down. Nothing is charged until you sign it."),
+      ? L("The route wrote this down. Nothing is charged until you sign it, and no further box comes from whoever sent this one while it waits.")
+      : L("The route wrote this down. Nothing is charged until you sign it.")),
     // §6.5, §10a.5. **The offer's expiry, because a merchant's block may state
     // an application period and a period is measured against something.** The
     // engine has carried it since this route was written and this screen
     // dropped it, so a block reading "apply within 7 days of the offer" stood
     // beside no date at all.
-    el("p", { class: "muted" }, `This box was offered until ${day(st.expires_at)}.`),
+    el("p", { class: "muted" }, L("This box was offered until %@.", day(st.expires_at))),
     el("p", { class: "muted" },
       st.carriage === null
-        ? "Carriage: not recorded."
+        ? L("Carriage: not recorded yet.")
         : st.carriage === 0
-          ? "Carriage: nothing to pay on this delivery."
-          : `Carriage: ${yen(st.carriage)}.`),
+          ? L("Carriage: nothing to pay on this delivery.")
+          : L("Carriage: %@.", yen(st.carriage))),
     ...cards,
     // §6.5, question 46, decided 2026-09-14. What signing attests over a
     // missing line, so silence is not read as agreeing the item is gone.
     ...(st.lines.some((l) => l.valence === "lost")
-      ? [el("p", { class: "muted" }, "Signing shows you were told which items the collection did not find. It is not you agreeing they are missing or taking responsibility for them; you are never charged for them, and you can dispute any you had.")]
+      ? [el("p", { class: "muted" }, L("Signing shows you were told which items the collection did not find. It is not you agreeing they are missing or taking responsibility for them; you are never charged for them, and you can say any of them was there."))]
       : []),
     totalLine,
     el("div", { class: "row" }, sign, back(member))
@@ -1318,7 +1372,7 @@ function statementReview(member: Member, st: Statement, disputed: ReadonlySet<st
       // A `200` whose body carries no charge is not a settlement this screen
       // can report as one: the engine always names the figure.
       if (typeof settled.body.charged !== "number") {
-        throw new Error("The answer came back in a form this screen could not read, so it cannot say whether this settled. Open the list again before signing a second time.");
+        throw new Error(L("The answer came back in a form this screen could not read, so it cannot say whether this settled. Open the list again before signing a second time."));
       }
       await showReceipt(member, st.offer, settled.body, "signed", st.disclosures);
     } catch (e) {
@@ -1340,7 +1394,7 @@ function statementReview(member: Member, st: Statement, disputed: ReadonlySet<st
   show(
     el("h1", {}, "Atarasy"),
     el("h2", {}, L("Sign this statement")),
-    el("p", {}, "Signing confirms what the collection recorded, except the lines you marked, and lets the shops named charge the goods amount below."),
+    el("p", {}, L("Signing confirms what the collection recorded, except the lines you marked, and lets %@ charge the goods amount below.", sellers([...new Set(st.lines.map((l) => l.merchant))], navigator.language))),
     el("div", { class: "card" }, ...st.lines.map(lineRow)),
     el("div", { class: "card" },
       el("div", { class: "row" }, el("span", { class: "grow" }, L("Goods")), el("span", {}, yen(goods))),
@@ -1392,14 +1446,14 @@ function receipt(r: Receipt, path: ReceiptPath): Node {
   return el("div", { class: "card" },
     el("p", {},
       stood
-        ? `This box has settled${r.settled_at ? `, on ${day(r.settled_at)}` : ""}.`
-        : "Signed."),
+        ? (r.settled_at ? L("This box has settled, on %@.", day(r.settled_at)) : L("This box has settled."))
+        : L("Signed.")),
     el("p", {},
       amount === null
-        ? "The amount could not be read back, so this screen cannot say what was charged. Nothing here means it was nothing."
+        ? L("The amount could not be read back, so this screen cannot say what was charged. Nothing here means it was nothing.")
         : stood
-          ? `${amount} was charged by the settlement that stands.`
-          : `${amount} charged.`),
+          ? L("%@ was charged by the settlement that stands.", amount)
+          : L("%@ charged.", amount)),
     // **Which signature settled it is not the same question on the two paths
     // that reach here**, and one sentence said the same thing on both. After a
     // refusal the engine has told us this signature was not the one; after no
@@ -1407,14 +1461,14 @@ function receipt(r: Receipt, path: ReceiptPath): Node {
     // guess either way is what the review of atarasy #5 took out.
     ...(stood
       ? [el("p", { class: "muted" }, {
-          refused: "What you just signed is not what settled it. This is the settlement that stands, and nothing was charged twice.",
-          "unanswered-mine": "The answer to your signature never came back, but this settlement carries the signature you just gave. Nothing was charged twice.",
-          "unanswered-other": "The answer to your signature never came back, and the settlement that stands was not made by the signature you just gave. Nothing was charged twice.",
-          "unanswered-unknown": "The answer to your signature never came back, and this is the settlement that stands. This screen could not read which signature made it. Nothing was charged twice.",
+          refused: L("What you just signed is not what settled it. This is the settlement that stands, and nothing was charged twice."),
+          "unanswered-mine": L("The answer to your signature never came back, but this settlement carries the signature you just gave. Nothing was charged twice."),
+          "unanswered-other": L("The answer to your signature never came back, and the settlement that stands was not made by the signature you just gave. Nothing was charged twice."),
+          "unanswered-unknown": L("The answer to your signature never came back, and this is the settlement that stands. This screen could not read which signature made it. Nothing was charged twice."),
         }[path as Exclude<ReceiptPath, "signed">])]
       : []),
     ...(r.disputed_amount
-      ? [el("p", { class: "muted" }, `${yen(r.disputed_amount)} was disputed and is not charged here. What is owed for it, if anything, is between you and the seller.`)]
+      ? [el("p", { class: "muted" }, L("%@ was disputed and is not charged here. What is owed for it, if anything, is between you and the seller.", yen(r.disputed_amount)))]
       : []));
 }
 
@@ -1477,13 +1531,13 @@ async function showReceipt(member: Member, offerId: string, r: Receipt, path: Re
 function correctionsCard(c: Corrections | null, disclosures: Statement["disclosures"]): Node[] {
   if (!c || c.corrections.length === 0) return [];
   return [el("div", { class: "card" },
-    el("p", {}, "The merchant of record has appended the following to the settlement above. There is nothing here for you to sign or dispute."),
+    el("p", {}, L("The merchant of record has appended the following to the settlement above. There is nothing here for you to sign or dispute.")),
     ...c.corrections.map((line) =>
       el("div", {},
-        el("p", {}, `${line.kind === "refund" ? "Refund" : "Collection"} from ${line.merchant}: −${yen(line.amount)}, ${day(line.corrected_at)}.`),
+        el("p", {}, `${line.kind === "refund" ? L("Refund from %@", line.merchant) : L("Collection from %@", line.merchant)}: −${yen(line.amount)}, ${day(line.corrected_at)}.`),
         el("p", { class: "muted" }, line.note))
     ),
-    el("p", {}, `Net after corrections: ${yen(c.net)}.`),
+    el("p", {}, L("Net after corrections: %@.", yen(c.net))),
     ...correctionReturnRows(c, disclosures))];
 }
 
@@ -1503,8 +1557,8 @@ function correctionReturnRows(c: Corrections, disclosures: Statement["disclosure
     const amount = original ? yen(original.amount) : "";
     return el("div", { class: "card" },
       ret.state === "returned"
-        ? el("p", {}, `The refund of ${amount} from ${ret.merchant} did not reach you. The shop still owes it to you, off this platform.`)
-        : el("p", {}, `${ret.merchant} reports it repaid this another way.`),
+        ? el("p", {}, L("The refund of %@ from %@ did not reach you. The shop still owes it to you, off this platform.", amount, ret.merchant))
+        : el("p", {}, L("%@ reports it repaid this another way.", ret.merchant)),
       el("p", { class: "muted" }, ret.note),
       ...merchantContactOrTerms(disclosures, ret.merchant));
   });
@@ -1546,11 +1600,11 @@ async function signOver(member: Member, bytes: Uint8Array<ArrayBuffer>): Promise
       userVerification: "required",
     },
   })) as PublicKeyCredential | null;
-  if (!credential) throw new Error("no assertion was made");
+  if (!credential) throw new Error(L("no assertion was made"));
   const handle = (credential.response as AuthenticatorAssertionResponse).userHandle;
-  if (!handle) throw new Error("this passkey carries no household");
+  if (!handle) throw new Error(L("this passkey carries no household"));
   const held = await memberKeyFromHandle(handle);
-  if (held.household !== member.household) throw new Error("this passkey is another household's");
+  if (held.household !== member.household) throw new Error(L("this passkey is another household's"));
   const signature = await crypto.subtle.sign({ name: "Ed25519" }, held.key, bytes as unknown as BufferSource);
   return toBase64(signature);
 }
@@ -1558,19 +1612,10 @@ async function signOver(member: Member, bytes: Uint8Array<ArrayBuffer>): Promise
 // ---- the protections a person sets for themselves (§16) ---------------------
 
 /** §16.5. How long a decided set waits, and how long it can be taken back. */
-const COOLING = [
-  ["none", null],
-  ["an hour", 3600],
-  ["a day", 86400],
-] as const;
+const COOLING = [null, 3600, 86400] as const;
 
 /** §16.3. What may settle for this household in one day, across every presenter. */
-const DAILY = [
-  ["no ceiling", null],
-  ["¥3,000", 3000],
-  ["¥10,000", 10000],
-  ["¥30,000", 30000],
-] as const;
+const DAILY = [null, 3000, 10000, 30000] as const;
 
 async function protections(member: Member) {
   const read = await api<Mandate & { error?: string; message?: string }>("GET", `/_node/mandates/${encodeURIComponent(member.mandate)}`);
@@ -1583,7 +1628,7 @@ async function protections(member: Member) {
   if (read.status !== 404 && !readable) {
     shell(member, "limits", failure(
       read.status === 200
-        ? "What you have set came back in a form this screen could not read. Nothing here has changed."
+        ? L("What you have set came back in a form this screen could not read. Nothing here has changed.")
         : refusal(read.body, read.status)));
     return;
   }
@@ -1612,7 +1657,7 @@ async function protections(member: Member) {
       // kind. Three passes and two documents had taken the refusal for the
       // engine's rule and reasoned from it.
       if (loosening && current && current.co_signers.length > 0) {
-        throw new Error(`${loosening}, and needs everyone you named: ${current.co_signers.join(", ")}`);
+        throw new Error(L("%@ Loosening this needs everyone you named: %@.", loosening, current.co_signers.join(", ")));
       }
       // A renewal moves the lapse later, which is a loosening, so it needs the
       // people the person named. With nobody named it is theirs alone.
@@ -1650,31 +1695,27 @@ async function protections(member: Member) {
     }
   }
 
-  // The picker labels this screen already had, translated where the
-  // dictionary has a matching iOS element and left as plain, short English
-  // (with an inline Japanese equivalent) where it has none: iOS reads this
-  // same picker through `Stepper` and a free-form hour count rather than a
-  // fixed set of choices, so there is no exact string to copy for "an hour"
-  // or "a day" here.
-  const coolingLabel = (label: string, seconds: number | null): string => {
-    if (seconds === null) return L("No time to undo");
-    if (LANG !== "ja") return label;
-    return seconds === 3600 ? "1 時間" : seconds === 86400 ? "1 日" : label;
-  };
-  const dailyLabel = (label: string, perDay: number | null): string =>
+  // The picker labels, through `formatDuration()` (the same one the review
+  // step's "Your limits" line uses) rather than a fixed English/Japanese
+  // pair per choice: iOS reads this same picker through `Stepper` and a
+  // free-form hour count, so there is no exact iOS string to copy for "an
+  // hour" or "a day" here, and this way there does not need to be one.
+  const coolingLabel = (seconds: number | null): string =>
+    seconds === null ? L("No time to undo") : formatDuration(seconds, LANG);
+  const dailyLabel = (perDay: number | null): string =>
     perDay === null ? L("No daily limit") : yen(perDay);
 
   // §16.5. How long a decided set waits before it can settle, and can be taken
   // back while it waits.
   const coolingRow: Node[] = [];
-  for (const [label, seconds] of COOLING) {
+  for (const seconds of COOLING) {
     const chosen = current?.cooling_seconds === seconds || (current === null && seconds === null);
-    const b = el("button", { class: chosen ? "chosen" : "" }, coolingLabel(label, seconds));
+    const b = el("button", { class: chosen ? "chosen" : "" }, coolingLabel(seconds));
     b.onclick = () =>
       write(
         { cooling_seconds: seconds },
         current && !longer(current.cooling_seconds, seconds)
-          ? "shortening or removing a cooling window is a loosening"
+          ? L("Shortening or removing a cooling window is a loosening.")
           : null
       );
     coolingRow.push(b);
@@ -1684,14 +1725,14 @@ async function protections(member: Member) {
   // presenter. Absent is not zero: no ceiling refuses nothing and a ceiling of
   // zero refuses everything, and the signed bytes tell them apart.
   const dailyRow: Node[] = [];
-  for (const [label, yenPerDay] of DAILY) {
+  for (const yenPerDay of DAILY) {
     const chosen = current?.ceiling_daily === yenPerDay || (current === null && yenPerDay === null);
-    const b = el("button", { class: chosen ? "chosen" : "" }, dailyLabel(label, yenPerDay));
+    const b = el("button", { class: chosen ? "chosen" : "" }, dailyLabel(yenPerDay));
     b.onclick = () =>
       write(
         { ceiling_daily: yenPerDay },
         current && !lower(current.ceiling_daily, yenPerDay)
-          ? "raising or removing a daily ceiling is a loosening"
+          ? L("Raising or removing a daily ceiling is a loosening.")
           : null
       );
     dailyRow.push(b);
@@ -1701,19 +1742,22 @@ async function protections(member: Member) {
     el("p", { class: "muted" }, L("These are the limits your agent works within. Nothing outside them can be bought for you, and loosening them needs the people you name here.")),
     el("p", { class: "muted" },
       current && current.co_signers.length > 0
-        ? `Version ${current.version}. Tightening is yours alone; loosening needs everyone you named: ${current.co_signers.join(", ")} (clause 47).`
+        ? L("Tightening is yours alone; loosening needs everyone you named: %@.", current.co_signers.join(", "))
         : current
           // **The honest sentence for the only household this hub can make.**
           // No co-signer can be recorded here, so nothing it sets is protected
           // from the person who set it. Saying otherwise was the screen
-          // claiming a protection that was never there.
-          ? `Version ${current.version}. You have named nobody to hold these with you, so anything here is yours to change back at any time. Naming somebody is what would make it otherwise, and this screen cannot yet do that (clause 47).`
-          : "Nothing yet. Until you name somebody to hold them with you, anything you set here stays yours alone to change back."),
+          // claiming a protection that was never there. Never "Version N":
+          // iOS names this record's own state by what it protects, not by an
+          // internal counter (`MemberLimitsView.swift` shows no such number).
+          ? L("You have named nobody to hold these with you, so anything here is yours to change back at any time. Naming somebody is what would make it otherwise, and this screen cannot yet do that.")
+          : L("Nothing yet. Until you name somebody to hold them with you, anything you set here stays yours alone to change back.")),
     el("div", { class: "card" },
-      el("p", {}, "How long a decision waits before it can settle, and can be taken back."),
+      el("p", {}, el("strong", {}, L("Time to undo a decision"))),
+      el("p", { class: "muted" }, L("After you sign a decision, how long you have to undo it.")),
       el("div", { class: "row" }, ...coolingRow)),
     el("div", { class: "card" },
-      el("p", {}, "The most that may be settled for you in one day, across every shop."),
+      el("p", {}, el("strong", {}, L("Daily limit"))),
       // §16.3, question 39, decided 2026-09-13. **A ceiling can stop a box
       // settling and not merely delay it**, because since §6.5 the household
       // is the party that presses the button and a box whose used goods come
@@ -1721,15 +1765,17 @@ async function protections(member: Member) {
       // specification makes saying so a requirement on this surface, and the
       // requirement shipped in the refusal and not here, where a person
       // chooses the number.
-      el("p", { class: "muted" }, "A ceiling can stop a box settling altogether, not just delay it: if what you used in one box comes to more than this, it cannot settle until the ceiling is raised, and raising one needs the people you named."),
+      el("p", { class: "muted" }, L("Everything bought for you in one day, including what has already been settled today.")),
+      el("p", { class: "muted" }, L("A ceiling can stop a box settling altogether, not just delay it: if what you used in one box comes to more than this, it cannot settle until the ceiling is raised, and raising one needs the people you named.")),
       el("div", { class: "row" }, ...dailyRow)),
     // Clause 58, clause 46. What the person is signing besides the button they
     // pressed. A screen that hides the rest of the record asks for a signature
-    // over things the person never saw.
+    // over things the person never saw. Both lines are iOS's own vocabulary
+    // for the same two protections (`MemberMandateSentences`).
     ...(current
-      ? [el("p", { class: "muted" },
-          `Also in what you signed: nothing offered to you may cost more than ${yen(current.ceiling_out_of_network)} at a shop outside the network, and this lapses on ${day(current.lapses_at)} unless you set something again.`)]
-      : [el("p", { class: "muted" }, "Setting one of these also records a ceiling of ¥100,000 on an offer from outside the network, and a lapse a year from now.")]),
+      ? [el("p", { class: "muted" }, L("Up to %@ at a shop outside your network", yen(current.ceiling_out_of_network))),
+         el("p", { class: "muted" }, L("Ends on %@", day(current.lapses_at)))]
+      : [el("p", { class: "muted" }, L("Setting one of these also records a ceiling of ¥100,000 on an offer from outside the network, and a lapse a year from now."))]),
     status
   );
 }
@@ -1741,16 +1787,22 @@ type LeaveBlocker = { kind: string; id: string };
  * §14.3. What each blocker kind reads as, in words a person can act on. A kind
  * this screen does not recognise is still shown, by its own name, rather than
  * dropped: a household is never told nothing is holding it here when the
- * engine said otherwise.
+ * engine said otherwise. Each sentence is a function of `L`, not a static
+ * table, so it reads in the member's language; `co_signer`'s used to be this
+ * hub's own and named the mandate, where iOS's own sentence for the same
+ * blocker (`MemberAccountView.swift`) names the limits instead.
  */
-const BLOCKERS: Record<string, string> = {
-  offer_in_progress: "A box or order is still open. Finish or decline it first.",
-  statement_unsigned: "A box is waiting for your signature on what it cost.",
-  reservation_held: "Money is still held for an order.",
-  gift_in_flight: "A gift you are paying for has not finished.",
-  co_signer: "You co-sign another household's mandate. Step down first.",
-  recoverer: "You help another household recover its account. Step down first.",
-};
+function blockerText(kind: string): string | null {
+  switch (kind) {
+    case "offer_in_progress": return L("A box or order is still open. Finish or decline it first.");
+    case "statement_unsigned": return L("A box is waiting for your signature on what it cost.");
+    case "reservation_held": return L("Money is still held for an order.");
+    case "gift_in_flight": return L("A gift you are paying for has not finished.");
+    case "co_signer": return L("You are named in another household's limits. Step down first.");
+    case "recoverer": return L("You help another household recover its account. Step down first.");
+    default: return null;
+  }
+}
 
 /** §14.3. Reads what would block a departure, and draws the screen for it. */
 async function leave(member: Member) {
@@ -1761,7 +1813,7 @@ async function leave(member: Member) {
   if (got.status !== 200 || !Array.isArray(got.body.blockers)) {
     show(el("h1", {}, "Atarasy"), failure(
       got.status === 200
-        ? "What is holding you here came back in a form this screen could not read. Nothing was deleted."
+        ? L("What is holding you here came back in a form this screen could not read. Nothing was deleted.")
         : refusal(got.body, got.status)), backTo(member, "account"));
     return;
   }
@@ -1781,7 +1833,7 @@ function renderLeave(member: Member, blockers: LeaveBlocker[], notice?: string) 
     show(
       el("h1", {}, "Atarasy"),
       el("h2", {}, L("This account cannot be deleted yet")),
-      el("ul", {}, ...blockers.map((b) => el("li", {}, BLOCKERS[b.kind] ?? `${b.kind} (${b.id})`))),
+      el("ul", {}, ...blockers.map((b) => el("li", {}, blockerText(b.kind) ?? `${b.kind} (${b.id})`))),
       status,
       backTo(member, "account")
     );
@@ -1805,7 +1857,7 @@ function renderLeave(member: Member, blockers: LeaveBlocker[], notice?: string) 
       try {
         response = await fetch(`/api/households/${encodeURIComponent(member.household)}/export`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ at, signature }) });
       } catch {
-        throw new Error("This page could not reach the service that serves it. Nothing was saved.");
+        throw new Error(L("This page could not reach the service that serves it. Nothing was saved."));
       }
       if (response.status !== 200) throw new Error(`this answered ${response.status}`);
       const text = await response.text();
@@ -1848,7 +1900,7 @@ function renderLeave(member: Member, blockers: LeaveBlocker[], notice?: string) 
         const blockers = Array.isArray(done.body.blockers)
           ? done.body.blockers
           : (await api<{ blockers?: LeaveBlocker[] }>("GET", `/households/${encodeURIComponent(member.household)}/leave`)).body.blockers ?? [];
-        renderLeave(member, blockers, "Something changed since this screen opened. What is holding you here now:");
+        renderLeave(member, blockers, L("Something changed since this screen opened. What is holding you here now:"));
         return;
       }
       if (done.status !== 200) throw new Error(refusal(done.body, done.status));
@@ -1862,7 +1914,7 @@ function renderLeave(member: Member, blockers: LeaveBlocker[], notice?: string) 
       localStorage.removeItem(STORAGE);
       await setup(el("div", { class: "card" },
         el("p", {}, L("Account deleted")),
-        el("p", { class: "muted" }, `${count} record${count === 1 ? "" : "s"} removed.`)));
+        el("p", { class: "muted" }, L("Records removed: %lld.", count))));
     } catch (e) {
       status.textContent = (e as Error).message;
       del.disabled = false;
