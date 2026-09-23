@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { blocksFor, decidable, disputable, disputeMovesMoney, statementTotal, validateCorrections } from "../src/shared/screen.js";
+import { blocksFor, decidable, decisionGoodsTotal, decisionOutcome, disputable, disputeMovesMoney, statementTotal, undoDeadline, validateCorrections } from "../src/shared/screen.js";
 import { REFUSALS, refusal } from "../src/shared/refusals.js";
 
 /**
@@ -344,5 +344,96 @@ describe("a refusal says what happened and what the member can do", () => {
     // It is also what a household sees when its signature went through and the
     // answer was lost.
     expect(REFUSALS.already_settled!).toContain("that signature is what settled it");
+  });
+});
+
+/**
+ * §16.5, item 4 (vault `80` §6.2 I, "proposal, decided and in cooling").
+ * Whether a row can say the actual moment a decided set stops being
+ * undoable, which needs the decision's own recorded moment and the
+ * mandate's cooling window both in hand.
+ */
+describe("undoDeadline: when a decided set stops being undoable, if both facts are in hand", () => {
+  test("decided_at plus the cooling window, in milliseconds", () => {
+    expect(undoDeadline(1_000_000, 3_600)).toBe(1_000_000 + 3_600_000);
+    expect(undoDeadline(0, 0)).toBe(0);
+  });
+
+  test("no recorded decision moment is nothing to compute, whatever the mandate says", () => {
+    expect(undoDeadline(null, 3_600)).toBeNull();
+    expect(undoDeadline(null, null)).toBeNull();
+    expect(undoDeadline(null, undefined)).toBeNull();
+  });
+
+  test("a mandate not yet read (undefined) is told apart from one read with no cooling window (null), and both are nothing to compute", () => {
+    expect(undoDeadline(1_000_000, undefined)).toBeNull();
+    expect(undoDeadline(1_000_000, null)).toBeNull();
+  });
+});
+
+/**
+ * Item 2 (vault `80` acceptance, IOS-10, COPY-04). A decision's own `POST`
+ * answer can be lost; this is what the re-read afterwards has to tell apart:
+ * recorded (and what it came to), or still not decided, which is never
+ * signed over a second time.
+ */
+describe("decisionOutcome: what a re-read says about a decision that never answered", () => {
+  test("every tried candidate resolved: counted by what it resolved to", () => {
+    const outcome = decisionOutcome(
+      [{ candidate: "c-1", valence: "kept" }, { candidate: "c-2", valence: "returned" }],
+      [{ id: "c-1", valence: "kept" }, { id: "c-2", valence: "returned" }]
+    );
+    expect(outcome).toEqual({ resolved: true, kept: 1, returned: 1 });
+  });
+
+  test("a candidate still `offered` means the set has not resolved, whatever the others read", () => {
+    const outcome = decisionOutcome(
+      [{ candidate: "c-1", valence: "kept" }, { candidate: "c-2", valence: "returned" }],
+      [{ id: "c-1", valence: "kept" }, { id: "c-2", valence: "offered" }]
+    );
+    expect(outcome.resolved).toBe(false);
+  });
+
+  test("a candidate missing from the fresh read (offer id wrong, or read truncated) counts as unresolved, never as decided", () => {
+    const outcome = decisionOutcome([{ candidate: "c-1", valence: "kept" }], []);
+    expect(outcome).toEqual({ resolved: false, kept: 0, returned: 0 });
+  });
+
+  test("a candidate this set never tried to decide is not counted either way", () => {
+    const outcome = decisionOutcome(
+      [{ candidate: "c-1", valence: "kept" }],
+      [{ id: "c-1", valence: "kept" }, { id: "c-2", valence: "consumed" }]
+    );
+    expect(outcome).toEqual({ resolved: true, kept: 1, returned: 0 });
+  });
+
+  test("no decisions at all is trivially resolved, with nothing kept or returned", () => {
+    expect(decisionOutcome([], [{ id: "c-1", valence: "kept" }])).toEqual({ resolved: true, kept: 0, returned: 0 });
+  });
+});
+
+/** D-6, D-7. The review screen's own total, before anything is signed. */
+describe("decisionGoodsTotal: what signing will buy, gifts excluded, carriage apart", () => {
+  const c = (over: Record<string, unknown> = {}) => ({ id: "c-1", unit_price: 1000, quantity: 1, given_by: null, ...over });
+
+  test("a kept line's price × quantity", () => {
+    expect(decisionGoodsTotal([c({ quantity: 2 })], [{ candidate: "c-1", valence: "kept" }])).toBe(2000);
+  });
+
+  test("a declined line is not counted", () => {
+    expect(decisionGoodsTotal([c()], [{ candidate: "c-1", valence: "returned" }])).toBe(0);
+  });
+
+  test("a kept gift is never billed, whatever its price", () => {
+    expect(decisionGoodsTotal([c({ given_by: "maker-a", unit_price: 5000 })], [{ candidate: "c-1", valence: "kept" }])).toBe(0);
+  });
+
+  test("several lines sum, and a line not in the decided set is not counted", () => {
+    const candidates = [c({ id: "c-1", unit_price: 1000 }), c({ id: "c-2", unit_price: 500 }), c({ id: "c-3", unit_price: 900 })];
+    const decisions: { candidate: string; valence: "kept" | "returned" }[] = [
+      { candidate: "c-1", valence: "kept" },
+      { candidate: "c-2", valence: "returned" },
+    ];
+    expect(decisionGoodsTotal(candidates, decisions)).toBe(1000);
   });
 });

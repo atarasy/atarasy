@@ -259,6 +259,67 @@ export function validateCorrections(body: unknown, offerId: string): Corrections
 }
 
 /**
+ * Item 2 (vault `80` acceptance, IOS-10, COPY-04). What became of a decided
+ * set the household tried to confirm, read off a fresh `GET .../approval`
+ * rather than assumed from a lost `POST .../decisions` answer.
+ *
+ * `resolved` is false while any of the household's own candidates still
+ * reads `offered`: the decision has not reached the engine yet, or the read
+ * itself raced it, and the caller's move is to ask again, never to sign
+ * again. A candidate this set did not try to decide (already resolved by the
+ * route, or never open) is not counted either way.
+ */
+export type DecisionOutcome = { resolved: boolean; kept: number; returned: number };
+
+export function decisionOutcome(
+  decisions: readonly { candidate: string; valence: "kept" | "returned" }[],
+  candidates: readonly { id: string; valence: string }[]
+): DecisionOutcome {
+  const now = new Map(candidates.map((c) => [c.id, c.valence]));
+  let kept = 0;
+  let returned = 0;
+  let unresolved = 0;
+  for (const d of decisions) {
+    const valence = now.get(d.candidate);
+    if (valence === "kept") kept++;
+    else if (valence === "returned") returned++;
+    else unresolved++;
+  }
+  return { resolved: unresolved === 0, kept, returned };
+}
+
+/**
+ * D-6, D-7. What signing a decided set will buy: the sum of every kept
+ * line's own price, excluding a line that arrived as a gift (clause 10,
+ * never billed). Carriage is not in this figure, the same convention
+ * `statementTotal` keeps for a settlement, so the review screen says it
+ * beside the total rather than folding it in silently.
+ */
+export function decisionGoodsTotal(
+  candidates: readonly { id: string; unit_price: number; quantity: number; given_by: string | null }[],
+  decisions: readonly { candidate: string; valence: "kept" | "returned" }[]
+): number {
+  const kept = new Set(decisions.filter((d) => d.valence === "kept").map((d) => d.candidate));
+  return candidates
+    .filter((c) => kept.has(c.id) && c.given_by === null)
+    .reduce((sum, c) => sum + c.unit_price * c.quantity, 0);
+}
+
+/**
+ * §16.5, vault `80` §6.2 I ("proposal, decided and in cooling"). When a
+ * decided set can no longer be undone: the moment it was decided, plus the
+ * mandate's own cooling window, when both are in hand. `null` is "nothing to
+ * compute here", not "no deadline": a decision with no recorded moment, or a
+ * mandate that was never read (`undefined`, told apart from a mandate read
+ * that carries no cooling window at all, `null`), leaves the caller with
+ * nothing to add to its own words.
+ */
+export function undoDeadline(decidedAt: number | null, coolingSeconds: number | null | undefined): number | null {
+  if (decidedAt === null || typeof coolingSeconds !== "number") return null;
+  return decidedAt + coolingSeconds * 1000;
+}
+
+/**
  * §3, question 48, decided 2026-09-15. What a `lost` line says, told apart by
  * what the collection named it. Not in the box is a record about the
  * household's home that it sees on its statement and may dispute; a line the

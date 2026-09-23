@@ -1,3 +1,5 @@
+import { goodsTitle } from "./format.js";
+
 /**
  * How a member's own list is sorted into sections.
  *
@@ -21,8 +23,28 @@ export type InboxOffer = {
   decided_at: number | null;
   expires_at: number;
   giver: string | null;
-  /** `collected_as` is question 48's; absent from an engine before the field. */
-  candidates: { id: string; valence: string; collected_as?: string | null }[];
+  /**
+   * §9's `GET /offers` already answers with the engine's full candidate view
+   * (`candidateView` in `valence/engine/src/http.ts`), the same one `.../approval`
+   * carries: `product`, `merchant`, catalogue revision 3's optional `name` and
+   * `variant` (D-1), and the rest. This type used to declare only `id`,
+   * `valence` and `collected_as`, which is a subset a caller can always read
+   * off a wider object, so nothing here was ever wrong to parse: the row this
+   * hub drew from it just never asked for the fields that were already on the
+   * wire, and asked a second question (`.../approval`) for what the list
+   * answer had carried the whole time.
+   */
+  candidates: {
+    id: string;
+    valence: string;
+    /** `collected_as` is question 48's; absent from an engine before the field. */
+    collected_as?: string | null;
+    product: string;
+    merchant: string;
+    /** D-1, catalogue revision 3. Absent from a candidate published before it. */
+    name?: string | null;
+    variant?: string | null;
+  }[];
 };
 
 /**
@@ -80,3 +102,57 @@ export const awaitsDecision = (o: InboxOffer): boolean =>
  */
 export const byArrival = (a: InboxOffer, b: InboxOffer): number =>
   (b.presented_at ?? b.expires_at) - (a.presented_at ?? a.expires_at);
+
+/**
+ * Vault `80` §6.2 I. The one status line a row carries, in the member's own
+ * words rather than a protocol state. Four of the plan's six cases are ones
+ * this list can answer on its own; the other two (a decided set's cooling
+ * countdown and a result gone unknown) need the mandate and a saved
+ * operation handle this module does not hold, and are drawn by the caller.
+ *
+ * A pure function so the case a row falls into is decided once, here, rather
+ * than by an `if` chain repeated wherever a row is drawn.
+ */
+export type RowStatus =
+  | { kind: "box-waiting"; nextSwap: number }
+  | { kind: "box-statement-ready"; holdsNext: boolean }
+  | { kind: "proposal-undecided"; closes: number }
+  | { kind: "proposal-decided" };
+
+export function rowStatus(o: InboxOffer): RowStatus {
+  if (awaitsStatement(o)) return { kind: "box-statement-ready", holdsNext: holdsNextBox(o) };
+  if (o.binding === "physical") return { kind: "box-waiting", nextSwap: o.expires_at };
+  if (awaitsDecision(o)) return { kind: "proposal-undecided", closes: o.expires_at };
+  return { kind: "proposal-decided" };
+}
+
+/**
+ * D-1, vault `80` §6.2 I: "a row shows product name of the first line and
+ * '+2 more'". `title` is `goodsTitle()` (`shared/format.ts`) of the first
+ * candidate; `moreCount` is how many lines beyond it there are, which the
+ * caller turns into the iOS app's own "%@ and %lld more" (D-5) or leaves
+ * unsaid when it is zero. Kept as data rather than a formatted string here,
+ * because this module carries no language and no copy table.
+ */
+export type RowGoods = { title: string; moreCount: number };
+
+export function rowGoods(o: InboxOffer): RowGoods {
+  const first = o.candidates[0];
+  if (!first) return { title: "", moreCount: 0 };
+  return { title: goodsTitle(first), moreCount: o.candidates.length - 1 };
+}
+
+/**
+ * The merchants this row's lines are sold by, each once, in the order they
+ * first appear. A box is one presenter's and several merchants' (clause 11:
+ * the presenter is not the seller), so a row's "who sells this" is this list
+ * rather than the presenter the old row showed.
+ */
+export function rowMerchants(o: InboxOffer): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const c of o.candidates) {
+    if (!seen.has(c.merchant)) { seen.add(c.merchant); out.push(c.merchant); }
+  }
+  return out;
+}
