@@ -67,13 +67,9 @@
     <string name="box_used">Used</string>
     <string name="box_missing">Not found in the box</string>
     <string name="box_kept">Kept</string>
-    <string name="statement_title">Statement</string>
-    <string name="action_review_statement">Review statement</string>
-    <string name="action_sign_statement">Sign and submit statement</string>
     <string name="action_dispute">This isn\'t right</string>
     <string name="action_disputed">Disputed</string>
     <string name="notice_statement_recorded">Your statement was recorded.</string>
-    <string name="settled_title">Settled</string>
 
     <!-- Limits -->
     <string name="limits_intro">These are the limits your agent works within. Nothing outside them can be bought for you, and loosening them needs the people you name here.</string>
@@ -91,7 +87,6 @@
     <string name="limits_your_limits">Your limits</string>
     <string name="limits_signature_review">Signature review</string>
     <string name="limits_sign_proposal">Sign fixed proposal</string>
-    <string name="limits_review_proposal">Review fixed proposal</string>
 
     <!-- Account -->
     <string name="account_signed_in_with_passkey">Signed in with your passkey</string>
@@ -113,4 +108,117 @@
 
     <string name="signed_and_sent">Signed and sent</string>
     <string name="prepared_not_signed">Prepared, not signed</string>
+
+    <!-- Box header and contents (ported from ios/AtarasyPrototype/MemberBoxScreen.swift at 34cde26) -->
+    <string name="box_offered_until">Offered until %1$s.</string>
+    <string name="box_at_home_note">These goods are already with you. Use what you like; you pay only for what you use, and the rest goes back at the swap.</string>
+    <string name="box_collected_note">The collection has recorded what was used and what went back.</string>
+    <string name="box_in_the_box_title">In the box</string>
+    <string name="box_prices_note">Prices are the shop\'s own. You are charged only for what you use.</string>
+    <string name="box_free">Free</string>
+    <string name="amount_not_charged">Not charged</string>
+
+    <!-- Line status words, digital and physical (MemberLineStatus, MemberOfferDetail.lostOutcome) -->
+    <string name="line_status_with_you">With you.</string>
+    <string name="line_status_with_you_not_collected">With you. Not collected yet.</string>
+    <string name="line_status_went_back">Went back at the swap.</string>
+    <string name="line_status_used">Used.</string>
+    <string name="line_status_kept">You kept this.</string>
+    <string name="line_status_defaulted">Sent because nothing was chosen.</string>
+    <string name="line_status_declined">Declined.</string>
+    <string name="line_status_waiting">Waiting for your choice.</string>
+    <string name="lost_outcome_missing">Not found in the box at collection. You are never charged for it. If it was there, you can say so on the statement.</string>
+    <string name="lost_outcome_deadline">Not collected by the deadline. You are never charged for it.</string>
+    <string name="lost_outcome_unknown">Not returned: either not found in the box or not collected by the deadline. You are never charged for it.</string>
+
+    <!-- Statement, grouped (MemberStatementLines) -->
+    <string name="statement_used_note">The collection found these used. You pay the shop\'s price, unless it was a gift.</string>
+    <string name="statement_kept_note">You chose to keep these.</string>
+    <string name="statement_missing_note">Never charged to you. If one was there, say so.</string>
+    <string name="dispute_missing">It was in the box</string>
+    <string name="box_unsigned_hold">This statement has not been signed. The next box is on hold until it is.</string>
+    <string name="box_review_and_sign">Review and sign</string>
+    <string name="label_goods">Goods</string>
+    <string name="label_goods_and_delivery">Goods and delivery</string>
+    <string name="notice_disputed_lines_note">Lines you marked are not charged here. What is owed for them is between you and the shop, under its terms.</string>
+    <string name="statement_not_ready_note">Delivery costs have not been recorded. This statement is not ready to sign.</string>
+
+    <!-- Signing a statement (MemberStatementReviewScreen) -->
+    <string name="sign_this_statement_title">Sign this statement</string>
+    <string name="statement_signing_confirms">Signing confirms what the collection recorded, except the lines you marked, and lets %1$s charge the goods amount below.</string>
+    <string name="marked_not_right_not_charged">Marked as not right, not charged here</string>
+    <string name="missing_attestation">Signing shows you were told which items the collection did not find. It is not you agreeing they are missing or taking responsibility for them; you are never charged for them, and you can say any of them was there.</string>
+
+    <!-- Settled box (MemberSettledView) -->
+    <string name="settled_on">Settled %1$s</string>
+    <string name="settled_goods_charged">Goods charged</string>
+    <string name="payment_status_unavailable">Payment status is not available here.</string>
+    <string name="nothing_left_to_sign_box">There is nothing left to sign for this box.</string>
+    <string name="corrections_from_shop">Corrections from the shop</string>
+    <string name="corrections_added_note">Added by the shop beside the settlement. Nothing here is yours to sign.</string>
+    <string name="after_corrections">After corrections</string>
+    <string name="marked_not_right_here_note">You marked this as not right. Not charged here.</string>
+    <string name="said_in_box_note">You said it was in the box.</string>
+    <string name="refund_from">Refund from %1$s</string>
+    <string name="correction_from">Correction from %1$s</string>
+
+    <!-- Per-merchant shop terms, collapsed while browsing, open on the signing screen -->
+    <string name="shop_terms_title">Shop terms</string>
+    <string name="shop_terms_subtitle">Written and signed by each shop. Shown exactly as the shop wrote it.</string>
+    <string name="for_product_only">For %1$s only</string>
+
+    <!-- Inbox: per-presenter partial failure -->
+    <string name="could_not_be_checked">Could not be checked.</string>
+
+    <!-- My records (MemberRecordText, MemberRecordList) -->
+    <string name="a_box">A box</string>
+    <string name="a_proposal">A proposal</string>
+    <string name="action_check_result">Check result</string>
+    <string name="label_checking">Checking…</string>
+
+    <!-- Mandate editor (MemberMandateEditor) -->
+    <string name="mandate_daily_limit_label">Daily limit</string>
+    <string name="mandate_daily_amount_label">Up to, per day</string>
+    <string name="mandate_outside_amount_label">At a shop outside your network</string>
+    <string name="mandate_time_to_undo_label">Time to undo a decision</string>
+    <string name="mandate_ends_on_label">Ends on</string>
+    <string name="mandate_new_limits_header">New limits</string>
+    <string name="mandate_amounts_in">Amounts are in %1$s.</string>
+    <string name="mandate_cosigners_header">People who must agree to loosen these</string>
+    <string name="mandate_cosigners_hint">One per line</string>
+    <string name="mandate_cosigners_footer">Enter the account reference each person gives you.</string>
+    <string name="mandate_review_change">Review this change</string>
+    <string name="mandate_change_note">Raising a limit, shortening the time to undo or removing a person needs everyone named in your current limits to sign. Nothing changes until they have.</string>
+    <string name="mandate_now_header">Now</string>
+    <string name="mandate_after_change_header">After the change</string>
+    <string name="mandate_who_must_sign_header">Who must sign</string>
+    <string name="mandate_validation_message">Change at least one limit. Amounts must be whole numbers, the time to undo at most 30 days, and each person listed once.</string>
+    <string name="mandate_signatures_count">%1$d of %2$d signatures</string>
+
+    <!-- Host move phases (MemberHostMoveView.phase) -->
+    <string name="host_move_phase_idle">Not started</string>
+    <string name="host_move_phase_signing_into_target">Signing in at the new host</string>
+    <string name="host_move_phase_exporting">Preparing your data</string>
+    <string name="host_move_phase_importing">Copying to the new host</string>
+    <string name="host_move_phase_verifying">Checking the new host</string>
+    <string name="host_move_phase_ready_to_retire">Ready to close your current host</string>
+    <string name="host_move_phase_retiring">Closing your current host</string>
+    <string name="host_move_phase_completed">Move complete</string>
+    <string name="host_move_phase_source_retained">Stopped. Your current host is unchanged</string>
+    <string name="host_move_phase_unresolved">Not confirmed. Check both hosts</string>
+
+    <!-- Deletion blockers (MemberLeaveSheet.blockerDescription) -->
+    <string name="leave_blocker_offer_in_progress">A box or order is still open. Finish or decline it first.</string>
+    <string name="leave_blocker_statement_unsigned">A settlement statement is waiting for your signature.</string>
+    <string name="leave_blocker_reservation_held">A reservation is still held against your account.</string>
+    <string name="leave_blocker_gift_in_flight">A gift to or from this household is still in flight.</string>
+    <string name="leave_blocker_permission_action_pending">A permission request is still pending a decision.</string>
+    <string name="leave_blocker_co_signer">You are named in another household\'s limits. Step down first.</string>
+    <string name="leave_blocker_recoverer">You help another household recover its account. Step down first.</string>
+    <string name="leave_blocker_host_move_pending">A host move is in progress for this account.</string>
+    <string name="leave_blocker_operation_pending">Something you signed is still waiting for its result.</string>
+    <string name="leave_blocker_mandate_change_pending">A change to your limits is still waiting for signatures.</string>
+    <string name="leave_blocker_recovery_request_pending">A recovery request involving this household is still pending.</string>
+    <string name="leave_blocker_permission_request_pending">A permission request involving this household is still pending.</string>
+    <string name="leave_blocker_default">Something is still in progress.</string>
 </resources>
