@@ -9,6 +9,10 @@ public struct MemberOfferDetail: Codable, Equatable, Sendable {
         public let givenBy: String?; public let valence: String; public let decidedAt: Int64?; public let keptAs: String?; public let lineage: String?
         /// §3, question 48. What the collection named this line, or nil where none did or the engine predates the field.
         public let collectedAs: String?
+        /// Catalogue revision 3 (vault `80` D-1). The merchant's display name and variant, absent
+        /// where the catalogue gave none; plain text rendered in the hub's own type (clause 54).
+        public let name: String?
+        public let variant: String?
     }
     public struct Disclosure: Codable, Equatable, Sendable {
         public struct Item: Codable, Equatable, Sendable { public let label: String; public let value: String }
@@ -33,7 +37,7 @@ public struct MemberOfferDetail: Codable, Equatable, Sendable {
         guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               Set(object.keys).subtracting(["decided_at"]) == Set("id binding household presenter presenter_attested purpose price_band giver config_version presented_at expires_at state exploration_floor_met mandate candidates disclosures".split(separator: " ").map(String.init)),
               let candidates = object["candidates"] as? [[String: Any]],
-              candidates.allSatisfy({ Set($0.keys).subtracting(["collected_as"]) == Set("id product quantity unit_price merchant maker ships category predicted_conversion is_exploration given_by valence decided_at kept_as lineage".split(separator: " ").map(String.init)) }),
+              candidates.allSatisfy({ Set($0.keys).subtracting(["collected_as", "name", "variant"]) == Set("id product quantity unit_price merchant maker ships category predicted_conversion is_exploration given_by valence decided_at kept_as lineage".split(separator: " ").map(String.init)) }),
               let disclosures = object["disclosures"] as? [[String: Any]],
               disclosures.allSatisfy({ block in
                   guard Set(block.keys).subtracting(["contact"]) == Set(["merchant", "product", "version", "items", "signature"]),
@@ -56,7 +60,7 @@ public struct MemberOfferDetail: Codable, Equatable, Sendable {
               !value.presenter.isEmpty, !value.household.isEmpty, !value.configVersion.isEmpty, !value.mandate.isEmpty,
               safe(value.expiresAt), value.presentedAt.map(safe) ?? true, value.decidedAt.map(safe) ?? true,
               value.candidates.allSatisfy({ c in
-                  !c.id.isEmpty && ids.insert(Data(c.id.utf8)).inserted && !c.product.isEmpty && !c.merchant.isEmpty && !c.maker.isEmpty && !c.ships.isEmpty && c.quantity > 0 && safe(c.quantity) && safe(c.unitPrice) && ["offered", "kept", "returned", "consumed", "defaulted", "lost"].contains(c.valence) && (c.decidedAt.map(safe) ?? true) && (c.predictedConversion.map { $0.isFinite && (0...1).contains($0) } ?? true) && (c.keptAs.map { ["self", "gift", "order"].contains($0) } ?? true) && (c.givenBy.map { !$0.isEmpty } ?? true)
+                  !c.id.isEmpty && ids.insert(Data(c.id.utf8)).inserted && !c.product.isEmpty && !c.merchant.isEmpty && !c.maker.isEmpty && !c.ships.isEmpty && c.quantity > 0 && safe(c.quantity) && safe(c.unitPrice) && ["offered", "kept", "returned", "consumed", "defaulted", "lost"].contains(c.valence) && (c.decidedAt.map(safe) ?? true) && (c.predictedConversion.map { $0.isFinite && (0...1).contains($0) } ?? true) && (c.keptAs.map { ["self", "gift", "order"].contains($0) } ?? true) && (c.givenBy.map { !$0.isEmpty } ?? true) && ReviewValidation.displayText(c.name, max: 120) && ReviewValidation.displayText(c.variant, max: 60)
               }), value.disclosures.allSatisfy({ d in
                   !d.merchant.isEmpty && !d.version.isEmpty && !d.signature.isEmpty && value.candidates.contains { c in same(c.merchant, d.merchant) && (d.product.map { same(c.product, $0) } ?? true) }
               }) else { throw MemberFailure.malformed }

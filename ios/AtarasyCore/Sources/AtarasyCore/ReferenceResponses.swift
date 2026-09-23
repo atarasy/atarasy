@@ -11,6 +11,8 @@ public struct ProtocolSettlement: Decodable, Equatable, Sendable {
         public let valence: String
         public let amount: Int64
         public let disputed: Bool
+        public let name: String?
+        public let variant: String?
     }
     public let offer: String
     public let settledAt: Int64
@@ -101,7 +103,7 @@ public enum ReferenceResponseReader {
             // Fail closed for this pinned contract; widening belongs to a tested revision.
             guard Set(body.keys) == Set(["offer", "settled_at", "kept_amount", "consumed_amount", "lost_amount", "charged", "disputed_amount", "lines", "payer", "signed_by", "signed_as", "receipt", "confirmation"]),
                   let lines = body["lines"] as? [[String: Any]],
-                  lines.allSatisfy({ Set($0.keys) == Set(["candidate", "product", "merchant", "maker", "ships", "valence", "amount", "disputed"]) })
+                  lines.allSatisfy({ Set($0.keys).subtracting(["name", "variant"]) == Set(["candidate", "product", "merchant", "maker", "ships", "valence", "amount", "disputed"]) && ReviewValidation.displayFields($0) })
             else { throw ReferenceReadFailure.malformedResponse }
             value = try JSONDecoder().decode(ProtocolSettlement.self, from: data)
         } catch { throw ReferenceReadFailure.malformedResponse }

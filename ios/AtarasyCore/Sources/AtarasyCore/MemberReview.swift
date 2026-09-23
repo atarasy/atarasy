@@ -23,6 +23,7 @@ public struct MemberApproval: Codable, Equatable, Sendable {
         public let givenBy: String?; public let quantity: Int64; public let unitPrice: Int64
         public let isExploration: Bool; public let valence: String
         public let alternatives: [String]; public let argumentAgainst: String; public let disclosure: MemberDisclosureReference
+        public let name: String?; public let variant: String?
     }
     public struct Excluded: Codable, Equatable, Sendable { public let product: String; public let reason: String }
     public let offer: String; public let presenter: String; public let expiresAt: Int64; public let carriage: Int64?
@@ -33,7 +34,7 @@ public struct MemberApproval: Codable, Equatable, Sendable {
         let object = try ReviewValidation.object(data, keys: "price_band disclosures offer presenter expires_at carriage reminded mandate candidates excluded")
         try ReviewValidation.shape(object["mandate"], keys: "kind scope lapses_at")
         if !(object["price_band"] is NSNull) { try ReviewValidation.shape(object["price_band"], keys: "min max") }
-        try ReviewValidation.rows(object["candidates"], keys: "merchant maker ships given_by id product quantity unit_price is_exploration valence alternatives argument_against disclosure", optional: "collected_as", reference: true)
+        try ReviewValidation.rows(object["candidates"], keys: "merchant maker ships given_by id product quantity unit_price is_exploration valence alternatives argument_against disclosure", optional: "collected_as name variant", reference: true)
         _ = try ReviewValidation.collectedAs(object["candidates"])
         try ReviewValidation.rows(object["excluded"], keys: "product reason")
         try ReviewValidation.disclosureShape(object["disclosures"])
@@ -49,6 +50,7 @@ public struct MemberApproval: Codable, Equatable, Sendable {
                   let source = detail.candidates.first(where: { ReviewValidation.same($0.id, c.id) }),
                   ReviewValidation.matches(source, product: c.product, merchant: c.merchant, maker: c.maker, ships: c.ships, giver: c.givenBy, quantity: c.quantity, unitPrice: c.unitPrice, valence: c.valence),
                   c.isExploration == source.isExploration, !c.alternatives.isEmpty,
+                  ReviewValidation.sameOptional(c.name, source.name), ReviewValidation.sameOptional(c.variant, source.variant),
                   c.alternatives.allSatisfy({ !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }),
                   !c.argumentAgainst.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                   ReviewValidation.governs(c.disclosure, candidate: source, blocks: value.disclosures) else { throw MemberFailure.malformed }
@@ -65,6 +67,7 @@ public struct MemberStatement: Decodable, Equatable, Sendable {
         /// Question 46. The collection's note for a missing (`lost`) line; nil otherwise and from engines before it.
         public let note: String?
         public let disclosure: MemberDisclosureReference
+        public let name: String?; public let variant: String?
     }
     public let offer: String; public let household: String; public let expiresAt: Int64
     public let lines: [Line]; public let disclosures: [MemberOfferDetail.Disclosure]; public let carriage: Int64?; public let challenge: String
@@ -73,7 +76,7 @@ public struct MemberStatement: Decodable, Equatable, Sendable {
         // Question 46 added `note` to every line. A capture from an engine before it carries no such key, and no lost line.
         let base = "candidate product merchant maker ships given_by valence quantity unit_price amount disclosure"
         let hasNote = ((object["lines"] as? [[String: Any]])?.first?.keys.contains("note")) ?? false
-        try ReviewValidation.rows(object["lines"], keys: hasNote ? base + " note" : base, reference: true)
+        try ReviewValidation.rows(object["lines"], keys: hasNote ? base + " note" : base, optional: "name variant", reference: true)
         try ReviewValidation.disclosureShape(object["disclosures"])
         let value: Self = try ReviewValidation.decode(data)
         guard detail.binding == "physical", ReviewValidation.same(value.offer, detail.id), ReviewValidation.same(value.household, detail.household), value.expiresAt == detail.expiresAt else { throw MemberFailure.scopeMismatch }
@@ -87,6 +90,7 @@ public struct MemberStatement: Decodable, Equatable, Sendable {
             guard ids.insert(Data(line.candidate.utf8)).inserted,
                   let source = (line.valence == "lost" ? lost : eligible).first(where: { ReviewValidation.same($0.id, line.candidate) }),
                   ReviewValidation.matches(source, product: line.product, merchant: line.merchant, maker: line.maker, ships: line.ships, giver: line.givenBy, quantity: line.quantity, unitPrice: line.unitPrice, valence: line.valence),
+                  ReviewValidation.sameOptional(line.name, source.name), ReviewValidation.sameOptional(line.variant, source.variant),
                   ReviewValidation.governs(line.disclosure, candidate: source, blocks: value.disclosures), ReviewValidation.safe(line.amount) else { throw MemberFailure.malformed }
             if line.valence == "lost" {
                 // Never charged, and a missing record always carries the collection's note.
@@ -113,6 +117,19 @@ enum ReviewValidation {
         switch (a, b) { case (.none, .none): return true; case let (.some(a), .some(b)): return same(a, b); default: return false }
     }
     static func safe(_ value: Int64) -> Bool { (0...Canonical.maximumInteger).contains(value) }
+    /// Catalogue revision 3. Absent is legitimate; present is nonempty text within the published bound.
+    static func displayText(_ value: String?, max: Int) -> Bool {
+        guard let value else { return true }
+        return !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && value.unicodeScalars.count <= max
+    }
+    /// The same check on a raw row, where a present key must also be a string.
+    static func displayFields(_ row: [String: Any]) -> Bool {
+        for (key, max) in [("name", 120), ("variant", 60)] {
+            guard let raw = row[key] else { continue }
+            guard let text = raw as? String, displayText(text, max: max) else { return false }
+        }
+        return true
+    }
     static func decode<T: Decodable>(_ data: Data) throws -> T {
         let decoder = JSONDecoder(); decoder.keyDecodingStrategy = .convertFromSnakeCase
         do { return try decoder.decode(T.self, from: data) } catch { throw MemberFailure.malformed }

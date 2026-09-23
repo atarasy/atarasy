@@ -35,6 +35,21 @@ private enum ProposalRead: Sendable {
     private var reviewGeneration: UInt64 = 0
     private var detailGeneration: UInt64 = 0
     public var incomplete: Bool { sources.contains { $0.status == .unavailable } }
+    /// `04b` §1b.2 and clause 14. One order, made once over the union of every presenter's
+    /// answer: newest arrival first, never grouped by presenter and never in the order the
+    /// session lists presenters, which is the shape that sells position. Ties fall back to the
+    /// offer id so two refreshes draw the same list.
+    public func rows(binding: String) -> [MemberOfferSummary] {
+        var seen = Set<Data>()
+        return sources.flatMap(\.offers)
+            .filter { $0.binding == binding && seen.insert(Data(($0.presenter + "\u{0}" + $0.id).utf8)).inserted }
+            .sorted { a, b in
+                if a.arrivedAt != b.arrivedAt { return a.arrivedAt > b.arrivedAt }
+                return a.id.utf16.lexicographicallyPrecedes(b.id.utf16)
+            }
+    }
+    /// Whether any configured source has answered at least once, so an empty union means empty.
+    public var anySourceChecked: Bool { sources.contains { $0.verifiedAt != nil } }
     var onSessionUnavailable: (() -> Void)?
     private let service: any MemberProposalService
     private let now: () -> Int64
