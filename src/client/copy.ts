@@ -35,6 +35,7 @@ const JA: Record<string, string> = {
   // button, neither of which is a string. This hub's cards need one of each.
   "Open": "開く",
   "Back": "戻る",
+  "%@ and %lld more": "%1$@ ほか %2$lld 点",
   "This account cannot be deleted yet": "このアカウントはまだ削除できません",
   "Account deleted": "アカウントを削除しました",
   "A box": "お届け箱",

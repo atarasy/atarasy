@@ -111,8 +111,20 @@ function stubAuthenticator(handle: ArrayBuffer | null = KEY.handle.buffer) {
 }
 
 /** Let the screen's own promises finish before reading what it drew. */
+/**
+ * D-7 widened the chain a click can start (browsing screen -> review screen
+ * -> its own async render), so the three 5ms ticks this used before started
+ * missing the tail end of it under load and made a different assertion
+ * flake each run. **A "wait until the DOM stops changing" poll was tried
+ * here and reverted**: it samples on a timer of its own, so a handler that
+ * has not rendered anything yet reads as stable too, and the poll returns
+ * before the real render happens. There is no cheap way to tell "finished"
+ * from "hasn't started" from outside the handler, so this is a longer fixed
+ * wait instead, sized for the slowest chain now in this file (two renders
+ * and a WebAuthn-shaped signature) rather than the fastest one.
+ */
 async function settled() {
-  for (let i = 0; i < 3; i++) await new Promise((r) => setTimeout(r, 5));
+  for (let i = 0; i < 8; i++) await new Promise((r) => setTimeout(r, 10));
   return document.getElementById("app")!;
 }
 
@@ -146,6 +158,20 @@ const STANDING = {
   ],
 };
 
+/**
+ * The list endpoint's own candidate shape (`GET /offers`, `shared/inbox.ts`'s
+ * `InboxOffer`): the engine's `candidateView` already carries `product` and
+ * `merchant`, not only `id` and `valence`, so a row fixture that omitted them
+ * was never what the engine actually sends.
+ */
+const rowCand = (over: Record<string, unknown> = {}) => ({
+  id: "c-1",
+  valence: "offered",
+  product: "row-tea-a",
+  merchant: "row-shop-x",
+  ...over,
+});
+
 const offerRow = (over: Record<string, unknown> = {}) => ({
   id: "o-1",
   presenter: "presenter-a",
@@ -155,7 +181,7 @@ const offerRow = (over: Record<string, unknown> = {}) => ({
   decided_at: null,
   expires_at: 9_999_999_999_999,
   giver: null,
-  candidates: [{ id: "c-1", valence: "offered" }],
+  candidates: [rowCand({ id: "c-1", valence: "offered" })],
   ...over,
 });
 
@@ -171,13 +197,13 @@ describe("the list, as a member sees it", () => {
           body: {
             offers: [
               offerRow({ id: "o-digital", presented_at: 3_000 }),
-              offerRow({ id: "o-box", binding: "physical", presented_at: 2_000, candidates: [{ id: "c-1", valence: "offered" }] }),
+              offerRow({ id: "o-box", binding: "physical", presented_at: 2_000, candidates: [rowCand({ id: "c-1", valence: "offered" })] }),
               offerRow({
                 id: "o-statement",
                 binding: "physical",
                 state: "decided",
                 presented_at: 1_000,
-                candidates: [{ id: "c-1", valence: "consumed" }],
+                candidates: [rowCand({ id: "c-1", valence: "consumed" })],
               }),
             ],
           },
@@ -231,8 +257,8 @@ describe("the list, as a member sees it", () => {
           status: 200,
           body: {
             offers: [
-              offerRow({ id: "o-route", binding: "physical", state: "decided", presented_at: 2_000, candidates: [{ id: "c-1", valence: "returned" }] }),
-              offerRow({ id: "o-signed", binding: "physical", state: "decided", presented_at: 1_000, candidates: [{ id: "c-1", valence: "kept" }] }),
+              offerRow({ id: "o-route", binding: "physical", state: "decided", presented_at: 2_000, candidates: [rowCand({ id: "c-1", valence: "returned" })] }),
+              offerRow({ id: "o-signed", binding: "physical", state: "decided", presented_at: 1_000, candidates: [rowCand({ id: "c-1", valence: "kept" })] }),
             ],
           },
         };
@@ -250,7 +276,7 @@ describe("the list, as a member sees it", () => {
     const pastApp = await render((url) => {
       if (url === "/config") return { status: 200, body: CONFIG };
       if (url.startsWith("/api/offers?")) {
-        return { status: 200, body: { offers: [offerRow({ id: "o-past", binding: "physical", state: "decided", expires_at: 1_000, candidates: [{ id: "c-1", valence: "kept" }] })] } };
+        return { status: 200, body: { offers: [offerRow({ id: "o-past", binding: "physical", state: "decided", expires_at: 1_000, candidates: [rowCand({ id: "c-1", valence: "kept" })] })] } };
       }
       return { status: 404, body: {} };
     });
@@ -268,7 +294,7 @@ describe("the list, as a member sees it", () => {
     const app = await render((url, method, body) => {
       if (url === "/config") return { status: 200, body: CONFIG };
       if (url.startsWith("/api/offers?")) {
-        return { status: 200, body: { offers: withdrawn ? [] : [offerRow({ state: "decided", decided_at: 1_800_000_000_001, candidates: [{ id: "c-1", valence: "kept" }] })] } };
+        return { status: 200, body: { offers: withdrawn ? [] : [offerRow({ state: "decided", decided_at: 1_800_000_000_001, candidates: [rowCand({ id: "c-1", valence: "kept" })] })] } };
       }
       if (url === "/api/offers/o-1/decisions" && method === "DELETE") {
         withdrawn = true;
@@ -451,6 +477,117 @@ describe("the approval, as a member sees it", () => {
     openButton.click();
     expect(text(await settled())).toContain("could not read");
   });
+
+  test("D-7: the shop's terms are collapsed while browsing, and open on the review step the Sign button sits on", async () => {
+    const app = await open([candidate()]);
+    // Browsing: a `<details>` names the merchant and is closed by default,
+    // so the terms are not part of the text a member reads without a tap.
+    // `<details>` without an `open` attribute renders collapsed to a
+    // sighted member (only the summary is visible); `textContent` does not
+    // reflect that either way, which is why this checks the attribute and
+    // not what `text()` returns.
+    const details = app.querySelector("details")!;
+    expect(details).not.toBeNull();
+    expect(details.hasAttribute("open")).toBe(false);
+    expect(text(details.querySelector("summary")!)).toBe("Terms from shop-x");
+
+    [...document.querySelectorAll("button")].find((b) => text(b) === "Keep")!.click();
+    [...document.querySelectorAll("button")].find((b) => text(b) === "Review")!.click();
+    const review = await settled();
+    // Review: no `<details>` at all, and the same terms are plain text.
+    expect(review.querySelector("details")).toBeNull();
+    expect(text(review)).toContain("on confirmation");
+    expect(text(review)).toContain("Sign with passkey");
+  });
+});
+
+describe("what a member is shown when a decision never answers (item 2, IOS-10, COPY-04)", () => {
+  /**
+   * Opens the approval, keeps the one line, and signs. `onApproval`, when
+   * given, answers only the reads Check result makes afterwards: the first
+   * load always finds the line still `offered`, since a line already
+   * resolved is not offered a Keep button to press in the first place.
+   */
+  async function decide(onDecisions: (body: unknown) => { status: number; body: unknown }, onApproval?: () => { status: number; body: unknown }) {
+    stubAuthenticator();
+    let decided = false;
+    const firstLoad = {
+      status: 200,
+      body: {
+        offer: "o-1", presenter: "presenter-a", expires_at: 9_999_999_999_999, reminded: false,
+        price_band: null, mandate: { kind: "individual", scope: "this offer", lapses_at: null },
+        candidates: [candidate()], disclosures: [STANDING], carriage: 500, excluded: [],
+      },
+    };
+    const app = await render((url, method, body) => {
+      if (url === "/config") return { status: 200, body: CONFIG };
+      if (url.startsWith("/api/offers?")) return { status: 200, body: { offers: [offerRow()] } };
+      if (url.includes("/decisions") && method === "POST") { decided = true; return onDecisions(body); }
+      if (url.includes("/approval")) return decided && onApproval ? onApproval() : firstLoad;
+      return { status: 404, body: {} };
+    });
+    [...app.querySelectorAll("button")].find((b) => text(b) === "Open")!.click();
+    await settled();
+    [...document.querySelectorAll("button")].find((b) => text(b) === "Keep")!.click();
+    // D-6, D-7: picking is on the browsing screen, signing is on the review
+    // step "Review" opens.
+    [...document.querySelectorAll("button")].find((b) => text(b) === "Review")!.click();
+    await settled();
+    [...document.querySelectorAll("button")].find((b) => text(b) === "Sign with passkey")!.click();
+    return text(await settled());
+  }
+
+  test("a lost answer offers Check result and nothing else, never a fresh signature", async () => {
+    const shown = await decide(() => ({ status: 0, body: {} }));
+    expect(shown).toContain("Result not known yet");
+    expect(shown).toContain("Nothing answered");
+    expect(buttons(document.getElementById("app")!)).toEqual(["Check result", "Back"]);
+  });
+
+  test("Check result reads the approval back and reports what was recorded, without posting a second decision", async () => {
+    let decisionPosts = 0;
+    const shown = await decide(
+      () => { decisionPosts++; return { status: 0, body: {} }; },
+      () => ({
+        status: 200,
+        body: {
+          offer: "o-1", presenter: "presenter-a", expires_at: 9_999_999_999_999, reminded: false,
+          price_band: null, mandate: { kind: "individual", scope: "this offer", lapses_at: null },
+          // The line the member kept now reads `kept`, so a fresh read finds
+          // the decision the lost POST may still have made.
+          candidates: [candidate({ valence: "kept" })], disclosures: [STANDING], carriage: 500, excluded: [],
+        },
+      })
+    );
+    expect(shown).toContain("Result not known yet");
+    [...document.querySelectorAll("button")].find((b) => text(b) === "Check result")!.click();
+    const after = text(await settled());
+    expect(after).toContain("Decision recorded");
+    expect(after).toContain("1 kept, 0 declined");
+    // The one `POST .../decisions` was the original attempt; Check result
+    // reads, it does not sign again.
+    expect(decisionPosts).toBe(1);
+  });
+
+  test("Check result reads a set still not decided, and stays on the unknown screen", async () => {
+    const shown = await decide(
+      () => ({ status: 0, body: {} }),
+      () => ({
+        status: 200,
+        body: {
+          offer: "o-1", presenter: "presenter-a", expires_at: 9_999_999_999_999, reminded: false,
+          price_band: null, mandate: { kind: "individual", scope: "this offer", lapses_at: null },
+          // Still `offered`: the POST never reached the engine.
+          candidates: [candidate({ valence: "offered" })], disclosures: [STANDING], carriage: 500, excluded: [],
+        },
+      })
+    );
+    expect(shown).toContain("Result not known yet");
+    [...document.querySelectorAll("button")].find((b) => text(b) === "Check result")!.click();
+    const after = text(await settled());
+    expect(after).toContain("Result not known yet");
+    expect(after).not.toContain("Decision recorded");
+  });
 });
 
 describe("the statement, as a member sees it", () => {
@@ -461,7 +598,7 @@ describe("the statement, as a member sees it", () => {
   const routes = (disclosures: Record<string, unknown>[] = [STANDING]) => (url: string) => {
     if (url === "/config") return { status: 200, body: CONFIG };
     if (url.startsWith("/api/offers?")) {
-      return { status: 200, body: { offers: [offerRow({ binding: "physical", state: "decided", candidates: [{ id: "c-1", valence: "consumed" }] })] } };
+      return { status: 200, body: { offers: [offerRow({ binding: "physical", state: "decided", candidates: [rowCand({ id: "c-1", valence: "consumed" })] })] } };
     }
     if (url.includes("/statement")) {
       return {
@@ -503,6 +640,19 @@ describe("the statement, as a member sees it", () => {
     expect(links).toHaveLength(2);
     for (const link of links) expect(text(link)).toBe("help@shop-x.example");
   });
+
+  test("D-7: the shop's terms are collapsed while disputing, and open on the review step the Sign button sits on", async () => {
+    const app = await openStatement();
+    const details = app.querySelectorAll("details");
+    expect(details.length).toBeGreaterThan(0);
+    for (const d of details) expect(d.hasAttribute("open")).toBe(false);
+
+    [...document.querySelectorAll("button")].find((b) => text(b) === "Review and sign")!.click();
+    const review = await settled();
+    expect(review.querySelector("details")).toBeNull();
+    expect(text(review)).toContain("on confirmation");
+    expect(text(review)).toContain("Sign with passkey");
+  });
 });
 
 describe("a missing line, as a member sees it (question 46)", () => {
@@ -528,7 +678,7 @@ describe("a missing line, as a member sees it (question 46)", () => {
   }
 
   test("it is drawn as not charged, with the collection's note, and leaves the total alone", async () => {
-    const { app } = await open([CONSUMED, MISSING], [{ id: "c-1", valence: "consumed" }, { id: "c-2", valence: "lost" }]);
+    const { app } = await open([CONSUMED, MISSING], [rowCand({ id: "c-1", valence: "consumed" }), rowCand({ id: "c-2", valence: "lost" })]);
     [...app.querySelectorAll("button")].find((b) => text(b) === "Open")!.click();
     const body = text(await settled());
     // "Not charged" is the iOS app's own label for this amount slot (vault
@@ -543,7 +693,7 @@ describe("a missing line, as a member sees it (question 46)", () => {
   });
 
   test("disputing it moves no money, and the signature posts it as disputed", async () => {
-    const { app, posted } = await open([CONSUMED, MISSING], [{ id: "c-1", valence: "consumed" }, { id: "c-2", valence: "lost" }]);
+    const { app, posted } = await open([CONSUMED, MISSING], [rowCand({ id: "c-1", valence: "consumed" }), rowCand({ id: "c-2", valence: "lost" })]);
     [...app.querySelectorAll("button")].find((b) => text(b) === "Open")!.click();
     await settled();
     [...document.querySelectorAll("button")].find((b) => text(b) === "It was in the box")!.click();
@@ -551,6 +701,10 @@ describe("a missing line, as a member sees it (question 46)", () => {
     expect(body).toContain("To be charged for the goods: ¥1,200");
     expect(body).toContain("1 missing item disputed");
     expect(body).not.toContain("disputed and not charged here");
+    // D-6, D-7: disputing is on the browsing screen; "Review and sign" opens
+    // the step the signature and the open terms are on.
+    [...document.querySelectorAll("button")].find((b) => text(b) === "Review and sign")!.click();
+    await settled();
     [...document.querySelectorAll("button")].find((b) => text(b) === "Sign with passkey")!.click();
     await settled();
     const sent = posted.find((p) => p.url.includes("/settle"))!;
@@ -558,7 +712,7 @@ describe("a missing line, as a member sees it (question 46)", () => {
   });
 
   test("a box whose only collection line is missing is listed, holds no next box, and can be signed", async () => {
-    const { app, posted } = await open([MISSING], [{ id: "c-2", valence: "lost" }, { id: "c-3", valence: "returned" }]);
+    const { app, posted } = await open([MISSING], [rowCand({ id: "c-2", valence: "lost" }), rowCand({ id: "c-3", valence: "returned" })]);
     const list = text(app);
     expect(list).toContain("Open");
     // No consumed line and no missing-beside-kept line, so `holdsNextBox` is
@@ -571,13 +725,15 @@ describe("a missing line, as a member sees it (question 46)", () => {
     const body = text(await settled());
     expect(body).toContain("To be charged for the goods: ¥0");
     expect(body).not.toContain("no further box comes");
+    [...document.querySelectorAll("button")].find((b) => text(b) === "Review and sign")!.click();
+    await settled();
     [...document.querySelectorAll("button")].find((b) => text(b) === "Sign with passkey")!.click();
     await settled();
     expect(posted.find((p) => p.url.includes("/settle"))!.body.disputed).toEqual([]);
   });
 
   test("a box lost at the deadline opens to a statement with nothing to sign", async () => {
-    const { app } = await open([], [{ id: "c-2", valence: "lost" }]);
+    const { app } = await open([], [rowCand({ id: "c-2", valence: "lost" })]);
     [...app.querySelectorAll("button")].find((b) => text(b) === "Open")!.click();
     const done = await settled();
     expect(text(done)).toContain("Nothing on this box needs your signature");
@@ -603,7 +759,7 @@ describe("what the screen posts, which nothing read until now", () => {
       if (url === "/config") return { status: 200, body: CONFIG };
       if (url.startsWith("/api/offers?")) {
         return { status: 200, body: { offers: [offerRow(open === "statement"
-          ? { binding: "physical", state: "decided", candidates: [{ id: "c-1", valence: "consumed" }] }
+          ? { binding: "physical", state: "decided", candidates: [rowCand({ id: "c-1", valence: "consumed" })] }
           : {})] } };
       }
       if (url.includes("/approval")) {
@@ -620,12 +776,19 @@ describe("what the screen posts, which nothing read until now", () => {
       if (url.includes("/settle")) return { status: 200, body: { charged: 1200, disputed_amount: 0 } };
       return { status: 404, body: {} };
     });
-    const label = open === "statement" ? "Open" : "Open";
-    [...app.querySelectorAll("button")].find((b) => text(b) === label)!.click();
+    [...app.querySelectorAll("button")].find((b) => text(b) === "Open")!.click();
     await settled();
+    // D-6, D-7: picking/disputing is on the browsing screen; "Review" or
+    // "Review and sign" opens the step the signature and the open terms are
+    // on, and the browsing screen's own gating never lets this be pressed
+    // before that.
     if (open === "approval") {
       [...document.querySelectorAll("button")].find((b) => text(b) === "Keep")!.click();
+      [...document.querySelectorAll("button")].find((b) => text(b) === "Review")!.click();
+    } else {
+      [...document.querySelectorAll("button")].find((b) => text(b) === "Review and sign")!.click();
     }
+    await settled();
     [...document.querySelectorAll("button")].find((b) => text(b) === "Sign with passkey")!.click();
     await settled();
     return posted;
@@ -682,7 +845,7 @@ describe("what a member is shown after signing a statement", () => {
     const app = await render((url, method, body) => {
       if (url === "/config") return { status: 200, body: CONFIG };
       if (url.startsWith("/api/offers?")) {
-        return { status: 200, body: { offers: [offerRow({ binding: "physical", state: "decided", candidates: [{ id: "c-1", valence: "consumed" }] })] } };
+        return { status: 200, body: { offers: [offerRow({ binding: "physical", state: "decided", candidates: [rowCand({ id: "c-1", valence: "consumed" })] })] } };
       }
       if (url.includes("/statement")) {
         return { status: 200, body: { offer: "o-1", household: MEMBER.household, expires_at: 9_999_999_999_999, lines: [LINE], disclosures: [STANDING], carriage: 500 } };
@@ -692,6 +855,10 @@ describe("what a member is shown after signing a statement", () => {
       return { status: 404, body: {} };
     });
     [...app.querySelectorAll("button")].find((b) => text(b) === "Open")!.click();
+    await settled();
+    // D-6, D-7: "Review and sign" opens the step the signature and the open
+    // terms are on.
+    [...document.querySelectorAll("button")].find((b) => text(b) === "Review and sign")!.click();
     await settled();
     [...document.querySelectorAll("button")].find((b) => text(b) === "Sign with passkey")!.click();
     return text(await settled());

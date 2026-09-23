@@ -17,17 +17,17 @@ import { canonicalMandate, type Mandate } from "../shared/mandate.js";
 import { fromBase64, memberKeyFromHandle, newMemberKey, toBase64, toBase64Url } from "../shared/encoding.js";
 // The rule that sorts a member's own list, in a module the suite can reach:
 // filing a collected box as settled was the worst thing this screen did.
-import { awaitsDecision, awaitsStatement, byArrival, rowStatus, type InboxOffer } from "../shared/inbox.js";
+import { awaitsDecision, awaitsStatement, byArrival, rowGoods, rowMerchants, rowStatus, type InboxOffer } from "../shared/inbox.js";
 // The sentences a refusal reads as, in a module the suite can reach: four of
 // them directed the member wrongly and nothing here could have said so.
 import { REFUSALS, refusal } from "../shared/refusals.js";
 // The judgements the screens make, separated from the drawing of them: a
 // reviewer reverted five of them at once and the suite stayed green.
-import { blocksFor, decidable, disputable, disputeMovesMoney, lostOutcome, statementTotal, validateCorrections, type Corrections } from "../shared/screen.js";
+import { blocksFor, decidable, decisionGoodsTotal, decisionOutcome, disputable, disputeMovesMoney, lostOutcome, statementTotal, undoDeadline, validateCorrections, type Corrections } from "../shared/screen.js";
 // D-1, D-3. What a member reads for money, a date and the goods themselves,
 // mirroring `ios/AtarasyPrototype/MemberFormat.swift` so the two apps say
 // the same thing about the same offer.
-import { formatDay, formatDayTime, formatMoney, goodsTitle } from "../shared/format.js";
+import { formatDay, formatDayTime, formatMoney, goodsTitle, sellers } from "../shared/format.js";
 // D-5. The screen's vocabulary in the member's own language, picked once
 // from `navigator.language` and carried for the length of the session; the
 // iOS app's own English and Japanese, not translated again here.
@@ -497,6 +497,23 @@ async function offers(member: Member) {
   decided.sort(byArrival);
   unsigned.sort(byArrival);
 
+  // Item 4, vault `80` §6.2 I's "decided and in cooling" row case. The
+  // cooling window is on the mandate, not the offer, so it takes a second
+  // read to say when a decided set can no longer be undone. **Fetched once
+  // for the whole screen, never once per row**: the mandate is the same
+  // record for every decided offer this household has, so a request per row
+  // would ask the engine the same question as many times as there are rows.
+  // `undefined` here is "not fetched" (no decided offer, or the read failed);
+  // `null` is a mandate read with no cooling window recorded.
+  let coolingSeconds: number | null | undefined;
+  if (decided.length > 0) {
+    const read = await api<Mandate & { error?: string }>("GET", `/_node/mandates/${encodeURIComponent(member.mandate)}`);
+    if (read.status === 200 && typeof read.body.cooling_seconds !== "undefined") coolingSeconds = read.body.cooling_seconds;
+    else if (read.status === 404) coolingSeconds = null;
+    // Any other status (unreachable, unreadable) leaves it `undefined`, and
+    // the row falls back to the sentence it always had rather than guessing.
+  }
+
   /**
    * `04b` §1b.3, §2.2b, vault `80` §6.2 I. **One status line, in the
    * member's own words rather than a protocol state**, from `rowStatus()`
@@ -520,13 +537,25 @@ async function offers(member: Member) {
         return L("You decided");
     }
   };
+  /**
+   * D-1, vault `80` §6.2 I. The list already carries each candidate's
+   * `product`, `merchant` and, since catalogue revision 3, `name`/`variant`
+   * (`shared/inbox.ts`'s `InboxOffer`), so a row's title and seller are read
+   * off the same answer this screen already asked for, and never a second
+   * request per row.
+   */
   const card = (o: InboxOffer) => {
     const open = el("button", { class: "primary" }, L("Open")) as HTMLButtonElement;
     open.onclick = () => (awaitsStatement(o) ? statement(member, o.id) : approval(member, o.id, o.binding));
+    const goods = rowGoods(o);
+    const headline = goods.moreCount > 0 ? L("%@ and %lld more", goods.title, goods.moreCount) : goods.title;
+    const merchants = rowMerchants(o);
     return el("div", { class: "card" },
       el("div", { class: "row" },
-        el("span", { class: "grow" }, o.giver ? L("Gift from %@", o.giver) + `, ${o.presenter}` : o.presenter),
+        el("strong", { class: "grow" }, headline || o.presenter),
         open),
+      ...(merchants.length ? [el("p", { class: "muted" }, sellers(merchants, navigator.language))] : []),
+      ...(o.giver ? [el("p", { class: "muted" }, L("Gift from %@", o.giver))] : []),
       el("p", { class: "muted" }, statusLine(o))
     );
   };
@@ -561,15 +590,25 @@ async function offers(member: Member) {
     // everything, and only the engine's confirmation register tells them
     // apart, which question 43 puts on the row.
     const box = o.binding === "physical" && !o.candidates.some((c) => c.valence === "kept");
+    // Item 4, vault `80` §6.2 I. When both the decision's own moment and the
+    // mandate's cooling window are in hand (fetched once for the whole
+    // screen, above), and the window has not yet closed, the row says the
+    // actual deadline rather than the generic "what you can still do is take
+    // it back": the same undoDeadline() a test in `shared/screen.ts` proves
+    // on its own. Anything less than both known keeps the sentence this row
+    // always had; no request is made per row to find out.
+    const deadline = undoDeadline(o.decided_at, coolingSeconds);
     const said = el("p", { class: "muted" },
       box
         ? "The route has resolved this box. Nothing here is waiting on you."
-        // **Nothing settles when a window closes.** The engine has no
-        // scheduler: a digital set settles when the presenter asks it to, and
-        // a cooling window only stops that happening sooner. This was the
-        // sentence family refuted in `mandate_cooling` the day before, sitting
-        // one screen over where the module's own test cannot see it.
-        : "Decided. It is the shop's to settle now; what you can still do is take it back.");
+        : deadline !== null && Date.now() < deadline
+          ? `Decided. It is the shop's to settle now; you can undo until ${when(deadline)}.`
+          // **Nothing settles when a window closes.** The engine has no
+          // scheduler: a digital set settles when the presenter asks it to, and
+          // a cooling window only stops that happening sooner. This was the
+          // sentence family refuted in `mandate_cooling` the day before, sitting
+          // one screen over where the module's own test cannot see it.
+          : "Decided. It is the shop's to settle now; what you can still do is take it back.");
     if (box) {
       return el("div", { class: "card" },
         el("div", { class: "row" }, el("span", { class: "grow" }, `From ${o.presenter}`)),
@@ -685,9 +724,18 @@ async function account(member: Member) {
  * surface deciding what a seller said. Which block governs a line is on the
  * line (`disclosure`), so this looks the block up rather than guessing.
  */
+/**
+ * D-7. `collapsed` draws the block(s) inside a `<details>` naming the
+ * merchant, for the browsing view a line sits on; `open` (the review step
+ * that carries the Sign button) draws them directly, as this always did
+ * before D-7. Vault `80` §4's own open question ("whether a collapsed
+ * 'Terms from <merchant>' row... satisfies" §10a.4) is answered by this
+ * plan's own choice: collapsed while browsing, open where the signature is.
+ */
 function blockFor(
   blocks: { merchant: string; product: string | null; items: { label: string; value: string }[]; contact?: { kind: "email" | "tel" | "url"; value: string } }[],
-  which: { merchant: string; product: string | null }
+  which: { merchant: string; product: string | null },
+  collapsed: boolean
 ): Node[] {
   const governing = blocksFor(blocks, which);
   if (governing.length === 0) {
@@ -696,20 +744,21 @@ function blockFor(
     // better than drawing a sale with no terms beside it.
     return [failure(`${which.merchant} sent no terms for this line.`)];
   }
-  const nodes: Node[] = [];
+  const body: Node[] = [];
   for (const { block, scope } of governing) {
-    nodes.push(el("p", { class: "muted" },
+    body.push(el("p", { class: "muted" },
       scope === "product"
         ? `${which.merchant}, for this product:`
         : governing.length > 1 ? `${which.merchant}, in general:` : `${which.merchant}:`));
-    nodes.push(el("dl", { class: "terms" },
+    body.push(el("dl", { class: "terms" },
       ...block.items.flatMap((i) => [el("dt", {}, i.label), el("dd", {}, i.value)])));
     // Question 72. Beside this block's own terms, and only where this
     // merchant signed one. No message is composed and nothing is sent on
     // the household's behalf; the tap, if there is one, is the household's.
-    if (block.contact) nodes.push(contactLink(block.contact));
+    if (block.contact) body.push(contactLink(block.contact));
   }
-  return nodes;
+  if (!collapsed) return body;
+  return [el("details", {}, el("summary", {}, L("Terms from %@", which.merchant)), ...body)];
 }
 
 function contactLink(contact: { kind: "email" | "tel" | "url"; value: string }): Node {
@@ -761,9 +810,12 @@ async function approval(member: Member, offerId: string, binding?: "digital" | "
   }
   const a = got.body;
   const choices = new Map<string, "kept" | "returned">();
-  const confirm = el("button", { class: "primary" }, L("Sign with passkey")) as HTMLButtonElement;
+  // D-6, D-7. This screen is the browsing step: it picks, it does not sign.
+  // "Review" (iOS's own label for the same button, `MemberOfferScreen.swift`)
+  // opens `approvalReview()`, where the terms are open and the one passkey
+  // prompt is.
+  const confirm = el("button", { class: "primary" }, L("Review")) as HTMLButtonElement;
   confirm.disabled = true;
-  const status = el("p", {});
   // §10 step 3c. **Only the lines still waiting on this household are asked
   // about.** A physical box is collected line by line and the offer stays
   // presented, so an approval routinely carries a line the route already
@@ -817,10 +869,12 @@ async function approval(member: Member, offerId: string, binding?: "digital" | "
       el("p", {}, el("span", { class: "muted" }, `${a.presenter} argues against taking it: `), c.argument_against),
       el("p", { class: "muted" }, `${a.presenter} says it also considered:`),
       el("ul", {}, ...c.alternatives.map((alt) => el("li", {}, alt))),
-      // §10a.5. This merchant's terms, beside this merchant's line and no
-      // other. One screen carries several sellers' blocks, and each seller
-      // answers for the whole 映像面 it appears on.
-      ...blockFor(a.disclosures ?? [], c.disclosure),
+      // §10a.5, D-7. This merchant's terms, beside this merchant's line and
+      // no other, collapsed while the person is still choosing (drawn open
+      // on the review step, `approvalReview()`, right before the signature).
+      // One screen carries several sellers' blocks, and each seller answers
+      // for the whole 映像面 it appears on.
+      ...blockFor(a.disclosures ?? [], c.disclosure, true),
       ...(decidable ? [el("div", { class: "row" }, keep, ret)] : [])
     );
   });
@@ -830,41 +884,14 @@ async function approval(member: Member, offerId: string, binding?: "digital" | "
        el("ul", {}, ...a.excluded.map((x) => el("li", {}, `${x.product}: ${RULES[x.reason] ?? x.reason}`)))]
     : [];
 
-  confirm.onclick = async () => {
-    confirm.disabled = true;
-    status.textContent = "";
+  // D-6, D-7. Picking is done; what is signed is frozen and shown with its
+  // terms open on `approvalReview()`, never here.
+  confirm.onclick = () => {
     const decisions: Decision[] = open.map((c) => {
       const valence = choices.get(c.id)!;
       return valence === "kept" ? { candidate: c.id, valence, kept_as: "self" } : { candidate: c.id, valence };
     });
-    try {
-      // §10.5. What is signed is the set in the canonical shape the engine
-      // compares, and the gesture that releases the key is over the same
-      // bytes: `signOver` puts their hash in the assertion's challenge even
-      // though what goes to the engine is the signature.
-      const decided = await api<{ state?: string; error?: string; message?: string }>("POST", `/offers/${encodeURIComponent(a.offer)}/decisions`, {
-        decisions,
-        signature: await signOver(member, new TextEncoder().encode(canonicalDecisions(a.offer, decisions))),
-      });
-      if (decided.status !== 200) throw new Error(refusal(decided.body, decided.status));
-      // The count below is this screen's own, so a `200` that carried no state
-      // would have been reported as a decision the engine never recorded.
-      if (typeof decided.body.state !== "string") {
-        throw new Error("The answer came back in a form this screen could not read, so it cannot say whether this was recorded. Go back and open it again.");
-      }
-      show(
-        el("h1", {}, "Atarasy"),
-        el("div", { class: "card" },
-          el("p", {}, LANG === "ja"
-            ? `${L("Decision recorded")}。${decisions.filter((d) => d.valence === "kept").length} 点を受け取り、${decisions.filter((d) => d.valence === "returned").length} 点を見送りました。`
-            : `${L("Decision recorded")}. ${decisions.filter((d) => d.valence === "kept").length} kept, ${decisions.filter((d) => d.valence === "returned").length} declined.`),
-          el("p", { class: "muted" }, "What you returned is recorded as a decision of yours, not as nothing (clause 8).")),
-        back(member)
-      );
-    } catch (e) {
-      status.textContent = (e as Error).message;
-      confirm.disabled = false;
-    }
+    approvalReview(member, a, decisions, binding);
   };
 
   show(
@@ -911,9 +938,140 @@ async function approval(member: Member, offerId: string, binding?: "digital" | "
       : []),
     ...cards,
     ...excluded,
-    el("div", { class: "row" }, ...(open.length ? [confirm] : []), back(member)),
+    el("div", { class: "row" }, ...(open.length ? [confirm] : []), back(member))
+  );
+}
+
+/**
+ * D-6, D-7. The review step: what the signature covers, in one sentence; the
+ * exact lines and their outcome; the total, carriage stated apart; the
+ * merchants' own terms drawn open (never collapsed here); and the one
+ * "Sign with passkey" button, which is the whole of the act (`22` UX-06,
+ * `04b` §2.2c). Reached only from `approval()`'s "Review", and never reached
+ * with an empty `decisions` array, since that button is disabled until every
+ * open line has a choice.
+ */
+function approvalReview(member: Member, a: Approval, decisions: Decision[], binding?: "digital" | "physical") {
+  const byId = new Map(a.candidates.map((c) => [c.id, c]));
+  const kept = decisions.filter((d) => d.valence === "kept").map((d) => byId.get(d.candidate)!);
+  const declined = decisions.filter((d) => d.valence === "returned").map((d) => byId.get(d.candidate)!);
+  const goods = decisionGoodsTotal(a.candidates, decisions);
+  const carriage = a.carriage ?? 0;
+
+  const sign = el("button", { class: "primary" }, L("Sign with passkey")) as HTMLButtonElement;
+  const status = el("p", {});
+  sign.onclick = async () => {
+    sign.disabled = true;
+    status.textContent = "";
+    try {
+      // §10.5. What is signed is the set in the canonical shape the engine
+      // compares, and the gesture that releases the key is over the same
+      // bytes: `signOver` puts their hash in the assertion's challenge even
+      // though what goes to the engine is the signature.
+      const decided = await api<{ state?: string; error?: string; message?: string }>("POST", `/offers/${encodeURIComponent(a.offer)}/decisions`, {
+        decisions,
+        signature: await signOver(member, new TextEncoder().encode(canonicalDecisions(a.offer, decisions))),
+      });
+      if (decided.status === 0) {
+        // Item 2, IOS-10, COPY-04. The signature may or may not have reached
+        // the engine; re-signing here would be a second act over the set the
+        // household already tried once. The only safe move is to ask again,
+        // through the read this hub already carries.
+        unknownDecisionResult(member, a.offer, decisions);
+        return;
+      }
+      if (decided.status !== 200) throw new Error(refusal(decided.body, decided.status));
+      // The count below is this screen's own, so a `200` that carried no state
+      // would have been reported as a decision the engine never recorded.
+      if (typeof decided.body.state !== "string") {
+        throw new Error("The answer came back in a form this screen could not read, so it cannot say whether this was recorded. Go back and open it again.");
+      }
+      show(el("h1", {}, "Atarasy"), decisionRecordedCard(kept.length, declined.length), back(member));
+    } catch (e) {
+      status.textContent = (e as Error).message;
+      sign.disabled = false;
+    }
+  };
+
+  const lineRow = (c: Approval["candidates"][number]) =>
+    el("div", { class: "row" },
+      el("span", { class: "grow" }, goodsTitle(c)),
+      el("span", {}, c.given_by ? L("Free") : yen(c.unit_price * c.quantity)));
+
+  const backToPicking = el("button", {}, L("Back")) as HTMLButtonElement;
+  backToPicking.onclick = () => approval(member, a.offer, binding);
+
+  show(
+    el("h1", {}, "Atarasy"),
+    el("h2", {}, L("Sign this decision")),
+    el("p", {}, L("Signing buys the items you keep, from the shops named, at the prices shown. The items you decline are declined, and nothing else is bought.")),
+    el("div", { class: "card" },
+      el("p", {}, L("You keep")),
+      ...(kept.length ? kept.map(lineRow) : [el("p", { class: "muted" }, L("Nothing. You decline every item."))]),
+      ...(declined.length ? [el("p", {}, L("You decline")), ...declined.map((c) => el("p", { class: "muted" }, goodsTitle(c)))] : [])),
+    el("div", { class: "card" },
+      el("div", { class: "row" }, el("span", { class: "grow" }, L("Goods")), el("span", {}, yen(goods))),
+      el("div", { class: "row" }, el("span", { class: "grow" }, L("Delivery")), el("span", {}, yen(carriage))),
+      el("div", { class: "row" }, el("strong", { class: "grow" }, L("Total")), el("strong", {}, yen(goods + carriage)))),
+    el("p", { class: "muted" },
+      a.mandate.kind === "standing"
+        ? `Under a standing mandate: ${a.mandate.scope}, lapsing ${a.mandate.lapses_at ? day(a.mandate.lapses_at) : "never"} (clause 58).`
+        : `Under an individual mandate: ${a.mandate.scope}.`),
+    // D-7. Open, one details-free block per decided line's governing terms:
+    // this is the step §10a.4 asks the disclosure to be seen on, before the
+    // signature below it.
+    el("h2", {}, L("Shop terms")),
+    ...[...kept, ...declined].flatMap((c) => blockFor(a.disclosures ?? [], c.disclosure, false)),
+    el("div", { class: "row" }, sign, backToPicking),
     status
   );
+}
+
+/** What a decided set came to, said once so the live path and the recheck path agree. */
+function decisionRecordedCard(kept: number, returned: number): Node {
+  return el("div", { class: "card" },
+    el("p", {}, LANG === "ja"
+      ? `${L("Decision recorded")}。${kept} 点を受け取り、${returned} 点を見送りました。`
+      : `${L("Decision recorded")}. ${kept} kept, ${returned} declined.`),
+    el("p", { class: "muted" }, "What you returned is recorded as a decision of yours, not as nothing (clause 8)."));
+}
+
+/**
+ * Item 2, IOS-10, COPY-04. A decision's own `POST .../decisions` never
+ * answered, so this screen does not know whether it was recorded. The one
+ * safe move is to ask again, and the read it asks with is `GET
+ * .../approval`, the route this hub already carries for the same offer
+ * (`server.ts`'s `carries()`), never a second signature over the set: a
+ * WebAuthn assertion is the one act the specification signs, and asking for
+ * a second one over an unanswered first is what the statement flow's own
+ * `unknownResult` was built to avoid on the settle path.
+ */
+function unknownDecisionResult(member: Member, offerId: string, decisions: Decision[]) {
+  const card = el("div", { class: "card" },
+    el("p", {}, L("Result not known yet")),
+    el("p", { class: "muted" }, refusal({}, 0)),
+    el("p", { class: "muted" }, L("Payment status is not available here."))
+  );
+  const check = el("button", { class: "primary" }, L("Check result")) as HTMLButtonElement;
+  let busy = false;
+  check.onclick = async () => {
+    if (busy) return;
+    busy = true;
+    check.disabled = true;
+    const got = await api<{ candidates?: { id: string; valence: string }[] }>("GET", `/offers/${encodeURIComponent(offerId)}/approval`);
+    if (got.status === 200 && Array.isArray(got.body.candidates)) {
+      const outcome = decisionOutcome(decisions, got.body.candidates);
+      if (outcome.resolved) {
+        show(el("h1", {}, "Atarasy"), decisionRecordedCard(outcome.kept, outcome.returned), back(member));
+        return;
+      }
+      // Read cleanly, but not yet decided: still nothing to sign a second
+      // time, so the screen stays here rather than offering a fresh act.
+    }
+    busy = false;
+    check.disabled = false;
+  };
+  show(el("h1", {}, "Atarasy"), card, el("div", { class: "row" }, check, back(member)));
 }
 
 // ---- the settlement statement (§6.5) ----------------------------------------
@@ -956,8 +1114,12 @@ async function statement(member: Member, offerId: string) {
     return;
   }
   const disputed = new Set<string>();
-  const status = el("p", {});
-  const sign = el("button", { class: "primary" }, L("Sign with passkey")) as HTMLButtonElement;
+  // D-6, D-7. This screen is the browsing step: it disputes, it does not
+  // sign. "Review and sign" (iOS's own label for the same button,
+  // `MemberBoxView.swift`'s `openStatementApproval`) opens
+  // `statementReview()`, where the terms are open and the one passkey
+  // prompt is.
+  const sign = el("button", { class: "primary" }, L("Review and sign")) as HTMLButtonElement;
 
   const total = () => statementTotal(st.lines, disputed);
   const totalLine = el("p", {});
@@ -1023,7 +1185,8 @@ async function statement(member: Member, offerId: string) {
             : "The collection found this used."),
       // Question 46. The collection's own words, as text (clause 54).
       ...(missing && l.note ? [el("p", { class: "muted" }, `The collection's note: ${l.note}`)] : []),
-      ...blockFor(st.disclosures ?? [], l.disclosure),
+      // D-7. Collapsed on this browsing view; open on `statementReview()`.
+      ...blockFor(st.disclosures ?? [], l.disclosure, true),
       // §6.5, §11.2. Only a consumed or missing line can be disputed: a kept
       // line is one this household signed itself.
       ...(wasKept ? [] : [el("div", { class: "row" }, mark), note])
@@ -1031,6 +1194,55 @@ async function statement(member: Member, offerId: string) {
   });
   refreshTotal();
 
+  // D-6, D-7. Disputing is done; what is signed is frozen and shown with its
+  // terms open on `statementReview()`, never here.
+  sign.onclick = () => statementReview(member, st, disputed);
+
+  show(
+    el("h1", {}, "Atarasy"),
+    el("h2", {}, "What the box came back with"),
+    // Clause 11. Whoever sent the box is the presenter, and a presenter is not
+    // the seller: this box is one presenter's and several merchants'. The
+    // statement names the merchants line by line and carries no presenter, so
+    // the sentence names neither rather than naming the wrong one.
+    // The engine's rule: goods used hold the next box, and so does a missing
+    // line beside a kept or defaulted one (question 46, decided 2026-09-14).
+    el("p", { class: "muted" }, st.lines.some((l) => l.valence === "consumed") ||
+      (st.lines.some((l) => l.valence === "lost") && st.lines.some((l) => l.valence === "kept" || l.valence === "defaulted"))
+      ? "The route wrote this down. Nothing is charged until you sign it, and no further box comes from whoever sent this one while it waits."
+      : "The route wrote this down. Nothing is charged until you sign it."),
+    // §6.5, §10a.5. **The offer's expiry, because a merchant's block may state
+    // an application period and a period is measured against something.** The
+    // engine has carried it since this route was written and this screen
+    // dropped it, so a block reading "apply within 7 days of the offer" stood
+    // beside no date at all.
+    el("p", { class: "muted" }, `This box was offered until ${day(st.expires_at)}.`),
+    el("p", { class: "muted" },
+      st.carriage === null
+        ? "Carriage: not recorded."
+        : st.carriage === 0
+          ? "Carriage: nothing to pay on this delivery."
+          : `Carriage: ${yen(st.carriage)}.`),
+    ...cards,
+    // §6.5, question 46, decided 2026-09-14. What signing attests over a
+    // missing line, so silence is not read as agreeing the item is gone.
+    ...(st.lines.some((l) => l.valence === "lost")
+      ? [el("p", { class: "muted" }, "Signing shows you were told which items the collection did not find. It is not you agreeing they are missing or taking responsibility for them; you are never charged for them, and you can dispute any you had.")]
+      : []),
+    totalLine,
+    el("div", { class: "row" }, sign, back(member))
+  );
+}
+
+/**
+ * D-6, D-7. The review step for a physical statement: the lines as they
+ * will be signed (read-only; disputing is done, back on the browsing
+ * screen), the total, carriage stated apart, the merchants' own terms drawn
+ * open, and the one "Sign with passkey" button (`22` UX-06, `04b` §2.2c).
+ */
+function statementReview(member: Member, st: Statement, disputed: ReadonlySet<string>) {
+  const sign = el("button", { class: "primary" }, L("Sign with passkey")) as HTMLButtonElement;
+  const status = el("p", {});
   sign.onclick = async () => {
     sign.disabled = true;
     status.textContent = "";
@@ -1115,39 +1327,30 @@ async function statement(member: Member, offerId: string) {
     }
   };
 
+  const goods = statementTotal(st.lines, disputed);
+  const carriage = st.carriage ?? 0;
+  const lineRow = (l: Statement["lines"][number]) =>
+    el("div", { class: "row" },
+      el("span", { class: "grow" }, goodsTitle(l)),
+      el("span", {}, l.valence === "lost" ? L("Not charged") : l.given_by ? L("Free") : disputed.has(l.candidate) ? L("Not charged") : yen(l.amount)));
+
+  const backToDisputing = el("button", {}, L("Back")) as HTMLButtonElement;
+  backToDisputing.onclick = () => statement(member, st.offer);
+
   show(
     el("h1", {}, "Atarasy"),
-    el("h2", {}, "What the box came back with"),
-    // Clause 11. Whoever sent the box is the presenter, and a presenter is not
-    // the seller: this box is one presenter's and several merchants'. The
-    // statement names the merchants line by line and carries no presenter, so
-    // the sentence names neither rather than naming the wrong one.
-    // The engine's rule: goods used hold the next box, and so does a missing
-    // line beside a kept or defaulted one (question 46, decided 2026-09-14).
-    el("p", { class: "muted" }, st.lines.some((l) => l.valence === "consumed") ||
-      (st.lines.some((l) => l.valence === "lost") && st.lines.some((l) => l.valence === "kept" || l.valence === "defaulted"))
-      ? "The route wrote this down. Nothing is charged until you sign it, and no further box comes from whoever sent this one while it waits."
-      : "The route wrote this down. Nothing is charged until you sign it."),
-    // §6.5, §10a.5. **The offer's expiry, because a merchant's block may state
-    // an application period and a period is measured against something.** The
-    // engine has carried it since this route was written and this screen
-    // dropped it, so a block reading "apply within 7 days of the offer" stood
-    // beside no date at all.
-    el("p", { class: "muted" }, `This box was offered until ${day(st.expires_at)}.`),
-    el("p", { class: "muted" },
-      st.carriage === null
-        ? "Carriage: not recorded."
-        : st.carriage === 0
-          ? "Carriage: nothing to pay on this delivery."
-          : `Carriage: ${yen(st.carriage)}.`),
-    ...cards,
-    // §6.5, question 46, decided 2026-09-14. What signing attests over a
-    // missing line, so silence is not read as agreeing the item is gone.
-    ...(st.lines.some((l) => l.valence === "lost")
-      ? [el("p", { class: "muted" }, "Signing shows you were told which items the collection did not find. It is not you agreeing they are missing or taking responsibility for them; you are never charged for them, and you can dispute any you had.")]
-      : []),
-    totalLine,
-    el("div", { class: "row" }, sign, back(member)),
+    el("h2", {}, L("Sign this statement")),
+    el("p", {}, "Signing confirms what the collection recorded, except the lines you marked, and lets the shops named charge the goods amount below."),
+    el("div", { class: "card" }, ...st.lines.map(lineRow)),
+    el("div", { class: "card" },
+      el("div", { class: "row" }, el("span", { class: "grow" }, L("Goods")), el("span", {}, yen(goods))),
+      el("div", { class: "row" }, el("span", { class: "grow" }, L("Delivery")), el("span", {}, yen(carriage))),
+      el("div", { class: "row" }, el("strong", { class: "grow" }, L("Total")), el("strong", {}, yen(goods + carriage)))),
+    // D-7. Open, per line's governing terms: this is the step §10a.4 asks
+    // the disclosure to be seen on, before the signature below it.
+    el("h2", {}, L("Shop terms")),
+    ...st.lines.flatMap((l) => blockFor(st.disclosures ?? [], l.disclosure, false)),
+    el("div", { class: "row" }, sign, backToDisputing),
     status
   );
 }
