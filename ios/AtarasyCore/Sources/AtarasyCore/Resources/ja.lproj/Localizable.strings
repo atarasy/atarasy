@@ -76,7 +76,6 @@
 "Your limits changed, or another change is waiting. Refresh before editing again." = "設定が変わったか、別の変更が保留中です。更新してから編集してください。";
 "Your limits could not be refreshed. Nothing was changed." = "設定を更新できませんでした。変更はしていません。";
 "Your records are encrypted on this device before they are stored." = "記録はこの端末で暗号化してから保管されます。";
-"Your records could not be opened on this device. Actions that need them are unavailable." = "この端末で記録を開けませんでした。記録が必要な操作は使えません。";
 "Your saved cancellations could not be read. Do not send one again before checking its result." = "保存した取り消しを読み込めませんでした。結果を確かめるまで送り直さないでください。";
 "Your saved decisions could not be read. Do not send a decision again before checking its result." = "保存した決定を読み込めませんでした。結果を確かめるまで、同じ決定を送り直さないでください。";
 "Your saved statements could not be read. Do not sign a statement again before checking its result." = "保存した明細の記録を読み込めませんでした。結果を確かめるまで、同じ明細に署名し直さないでください。";
@@ -92,3 +91,5 @@
 "Nothing was closed. Your current host is still active." = "何も閉じていません。いまの保管先はそのまま使えます。";
 "Your answer was recorded. The current status is below." = "回答を記録しました。現在の状態は下に表示しています。";
 "Request declined. Nothing was shared." = "依頼を断りました。何も提供していません。";
+"This device's key does not match your encrypted records. They may have been set up on another device. Use Recovery, or delete this account and join again with a new invitation." = "この端末の鍵が、暗号化された記録と合いません。別の端末で先に設定された可能性があります。「復旧」を使うか、このアカウントを削除して新しい招待で登録し直してください。";
+"Your records could not be opened on this device. Check your connection and try again." = "この端末で記録を開けませんでした。通信状態を確認して、もう一度お試しください。";

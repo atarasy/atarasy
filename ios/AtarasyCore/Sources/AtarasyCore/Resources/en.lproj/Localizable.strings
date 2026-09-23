@@ -76,7 +76,6 @@
 "Your limits changed, or another change is waiting. Refresh before editing again." = "Your limits changed, or another change is waiting. Refresh before editing again.";
 "Your limits could not be refreshed. Nothing was changed." = "Your limits could not be refreshed. Nothing was changed.";
 "Your records are encrypted on this device before they are stored." = "Your records are encrypted on this device before they are stored.";
-"Your records could not be opened on this device. Actions that need them are unavailable." = "Your records could not be opened on this device. Actions that need them are unavailable.";
 "Your saved cancellations could not be read. Do not send one again before checking its result." = "Your saved cancellations could not be read. Do not send one again before checking its result.";
 "Your saved decisions could not be read. Do not send a decision again before checking its result." = "Your saved decisions could not be read. Do not send a decision again before checking its result.";
 "Your saved statements could not be read. Do not sign a statement again before checking its result." = "Your saved statements could not be read. Do not sign a statement again before checking its result.";
@@ -92,3 +91,5 @@
 "Nothing was closed. Your current host is still active." = "Nothing was closed. Your current host is still active.";
 "Your answer was recorded. The current status is below." = "Your answer was recorded. The current status is below.";
 "Request declined. Nothing was shared." = "Request declined. Nothing was shared.";
+"This device's key does not match your encrypted records. They may have been set up on another device. Use Recovery, or delete this account and join again with a new invitation." = "This device's key does not match your encrypted records. They may have been set up on another device. Use Recovery, or delete this account and join again with a new invitation.";
+"Your records could not be opened on this device. Check your connection and try again." = "Your records could not be opened on this device. Check your connection and try again.";

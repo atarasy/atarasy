@@ -11,6 +11,11 @@ private final class MemoryOperationKeys: MemberOperationKeyVault, @unchecked Sen
     func removeAll() { lock.withLock { values = [:] } }
     var count: Int { lock.withLock { values.count } }
 }
+/// A device that already holds a key of its own for every scope.
+private final class ForeignKey: MemberOperationKeyVault, @unchecked Sendable {
+    func key(scope: String, create: Bool) throws -> Data? { Data(repeating: 7, count: 32) }
+    func install(key: Data, scope: String) throws {}
+}
 private actor MemoryPrivateNodeService: MemberPrivateNodeService {
     var records: [String: MemberPrivateNodeRecord] = [:]
     func privateNodeRecords() async throws -> MemberPrivateNodeIndex { .init(profile: "atarasy.private-node-index.1", checkedAt: 1_800_000_000_000, records: records.values.sorted { $0.id < $1.id }) }
@@ -116,6 +121,19 @@ final class PrivateStorageTests: XCTestCase {
         try await reinstalled.installRecoveredKey(recoveryKey, session: session)
         let recoveredState = await reinstalled.state, recoveredClear = try await reinstalled.read(id: id)
         XCTAssertEqual(recoveredState, .ready); XCTAssertEqual(recoveredClear, secret)
+    }
+    // Measured on the iPhone on 2026-09-23 with build 3: the host held a bootstrap record sealed by
+    // another device, this device held a key of its own for the same scope, and opening threw.
+    // MemberAccount reads that throw as a key mismatch rather than as a failed read.
+    func testADeviceWhoseKeyDiffersFromTheOneThatSealedTheNodeGetsACryptoFailureNotRecoveryRequired() async throws {
+        let env = try MemberEnvironment(name: "test", origin: URL(string: "https://unit.example")!), session = MemberSessionInfo(id: "private-session", household: "key:private-household", presenters: [], expiresAt: 1_900_000_000_000)
+        let service = MemoryPrivateNodeService()
+        let first = MemberPrivateNode(environment: env, service: service, vault: MemoryOperationKeys())
+        let opened = try await first.open(session: session); XCTAssertEqual(opened, .ready)
+        let second = MemberPrivateNode(environment: env, service: service, vault: ForeignKey())
+        do { _ = try await second.open(session: session); XCTFail("a foreign key must not open the node") }
+        catch { XCTAssertTrue(error is CryptoKitError, "got \(error)") }
+        let state = await second.state; XCTAssertEqual(state, .locked)
     }
     func testHostMoveReencryptsEveryRecordForTargetAADAndVerifiesBeforeSourceRetirement() async throws {
         let sourceEnvironment = try MemberEnvironment(name: "source", origin: URL(string: "https://source.example")!), targetEnvironment = try MemberEnvironment(name: "target", origin: URL(string: "https://target.example")!), session = MemberSessionInfo(id: "move-session", household: "key:move-household", presenters: [], expiresAt: 1_900_000_000_000)

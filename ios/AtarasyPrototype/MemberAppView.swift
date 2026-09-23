@@ -95,17 +95,38 @@ struct MemberEntryView: View {
 }
 
 /// Signed in, but this device cannot open the household's encrypted records yet.
+/// Every way out stays reachable here: trying again, recovery, deleting the account and
+/// signing out. A member whose records cannot be opened must never meet a dead end.
 struct MemberLockedView: View {
     @ObservedObject var account: MemberAccount
+    @State private var showingLeaveSheet = false
     var body: some View {
         List {
             Section { Text(verbatim: account.privateNodeNotice.isEmpty ? String(localized: "Opening your records.") : account.privateNodeNotice).accessibilityIdentifier("privateNodeStatus") }
+            if account.privateNodeState == .locked && !account.privateNodeNotice.isEmpty && !account.privateNodeKeyMismatch {
+                Section { Button("Try again") { Task { await account.retryPrivateNode() } }.accessibilityIdentifier("privateNodeRetry") }
+            }
             if let recovery = account.recovery {
                 Section { NavigationLink("Recovery") { MemberRecoveryView(model: recovery, recoveryRequired: account.privateNodeState == .recoveryRequired) } }
             }
-            Section { Button("Sign out") { Task { await account.signOut() } } }
+            Section {
+                Button("Sign out") { Task { await account.signOut() } }.accessibilityIdentifier("memberSignOut")
+                Button("Delete account", role: .destructive) { showingLeaveSheet = true }.accessibilityIdentifier("memberDeleteAccount")
+            }
+            if let session = account.session {
+                Section {
+                    DisclosureGroup("About this account") {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Account reference, for support").font(.caption).foregroundStyle(.secondary)
+                            Text(verbatim: session.household).font(.caption.monospaced()).textSelection(.enabled)
+                        }
+                    }
+                }
+            }
         }
         .navigationTitle("Atarasy")
+        .disabled(account.busy)
+        .sheet(isPresented: $showingLeaveSheet) { NavigationStack { MemberLeaveSheet(account: account) } }
     }
 }
 
