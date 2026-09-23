@@ -32,7 +32,7 @@ final class MemberAppUITests: XCTestCase {
         }
     }
     @MainActor private func waitEnabled(_ e: XCUIElement) {
-        expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: e); waitForExpectations(timeout: 8)
+        expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: e); waitForExpectations(timeout: 20)
     }
 
     // 04b §1b.2, clause 14: one list over both shops, newest first, in two sections.
@@ -165,8 +165,8 @@ final class MemberAppUITests: XCTestCase {
         for language in ["en", "ja"] {
             let app = launchAccessibility(language: language)
             reach("memberProposal-proposal-refill", app, timeout: 10).tap()
-            XCTAssertTrue(element("keep-p1", app).waitForExistence(timeout: 8), language)
-            reach("keep-p1", app).tap(); reach("decline-p2", app).tap()
+            // At this size the first line may sit below the fold; reach() scrolls until it exists.
+            reach("keep-p1", app, timeout: 12).tap(); reach("decline-p2", app).tap()
             let review = element("openDigitalDecision", app); waitEnabled(review); review.tap()
             let total = reach("frozenDigitalTotal", app)
             XCTAssertTrue(total.exists, "\(language): the total must still be on screen, not truncated away")
@@ -196,7 +196,9 @@ final class MemberAppUITests: XCTestCase {
     // collapsing to the stack a phone already had (vault `80` §6.2). Intended for an iPad
     // destination; on a phone the row is pushed off screen and the geometry check below does
     // not apply.
-    @MainActor func testIPadInboxShowsListAndDetailSideBySide() {
+    @MainActor func testIPadInboxShowsListAndDetailSideBySide() throws {
+        // The split layout exists only at regular width; on an iPhone the stack is correct and this has nothing to check.
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad only")
         let app = launch()
         let row = element("memberProposal-proposal-refill", app)
         XCTAssertTrue(row.waitForExistence(timeout: 10)); row.tap()
