@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { formatDay, formatDayTime, formatMoney, goodsTitle } from "../src/shared/format.js";
+import { formatDay, formatDayTime, formatDuration, formatMoney, goodsTitle } from "../src/shared/format.js";
 
 /**
  * Vault `80` D-1 and §6.3: what a member reads for the goods, the money and
@@ -52,5 +52,23 @@ describe("formatDay and formatDayTime: a day a member can read, never an epoch",
     const dayTime = formatDayTime(fri, "en-US");
     expect(dayTime.startsWith(day.split(",")[0]!)).toBe(true);
     expect(dayTime).not.toBe(day);
+  });
+});
+
+describe("formatDuration: the largest unit that reads naturally, mirroring MemberFormat.duration", () => {
+  test("a whole number of days, in each language", () => {
+    expect(formatDuration(86_400, "en")).toBe("1 day");
+    expect(formatDuration(172_800, "en")).toBe("2 days");
+    expect(formatDuration(86_400, "ja")).toBe("1 日");
+  });
+  test("a whole number of hours that is not a whole day", () => {
+    expect(formatDuration(3_600, "en")).toBe("1 hour");
+    expect(formatDuration(7_200, "en")).toBe("2 hours");
+    expect(formatDuration(3_600, "ja")).toBe("1 時間");
+  });
+  test("falls back to minutes, then seconds, for anything finer", () => {
+    expect(formatDuration(120, "en")).toBe("2 minutes");
+    expect(formatDuration(30, "en")).toBe("30 seconds");
+    expect(formatDuration(1, "en")).toBe("1 second");
   });
 });
