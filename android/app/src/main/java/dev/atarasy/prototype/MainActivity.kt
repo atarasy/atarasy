@@ -40,10 +40,14 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.semantics.heading
@@ -240,7 +244,8 @@ fun AtarasyApp(
     onDeleteAccount: suspend () -> MemberLeaveState = { MemberLeaveState() },
     onRequestAccountExport: suspend () -> MemberExport = { throw MemberFailure.Unavailable },
 ) {
-    var selectedSection by rememberSaveable { mutableStateOf("Offers") }
+    var selectedSection by rememberSaveable { mutableStateOf("Inbox") }
+    var accountSection by rememberSaveable { mutableStateOf("Home") }
     var session by remember { mutableStateOf<MemberSessionInfo?>(null) }
     var offers by remember { mutableStateOf<List<MemberOfferSummary>?>(null) }
     var offerFailure by remember { mutableStateOf(false) }
@@ -317,16 +322,89 @@ fun AtarasyApp(
                         )
                     }
                     if (refreshNotice.isNotEmpty()) MemberCard("Updates", refreshNotice)
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        (listOf("Offers", "Saved", "Access", "Dials", "Recovery") + (if (hostMoveAvailable) listOf("Move Host") else emptyList()) + listOf("Delete Account", "Account")).chunked(3).forEach { sections ->
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                sections.forEach { section -> TextButton(onClick = { selectedSection = section }) { Text(section) } }
+                    if (session != null) {
+                        // Three destinations (vault `80` §6.1): Inbox, Limits, Account. A result is
+                        // reached from its offer or from Account, never from a fourth top-level list.
+                        // Shown even while locked, since Account is where Recovery is reached.
+                        val tabs = listOf("Inbox" to R.string.tab_inbox, "Limits" to R.string.tab_limits, "Account" to R.string.tab_account)
+                        TabRow(selectedTabIndex = tabs.indexOfFirst { it.first == selectedSection }.coerceAtLeast(0)) {
+                            tabs.forEach { (key, label) ->
+                                Tab(selected = selectedSection == key, onClick = { selectedSection = key; accountSection = "Home" }, text = { Text(stringResource(label)) })
                             }
                         }
                     }
                     Spacer(Modifier.height(8.dp))
-                    if (selectedSection == "Offers") {
-                        MemberOffersCard(
+                    if (selectedSection == "Limits") {
+                        MemberDialsCard(accessSession, onLoadEffectiveMandates, onLoadMandateChanges, onPrepareMandateChange, onPrepareMandateSignature, onApproveMandateChange, onCancelMandateChange)
+                    } else if (selectedSection == "Account") {
+                        when {
+                            session == null -> MemberAccountCard(
+                                onSignIn = onSignIn,
+                                onRegister = onRegister,
+                                onSignedIn = { info ->
+                                    session = info; privateNodeState = onOpenPrivateNode(info)
+                                    onSetHostMoveSession(info)
+                                    refreshNotice = try {
+                                        onRegisterRefresh(); "Private update notifications are enabled. Notifications contain no proposal details."
+                                    } catch (_: Exception) { "Update notifications are unavailable. Foreground refresh remains available." }
+                                    selectedSection = "Inbox"
+                                    privateNodeState
+                                },
+                            )
+                            accountSection == "Saved" -> MemberAccountSubScreen(title = stringResource(R.string.account_my_records), onBack = { accountSection = "Home" }) {
+                                MemberSavedOperationsCard(accessSession, onLoadSaved, onCheckSaved, onPrepareWithdrawal, onApproveWithdrawal, onCancelOperation)
+                            }
+                            accountSection == "Access" -> MemberAccountSubScreen(title = stringResource(R.string.account_sharing), onBack = { accountSection = "Home" }) {
+                                MemberPermissionsCard(accessSession, onLoadPermissions, onRevokePermission, onLoadPermissionRequests, onReadPermissionRequest, onDecidePermissionRequest)
+                            }
+                            accountSection == "Recovery" -> MemberAccountSubScreen(title = stringResource(R.string.account_recovery), onBack = { accountSection = "Home" }) {
+                                MemberRecoveryCard(
+                                    session, privateNodeState, recoveryCanConfigure, onLoadRecovery, onRegisterRecoveryKey, onConfigureRecovery,
+                                    onBeginRecovery, onApproveRecovery,
+                                    onFinish = { info, request -> onFinishRecovery(info, request).also { if (it is MemberRecoveryActionResult.Completed) privateNodeState = MemberPrivateNodeState.READY } },
+                                )
+                            }
+                            accountSection == "MoveHost" -> MemberAccountSubScreen(title = stringResource(R.string.account_move_host), onBack = { accountSection = "Home" }) {
+                                MemberHostMoveCard(
+                                    accessSession, onPrepareHostMove,
+                                    onRetire = {
+                                        onRetireSourceHost().also {
+                                            if (it.phase == MemberHostMovePhase.COMPLETED) {
+                                                session = null; privateNodeState = MemberPrivateNodeState.LOCKED; onSetHostMoveSession(null); accountSection = "Home"
+                                            }
+                                        }
+                                    },
+                                )
+                            }
+                            accountSection == "Delete" -> MemberAccountSubScreen(title = stringResource(R.string.account_delete_account), onBack = { accountSection = "Home" }) {
+                                MemberLeaveCard(
+                                    accessSession,
+                                    onRefreshStatus = onRefreshLeaveStatus,
+                                    onDeleteAccount = {
+                                        onDeleteAccount().also {
+                                            if (it.phase == MemberLeavePhase.DONE) {
+                                                session = null; privateNodeState = MemberPrivateNodeState.LOCKED; onSetHostMoveSession(null); accountSection = "Home"
+                                            }
+                                        }
+                                    },
+                                    onRequestExport = onRequestAccountExport,
+                                )
+                            }
+                            else -> MemberAccountHomeCard(
+                                session = session,
+                                notice = refreshNotice,
+                                onOpenSaved = { accountSection = "Saved" },
+                                onOpenAccess = { accountSection = "Access" },
+                                onOpenRecovery = { accountSection = "Recovery" },
+                                onOpenMoveHost = if (hostMoveAvailable) ({ accountSection = "MoveHost" }) else null,
+                                onOpenDelete = { accountSection = "Delete" },
+                                onSignOut = {
+                                    session = null; privateNodeState = MemberPrivateNodeState.LOCKED; onSetHostMoveSession(null); selectedSection = "Account"; accountSection = "Home"
+                                },
+                            )
+                        }
+                    } else {
+                        MemberInboxCard(
                             connected = accessSession != null,
                             offers = offers,
                             failed = offerFailure,
@@ -343,56 +421,6 @@ fun AtarasyApp(
                             onApproveStatement = onApproveStatement,
                             onSelect = { selectedOffer = it },
                             onAccount = { selectedSection = "Account" },
-                        )
-                    } else if (selectedSection == "Saved") {
-                        MemberSavedOperationsCard(accessSession, onLoadSaved, onCheckSaved, onPrepareWithdrawal, onApproveWithdrawal, onCancelOperation)
-                    } else if (selectedSection == "Access") {
-                        MemberPermissionsCard(accessSession, onLoadPermissions, onRevokePermission, onLoadPermissionRequests, onReadPermissionRequest, onDecidePermissionRequest)
-                    } else if (selectedSection == "Dials") {
-                        MemberDialsCard(accessSession, onLoadEffectiveMandates, onLoadMandateChanges, onPrepareMandateChange, onPrepareMandateSignature, onApproveMandateChange, onCancelMandateChange)
-                    } else if (selectedSection == "Recovery") {
-                        MemberRecoveryCard(
-                            session, privateNodeState, recoveryCanConfigure, onLoadRecovery, onRegisterRecoveryKey, onConfigureRecovery,
-                            onBeginRecovery, onApproveRecovery,
-                            onFinish = { info, request -> onFinishRecovery(info, request).also { if (it is MemberRecoveryActionResult.Completed) privateNodeState = MemberPrivateNodeState.READY } },
-                        )
-                    } else if (selectedSection == "Move Host") {
-                        MemberHostMoveCard(
-                            accessSession, onPrepareHostMove,
-                            onRetire = {
-                                onRetireSourceHost().also {
-                                    if (it.phase == MemberHostMovePhase.COMPLETED) {
-                                        session = null; privateNodeState = MemberPrivateNodeState.LOCKED; onSetHostMoveSession(null); selectedSection = "Account"
-                                    }
-                                }
-                            },
-                        )
-                    } else if (selectedSection == "Delete Account") {
-                        MemberLeaveCard(
-                            accessSession,
-                            onRefreshStatus = onRefreshLeaveStatus,
-                            onDeleteAccount = {
-                                onDeleteAccount().also {
-                                    if (it.phase == MemberLeavePhase.DONE) {
-                                        session = null; privateNodeState = MemberPrivateNodeState.LOCKED; onSetHostMoveSession(null); selectedSection = "Account"
-                                    }
-                                }
-                            },
-                            onRequestExport = onRequestAccountExport,
-                        )
-                    } else {
-                        MemberAccountCard(
-                            onSignIn = onSignIn,
-                            onRegister = onRegister,
-                            onSignedIn = { info ->
-                                session = info; privateNodeState = onOpenPrivateNode(info)
-                                onSetHostMoveSession(info)
-                                refreshNotice = try {
-                                    onRegisterRefresh(); "Private update notifications are enabled. Notifications contain no proposal details."
-                                } catch (_: Exception) { "Update notifications are unavailable. Foreground refresh remains available." }
-                                selectedSection = if (privateNodeState == MemberPrivateNodeState.READY) "Offers" else "Account"
-                                privateNodeState
-                            },
                         )
                     }
                 }
@@ -932,6 +960,10 @@ private fun MemberDialsCard(
     var notice by remember(session) { mutableStateOf("") }
     var refresh by remember(session) { mutableStateOf(0L) }
     val scope = rememberCoroutineScope()
+    // Read once per composition: never call stringResource() from inside a launched coroutine.
+    val recordedText = stringResource(R.string.notice_decision_recorded)
+    val cancelledText = stringResource(R.string.notice_signing_cancelled)
+    val noCredentialText = stringResource(R.string.notice_no_credential)
     fun begin(value: Mandate) {
         editing = value; prepared = null; outOfNetwork = value.ceilingOutOfNetwork.toString(); daily = value.ceilingDaily?.toString().orEmpty()
         cooling = value.coolingSeconds?.toString().orEmpty(); lapses = value.lapsesAt.toString(); coSigners = value.coSigners.joinToString(",")
@@ -948,14 +980,14 @@ private fun MemberDialsCard(
         effective == null || changes == null -> MemberCard("Checking Dials…", "Reading effective protections and pending signatures.")
         else -> Card(modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Dials", style = MaterialTheme.typography.titleLarge)
-                if (effective!!.isEmpty()) Text("No effective mandate is available.")
+                Text(stringResource(R.string.limits_intro), style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+                if (effective!!.isEmpty()) Text(stringResource(R.string.limits_no_limits))
                 effective!!.forEach { mandate ->
                     Card(modifier = Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text("Effective version ${mandate.version}", fontWeight = FontWeight.SemiBold)
+                            Text(stringResource(R.string.limits_your_limits), fontWeight = FontWeight.SemiBold)
                             Text(describeMandate(mandate))
-                            Button(enabled = !busy, onClick = { begin(mandate) }) { Text("Edit protections") }
+                            Button(enabled = !busy, onClick = { begin(mandate) }) { Text(stringResource(R.string.limits_edit_button)) }
                         }
                     }
                 }
@@ -983,12 +1015,12 @@ private fun MemberDialsCard(
                                         busy = false
                                     }
                                 }
-                            }) { Text("Review fixed proposal") }
+                            }) { Text(stringResource(R.string.limits_review_proposal)) }
                         }
                     }
                 }
-                Text("Pending changes", fontWeight = FontWeight.SemiBold)
-                if (changes!!.isEmpty()) Text("No pending or historical mandate changes.")
+                Text(stringResource(R.string.limits_pending_changes_title), fontWeight = FontWeight.SemiBold)
+                if (changes!!.isEmpty()) Text(stringResource(R.string.limits_no_pending))
                 changes!!.forEach { change ->
                     Card(modifier = Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -1015,32 +1047,44 @@ private fun MemberDialsCard(
                 prepared?.let { fixed ->
                     Card(modifier = Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text("Signature review", fontWeight = FontWeight.SemiBold)
+                            Text(stringResource(R.string.limits_signature_review), fontWeight = FontWeight.SemiBold)
                             Text("Before: ${describeMandate(fixed.change.before)}")
                             Text("After: ${describeMandate(fixed.change.mandate)}")
                             Text("Required signers: ${fixed.change.requiredSigners.joinToString()}")
                             Button(enabled = !busy, onClick = { busy = true; scope.launch {
                                 notice = when (val result = onApprove(fixed)) {
-                                    is MemberDialsActionResult.Recorded -> if (result.change.state == "effective") "Mandate version ${result.change.mandate.version} is effective." else "Signature recorded. Waiting for required signers."
-                                    MemberDialsActionResult.Cancelled -> "Signing cancelled. The effective mandate was not changed."
-                                    MemberDialsActionResult.NoCredential -> "No passkey is available for this mandate."
-                                    is MemberDialsActionResult.Failed -> "The submission result is unconfirmed. Refresh Dials; do not sign a new version yet."
+                                    is MemberDialsActionResult.Recorded -> if (result.change.state == "effective") recordedText else "Signature recorded. Waiting for required signers."
+                                    MemberDialsActionResult.Cancelled -> cancelledText
+                                    MemberDialsActionResult.NoCredential -> noCredentialText
+                                    is MemberDialsActionResult.Failed -> "The submission result is unconfirmed. Refresh before signing a new version."
                                 }
                                 prepared = null; editing = null; busy = false; refresh++
-                            } }) { Text("Sign fixed proposal") }
-                            TextButton(enabled = !busy, onClick = { prepared = null }) { Text("Close review") }
+                            } }) { Text(stringResource(R.string.limits_sign_proposal)) }
+                            TextButton(enabled = !busy, onClick = { prepared = null }) { Text("← " + stringResource(R.string.tab_limits)) }
                         }
                     }
                 }
                 if (notice.isNotEmpty()) Text(notice)
-                TextButton(enabled = !busy, onClick = { prepared = null; editing = null; refresh++ }) { Text("Refresh Dials") }
+                TextButton(enabled = !busy, onClick = { prepared = null; editing = null; refresh++ }) { Text(stringResource(R.string.inbox_refresh)) }
             }
         }
     }
 }
 
-private fun describeMandate(value: Mandate) = "Out-of-network ${value.ceilingOutOfNetwork}; daily ${value.ceilingDaily?.toString() ?: "none"}; " +
-    "cooling ${value.coolingSeconds?.toString() ?: "none"}; co-signers ${value.coSigners.joinToString().ifEmpty { "none" }}; lapses ${value.lapsesAt}"
+/**
+ * The five protections as sentences (vault `80` §6.2 L), not a raw field dump. Mirrors
+ * iOS's `MemberMandateSentences`: hours and days, not seconds, and money in the host
+ * currency.
+ */
+@Composable
+private fun describeMandate(value: Mandate): String {
+    val daily = value.ceilingDaily?.let { stringResource(R.string.limits_daily_sentence, MemberFormat.money(it)) } ?: ""
+    val outOfNetwork = stringResource(R.string.limits_out_of_network_sentence, MemberFormat.money(value.ceilingOutOfNetwork))
+    val cooling = value.coolingSeconds?.let { stringResource(R.string.limits_cooling_sentence, MemberFormat.duration(it)) } ?: stringResource(R.string.limits_no_cooling)
+    val coSigners = if (value.coSigners.isEmpty()) stringResource(R.string.limits_no_cosigners) else stringResource(R.string.limits_cosigners_sentence, value.coSigners.size)
+    val ends = stringResource(R.string.limits_ends_sentence, MemberFormat.day(value.lapsesAt))
+    return listOfNotNull(daily.takeIf { it.isNotEmpty() }, outOfNetwork, cooling, coSigners, ends).joinToString("\n")
+}
 
 private fun Exception.endsPrivateSession() = this is MemberFailure.Expired || this is MemberFailure.Superseded || (this is MemberFailure.Http && status == 401)
 
@@ -1082,12 +1126,12 @@ private fun MemberAccountCard(
                     }
                     busy = false
                 }
-            }) { Text(if (busy) "Connecting…" else "Sign in with passkey") }
+            }) { Text(if (busy) "Connecting…" else stringResource(R.string.account_sign_in_with_passkey)) }
             OutlinedTextField(
                 value = invitation,
                 onValueChange = { invitation = it.trim() },
                 enabled = !busy,
-                label = { Text("Device invitation") },
+                label = { Text(stringResource(R.string.account_device_invitation)) },
                 singleLine = true,
                 visualTransformation = PasswordVisualTransformation(),
                 modifier = Modifier.fillMaxWidth(),
@@ -1095,13 +1139,86 @@ private fun MemberAccountCard(
             Button(enabled = !busy && Regex("^aen1_[A-Za-z0-9_-]{43}$").matches(invitation), onClick = {
                 val submitted = invitation; invitation = ""; busy = true
                 scope.launch { status = describe(onRegister(submitted)); busy = false }
-            }) { Text("Connect this device") }
+            }) { Text(stringResource(R.string.account_connect_device)) }
         }
     }
 }
 
+/** A destination reached from Account, with a way back to it (vault `80` §6.2 A). */
 @Composable
-private fun MemberOffersCard(
+private fun MemberAccountSubScreen(title: String, onBack: () -> Unit, content: @Composable () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = onBack) { Text("← " + stringResource(R.string.tab_account)) }
+        }
+        Text(title, style = MaterialTheme.typography.titleLarge)
+        content()
+    }
+}
+
+/**
+ * Me, my devices, my data (vault `80` §6.2 A). The household's own reference moves to
+ * "About this account" and is never the first line the member reads.
+ */
+@Composable
+private fun MemberAccountHomeCard(
+    session: MemberSessionInfo?,
+    notice: String,
+    onOpenSaved: () -> Unit,
+    onOpenAccess: () -> Unit,
+    onOpenRecovery: () -> Unit,
+    onOpenMoveHost: (() -> Unit)?,
+    onOpenDelete: () -> Unit,
+    onSignOut: () -> Unit,
+) {
+    var showingAbout by rememberSaveable { mutableStateOf(false) }
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (session != null) MemberCard(stringResource(R.string.account_signed_in_with_passkey), stringResource(R.string.account_signed_in_until, MemberFormat.dayAndTime(session.expiresAt)))
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(onClick = onOpenSaved) { Text(stringResource(R.string.account_my_records)) }
+            }
+        }
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(stringResource(R.string.account_sharing), style = MaterialTheme.typography.titleMedium)
+                TextButton(onClick = onOpenAccess) { Text(stringResource(R.string.account_access_requests) + " / " + stringResource(R.string.account_shared)) }
+            }
+        }
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(stringResource(R.string.account_your_data), style = MaterialTheme.typography.titleMedium)
+                TextButton(onClick = onOpenRecovery) { Text(stringResource(R.string.account_recovery)) }
+                if (onOpenMoveHost != null) TextButton(onClick = onOpenMoveHost) { Text(stringResource(R.string.account_move_host)) }
+            }
+        }
+        if (notice.isNotEmpty()) MemberCard("Notifications", notice)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TextButton(onClick = onSignOut) { Text(stringResource(R.string.account_sign_out)) }
+            TextButton(onClick = onOpenDelete) { Text(stringResource(R.string.account_delete_account)) }
+        }
+        if (session != null) {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    TextButton(onClick = { showingAbout = !showingAbout }) { Text(stringResource(R.string.account_about_this_account)) }
+                    if (showingAbout) {
+                        Text(stringResource(R.string.account_reference_label), style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                        Text(session.household, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Two sections, "At home" (physical) and "Proposals" (digital), each newest arrival first
+ * over all presenters (`04b` §1b.2, clause 14, vault `80` §6.2 I). A row shows its goods'
+ * title, its merchants, and one status line in the member's words: never a raw protocol
+ * state word, never a raw offer id.
+ */
+@Composable
+private fun MemberInboxCard(
     connected: Boolean,
     offers: List<MemberOfferSummary>?,
     failed: Boolean,
@@ -1124,23 +1241,67 @@ private fun MemberOffersCard(
             Button(onClick = onAccount) { Text("Go to Account") }
         }
         failed -> MemberCard("Offers are unavailable", "Your private offer list could not be loaded. Sign in again to retry.")
-        offers == null -> MemberCard("Loading offers…", "Checking every presenter connected to your household.")
+        offers == null -> MemberCard(stringResource(R.string.inbox_loading), "")
         selectedOffer != null -> MemberOfferDetailCard(detail, detailFailed, review, reviewFailed, session, onPrepareDecision, onApproveDecision, onPrepareStatement, onApproveStatement, onRecorded) { onSelect(null) }
-        offers.isEmpty() -> MemberCard("No offers waiting", "New offers and boxes that need your decision will appear here.")
-        else -> Card(modifier = Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Offers", style = MaterialTheme.typography.titleLarge)
-                offers.forEach { offer ->
-                    Card(modifier = Modifier.fillMaxWidth(), onClick = { onSelect(offer) }) {
-                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(if (offer.binding == "digital") "Digital offer" else "Box offer", fontWeight = FontWeight.SemiBold)
-                            Text(offer.state.replaceFirstChar { it.uppercase() })
-                        }
-                    }
-                }
-            }
+        else -> Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            MemberInboxSection(
+                title = stringResource(R.string.inbox_section_at_home_title),
+                subtitle = stringResource(R.string.inbox_section_at_home_subtitle),
+                rows = offers.inboxRows("physical"),
+                empty = stringResource(R.string.inbox_empty_at_home),
+                onSelect = onSelect,
+            )
+            MemberInboxSection(
+                title = stringResource(R.string.inbox_section_proposals_title),
+                subtitle = stringResource(R.string.inbox_section_proposals_subtitle),
+                rows = offers.inboxRows("digital"),
+                empty = stringResource(R.string.inbox_empty_proposals),
+                onSelect = onSelect,
+            )
+            if (offers.isEmpty()) MemberCard(stringResource(R.string.inbox_no_sources), "")
         }
     }
+}
+
+@Composable
+private fun MemberInboxSection(title: String, subtitle: String, rows: List<MemberOfferSummary>, empty: String, onSelect: (MemberOfferSummary) -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(title, style = MaterialTheme.typography.titleLarge)
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+            }
+            if (rows.isEmpty()) Text(empty, color = Color.Gray)
+            rows.forEach { offer -> MemberInboxRow(offer = offer, onClick = { onSelect(offer) }) }
+        }
+    }
+}
+
+@Composable
+private fun MemberInboxRow(offer: MemberOfferSummary, onClick: () -> Unit) {
+    val lines = offer.candidates.orEmpty()
+    val headline = when {
+        lines.isEmpty() -> stringResource(if (offer.binding == "physical") R.string.inbox_row_box_generic else R.string.inbox_row_proposal_generic)
+        lines.size == 1 -> lines.first().title
+        else -> stringResource(R.string.inbox_row_and_more, lines.first().title, lines.size - 1)
+    }
+    Card(modifier = Modifier.fillMaxWidth(), onClick = onClick) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(headline, fontWeight = FontWeight.SemiBold)
+            if (offer.merchants.isNotEmpty()) Text(offer.merchants.joinToString(", "), style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+            Text(memberRowStatusText(offer.rowStatus))
+        }
+    }
+}
+
+@Composable
+private fun memberRowStatusText(status: MemberRowStatus): String = when (status) {
+    is MemberRowStatus.AtHome -> status.nextSwap?.let { stringResource(R.string.status_next_swap, MemberFormat.day(it)) } ?: stringResource(R.string.status_at_home)
+    is MemberRowStatus.StatementReady -> stringResource(if (status.holdsNextBox) R.string.status_statement_ready_holds_next else R.string.status_statement_ready)
+    is MemberRowStatus.BoxClosed -> stringResource(if (status.settled) R.string.status_box_closed_settled else R.string.status_box_closed_not_settled)
+    is MemberRowStatus.ProposalOpen -> status.closesAt?.let { stringResource(R.string.status_proposal_closes, MemberFormat.day(it)) } ?: stringResource(R.string.status_proposal_waiting)
+    MemberRowStatus.ProposalDecided -> stringResource(R.string.status_proposal_decided)
+    MemberRowStatus.ProposalClosed -> stringResource(R.string.status_proposal_closed)
 }
 
 @Composable
@@ -1159,18 +1320,22 @@ private fun MemberOfferDetailCard(
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            TextButton(onClick = onBack) { Text("Back to offers") }
+            TextButton(onClick = onBack) { Text("← " + stringResource(R.string.tab_inbox)) }
             when {
                 failed -> { Text("Offer unavailable", style = MaterialTheme.typography.titleLarge); Text("This offer could not be loaded.") }
                 detail == null -> { Text("Loading offer…", style = MaterialTheme.typography.titleLarge) }
                 else -> {
-                    Text(if (detail.binding == "digital") "Digital offer" else "Box offer", style = MaterialTheme.typography.titleLarge)
-                    Text(detail.purpose.replaceFirstChar { it.uppercase() } + " · " + detail.state.replaceFirstChar { it.uppercase() })
+                    Text(
+                        stringResource(if (detail.binding == "digital") R.string.inbox_row_proposal_generic else R.string.inbox_row_box_generic),
+                        style = MaterialTheme.typography.titleLarge,
+                    )
                     detail.candidates.forEach { candidate ->
                         Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                            Text(candidate.product, fontWeight = FontWeight.SemiBold)
-                            Text("${candidate.quantity} × ${candidate.unitPrice}")
-                            Text("Made by ${candidate.maker}")
+                            Text(candidate.title, fontWeight = FontWeight.SemiBold)
+                            Text("${candidate.quantity} × " + MemberFormat.money(candidate.unitPrice))
+                            Text(stringResource(R.string.label_sold_by, candidate.merchant), style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                            Text(stringResource(R.string.label_made_by, candidate.maker), style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                            candidate.givenBy?.let { Text(stringResource(R.string.label_gift_from, it), style = MaterialTheme.typography.bodySmall, color = Color.Gray) }
                         }
                     }
                     detail.disclosures.forEach { block ->
@@ -1189,25 +1354,27 @@ private fun MemberOfferDetailCard(
                         reviewFailed -> Text("The decision review is unavailable.")
                         review == null -> Text("Loading decision review…")
                         review is MemberReview.Approval -> {
-                            Text("Before you decide", style = MaterialTheme.typography.titleMedium)
+                            Text(stringResource(R.string.why_this_and_why_not), style = MaterialTheme.typography.titleMedium)
                             review.value.candidates.forEach { candidate ->
                                 Text(candidate.argumentAgainst)
                                 candidate.alternatives.forEach { Text("• $it") }
+                                if (candidate.isExploration) Text(stringResource(R.string.label_new_to_you), style = MaterialTheme.typography.labelSmall, color = Color.Gray)
                             }
-                            review.value.excluded.forEach { Text("Excluded: ${it.product} (${it.reason.replace('_', ' ')})") }
-                            Text(review.value.carriage?.let { "Delivery: $it" } ?: "Delivery amount is not known yet.")
+                            Text(review.value.carriage?.let { stringResource(R.string.label_delivery) + ": " + MemberFormat.money(it) } ?: stringResource(R.string.label_delivery_unknown))
                             if (session != null && detail.state == "presented") MemberDigitalDecisionControls(session, detail, review.value, onPrepareDecision, onApproveDecision, onRecorded)
                         }
                         review is MemberReview.Statement -> {
-                            Text("Statement", style = MaterialTheme.typography.titleMedium)
-                            review.value.lines.forEach { Text("${it.product}: ${it.amount}${if (it.givenBy != null) " (gift)" else ""}") }
-                            Text(review.value.carriage?.let { "Delivery: $it" } ?: "Delivery amount is not known yet.")
+                            Text(stringResource(R.string.statement_title), style = MaterialTheme.typography.titleMedium)
+                            review.value.lines.forEach { line ->
+                                Text(line.title + ": " + (if (line.givenBy != null) stringResource(R.string.label_gift_from, line.givenBy) else MemberFormat.money(line.amount)))
+                            }
+                            Text(review.value.carriage?.let { stringResource(R.string.label_delivery) + ": " + MemberFormat.money(it) } ?: stringResource(R.string.label_delivery_unknown))
                             if (session != null && detail.state in setOf("decided", "expired")) MemberStatementControls(session, detail, review.value, onPrepareStatement, onApproveStatement, onRecorded)
                         }
                         review is MemberReview.Settlement -> {
-                            Text("Settled", style = MaterialTheme.typography.titleMedium)
-                            Text("Goods charged: ${review.value.charged}")
-                            if (review.value.disputedAmount > 0) Text("Disputed: ${review.value.disputedAmount}")
+                            Text(stringResource(R.string.settled_title), style = MaterialTheme.typography.titleMedium)
+                            Text(stringResource(R.string.label_total) + ": " + MemberFormat.money(review.value.charged))
+                            if (review.value.disputedAmount > 0) Text(stringResource(R.string.action_disputed) + ": " + MemberFormat.money(review.value.disputedAmount))
                             Text("This settlement is signed and is never rewritten.")
                             // §6.6, question 70. A correction only ever lowers what was
                             // signed, appended beside it. Nothing here is the household's
@@ -1311,39 +1478,53 @@ private fun MemberStatementControls(
     var busy by remember(detail.id) { mutableStateOf(false) }
     var notice by remember(detail.id) { mutableStateOf("") }
     val scope = rememberCoroutineScope()
+    // Read once per composition: never call stringResource() from inside a launched coroutine.
+    val disputeText = stringResource(R.string.action_dispute)
+    val disputedText = stringResource(R.string.action_disputed)
+    val deliveryText = stringResource(R.string.label_delivery)
+    val notPreparedText = "The statement could not be prepared. Refresh the offer before trying again."
+    val recordedText = stringResource(R.string.notice_statement_recorded)
+    val cancelledText = stringResource(R.string.notice_signing_cancelled)
+    val noCredentialText = stringResource(R.string.notice_no_credential)
+    val unresolvedText = stringResource(R.string.notice_unresolved)
+    val checkRecordsText = "Check your records before another action."
     statement.lines.filter { it.valence in setOf("consumed", "lost") }.forEach { line ->
         TextButton(enabled = !busy && frozen == null, onClick = { disputed = if (line.candidate in disputed) disputed - line.candidate else disputed + line.candidate }) {
-            Text(if (line.candidate in disputed) "Disputed: ${line.product}" else "Dispute ${line.product}")
+            Text((if (line.candidate in disputed) disputedText else disputeText) + ": " + line.title)
         }
     }
     if (frozen == null) {
         Button(enabled = !busy && statement.carriage != null, onClick = {
             busy = true; notice = ""; scope.launch {
-                try { frozen = onPrepare(session, detail, statement, disputed.sorted()); notice = "Review the frozen statement before signing." }
-                catch (_: Exception) { notice = "The statement could not be prepared. Refresh the offer before trying again." }
+                try { frozen = onPrepare(session, detail, statement, disputed.sorted()); notice = "" }
+                catch (_: Exception) { notice = notPreparedText }
                 busy = false
             }
-        }) { Text(if (busy) "Preparing…" else "Review statement") }
+        }) { Text(if (busy) stringResource(R.string.label_preparing) else stringResource(R.string.action_review_statement)) }
     } else {
         val value = frozen!!
-        Text("Goods: ${value.local.goodsCharged} · Disputed: ${value.local.disputedGoods} · Delivery: ${value.local.carriage}", fontWeight = FontWeight.SemiBold)
+        Text(
+            MemberFormat.money(value.local.goodsCharged) +
+                (if (value.local.disputedGoods > 0) " · $disputedText " + MemberFormat.money(value.local.disputedGoods) else "") +
+                " · $deliveryText " + MemberFormat.money(value.local.carriage),
+            fontWeight = FontWeight.SemiBold,
+        )
         Button(enabled = !busy, onClick = {
             busy = true; notice = ""; scope.launch {
                 when (val result = onApprove(value)) {
                     is MemberStatementActionResult.Outcome -> when (result.value) {
-                        is MemberStatementOutcome.Committed -> { notice = "Statement recorded."; onRecorded() }
-                        is MemberStatementOutcome.SettledElsewhere -> { frozen = null; notice = "This box was settled by another confirmation. Review the saved result." }
-                        is MemberStatementOutcome.Pending -> { frozen = null; notice = "The operation is ${result.value.state}. Check the saved result before another action." }
-                        MemberStatementOutcome.Unresolved -> { frozen = null; notice = "The result is unresolved. Check the saved result; do not submit again." }
+                        is MemberStatementOutcome.Committed -> { notice = recordedText; onRecorded() }
+                        is MemberStatementOutcome.SettledElsewhere -> { frozen = null; notice = "This box was settled by another confirmation. Check your records." }
+                        is MemberStatementOutcome.Pending -> { frozen = null; notice = checkRecordsText }
+                        MemberStatementOutcome.Unresolved -> { frozen = null; notice = unresolvedText }
                     }
-                    MemberStatementActionResult.Cancelled -> notice = "Signing cancelled. Nothing was submitted."
-                    MemberStatementActionResult.NoCredential -> notice = "The required passkey is unavailable."
-                    is MemberStatementActionResult.Failed -> { frozen = null; notice = "The statement could not be confirmed. Check the saved result before another action." }
+                    MemberStatementActionResult.Cancelled -> notice = cancelledText
+                    MemberStatementActionResult.NoCredential -> notice = noCredentialText
+                    is MemberStatementActionResult.Failed -> { frozen = null; notice = checkRecordsText }
                 }
                 busy = false
             }
-        }) { Text(if (busy) "Signing…" else "Sign and submit statement") }
-        TextButton(enabled = !busy, onClick = { frozen = null; notice = "Prepared statement kept in saved results." }) { Text("Close review") }
+        }) { Text(if (busy) stringResource(R.string.label_signing) else stringResource(R.string.action_sign_statement)) }
     }
     if (notice.isNotEmpty()) Text(notice)
 }
@@ -1362,11 +1543,24 @@ private fun MemberDigitalDecisionControls(
     var busy by remember(detail.id) { mutableStateOf(false) }
     var notice by remember(detail.id) { mutableStateOf("") }
     val scope = rememberCoroutineScope()
+    // Read once per composition: never call stringResource() from inside a launched coroutine.
+    val keepText = stringResource(R.string.action_keep)
+    val declineText = stringResource(R.string.action_decline)
+    val keepingText = stringResource(R.string.action_keeping)
+    val decliningText = stringResource(R.string.action_declining)
+    val totalText = stringResource(R.string.label_total)
+    val deliveryText = stringResource(R.string.label_delivery)
+    val notPreparedText = "The decision could not be prepared. Refresh the offer before trying again."
+    val recordedText = stringResource(R.string.notice_decision_recorded)
+    val cancelledText = stringResource(R.string.notice_signing_cancelled)
+    val noCredentialText = stringResource(R.string.notice_no_credential)
+    val unresolvedText = stringResource(R.string.notice_unresolved)
+    val checkRecordsText = "Check your records before another action."
     approval.candidates.forEach { candidate ->
-        Text(candidate.product, fontWeight = FontWeight.SemiBold)
+        Text(candidate.title, fontWeight = FontWeight.SemiBold)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(enabled = !busy && frozen == null, onClick = { choices = choices + (candidate.id to MemberDigitalChoice.KEEP) }) { Text(if (choices[candidate.id] == MemberDigitalChoice.KEEP) "Keeping" else "Keep") }
-            Button(enabled = !busy && frozen == null, onClick = { choices = choices + (candidate.id to MemberDigitalChoice.DECLINE) }) { Text(if (choices[candidate.id] == MemberDigitalChoice.DECLINE) "Declining" else "Decline") }
+            Button(enabled = !busy && frozen == null, onClick = { choices = choices + (candidate.id to MemberDigitalChoice.KEEP) }) { Text(if (choices[candidate.id] == MemberDigitalChoice.KEEP) keepingText else keepText) }
+            Button(enabled = !busy && frozen == null, onClick = { choices = choices + (candidate.id to MemberDigitalChoice.DECLINE) }) { Text(if (choices[candidate.id] == MemberDigitalChoice.DECLINE) decliningText else declineText) }
         }
     }
     val complete = approval.candidates.isNotEmpty() && approval.candidates.all { choices[it.id] in setOf(MemberDigitalChoice.KEEP, MemberDigitalChoice.DECLINE) }
@@ -1374,31 +1568,33 @@ private fun MemberDigitalDecisionControls(
         Button(enabled = !busy && complete && approval.carriage != null, onClick = {
             busy = true; notice = ""
             scope.launch {
-                try { frozen = onPrepare(session, detail, approval, choices); notice = "Review the frozen total before signing." }
-                catch (_: Exception) { notice = "The decision could not be prepared. Refresh the offer before trying again." }
+                try { frozen = onPrepare(session, detail, approval, choices); notice = "" }
+                catch (_: Exception) { notice = notPreparedText }
                 busy = false
             }
-        }) { Text(if (busy) "Preparing…" else "Review decision") }
+        }) { Text(if (busy) stringResource(R.string.label_preparing) else stringResource(R.string.action_review)) }
     } else {
         val value = frozen!!
-        Text("Goods: ${value.frozen.goods} · Delivery: ${value.frozen.carriage} · Total: ${value.frozen.total}", fontWeight = FontWeight.SemiBold)
+        Text(
+            MemberFormat.money(value.frozen.goods) + " · $deliveryText " + MemberFormat.money(value.frozen.carriage) + " · $totalText " + MemberFormat.money(value.frozen.total),
+            fontWeight = FontWeight.SemiBold,
+        )
         Button(enabled = !busy, onClick = {
             busy = true; notice = ""
             scope.launch {
                 when (val result = onApprove(value)) {
                     is MemberDecisionActionResult.Outcome -> when (result.value) {
-                        is MemberDecisionOutcome.Recorded -> { notice = "Decision recorded."; onRecorded() }
-                        is MemberDecisionOutcome.Pending -> { frozen = null; notice = "The operation is ${result.value.state}. Check the saved result before another action." }
-                        MemberDecisionOutcome.Unresolved -> { frozen = null; notice = "The result is unresolved. Check the saved result; do not submit again." }
+                        is MemberDecisionOutcome.Recorded -> { notice = recordedText; onRecorded() }
+                        is MemberDecisionOutcome.Pending -> { frozen = null; notice = checkRecordsText }
+                        MemberDecisionOutcome.Unresolved -> { frozen = null; notice = unresolvedText }
                     }
-                    MemberDecisionActionResult.Cancelled -> notice = "Signing cancelled. Nothing was submitted."
-                    MemberDecisionActionResult.NoCredential -> notice = "The required passkey is unavailable."
-                    is MemberDecisionActionResult.Failed -> { frozen = null; notice = "Approval could not be confirmed. Check the saved result before another action." }
+                    MemberDecisionActionResult.Cancelled -> notice = cancelledText
+                    MemberDecisionActionResult.NoCredential -> notice = noCredentialText
+                    is MemberDecisionActionResult.Failed -> { frozen = null; notice = checkRecordsText }
                 }
                 busy = false
             }
-        }) { Text(if (busy) "Signing…" else "Sign and submit") }
-        TextButton(enabled = !busy, onClick = { frozen = null; notice = "Prepared decision kept in saved results." }) { Text("Close review") }
+        }) { Text(if (busy) stringResource(R.string.label_signing) else stringResource(R.string.action_sign_with_passkey)) }
     }
     if (notice.isNotEmpty()) Text(notice)
 }
