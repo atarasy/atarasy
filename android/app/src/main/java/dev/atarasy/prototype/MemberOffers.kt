@@ -1,6 +1,7 @@
 package dev.atarasy.prototype
 
 import java.nio.charset.StandardCharsets
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -283,16 +284,50 @@ object MemberOfferCodec {
     } catch (_: Exception) { throw MemberFailure.Malformed }
 }
 
+/**
+ * The union of every presenter's rows, plus whether every presenter answered. `incomplete`
+ * is true when at least one presenter's list could not be read, so a row-less section can be
+ * told apart from a section nobody could check (vault `80` §6.2 I, "may be incomplete").
+ */
+data class MemberOfferListResult(val offers: List<MemberOfferSummary>, val incomplete: Boolean)
+
 class MemberOffers(private val sessions: MemberSessionClient) {
     suspend fun list(presenter: String): List<MemberOfferSummary> {
         if (presenter.isEmpty()) throw MemberFailure.ScopeMismatch
         return listForSession(sessions.activeInfo(), presenter)
     }
 
-    suspend fun listAll(session: MemberSessionInfo): List<MemberOfferSummary> = coroutineScope {
+    /**
+     * A presenter whose own read fails (a malformed body, a foreign row, a transport error)
+     * is dropped from the union rather than failing the whole list, the same as iOS's
+     * `MemberProposals.refresh()`. Only a failure that ends the private session itself
+     * (expired, superseded, or a 401) propagates; every other per-presenter failure just
+     * marks the union `incomplete`.
+     */
+    suspend fun listAll(session: MemberSessionInfo): MemberOfferListResult = coroutineScope {
         if (sessions.activeInfo() != session) throw MemberFailure.ScopeMismatch
         val permits = Semaphore(4)
-        session.presenters.sorted().map { presenter -> async { permits.withPermit { listForSession(session, presenter) } } }.awaitAll().flatten()
+        val outcomes = session.presenters.sorted().map { presenter ->
+            async {
+                permits.withPermit {
+                    try {
+                        listForSession(session, presenter)
+                    } catch (failure: CancellationException) {
+                        throw failure
+                    } catch (failure: MemberFailure.Expired) {
+                        throw failure
+                    } catch (failure: MemberFailure.Superseded) {
+                        throw failure
+                    } catch (failure: MemberFailure.Http) {
+                        if (failure.status == 401) throw failure
+                        null
+                    } catch (_: Exception) {
+                        null
+                    }
+                }
+            }
+        }.awaitAll()
+        MemberOfferListResult(outcomes.filterNotNull().flatten(), incomplete = outcomes.any { it == null })
     }
 
     suspend fun detail(id: String): MemberOfferDetail {

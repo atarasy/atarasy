@@ -196,4 +196,36 @@ class MemberOffersTest {
         entered.await(); sessions.lockLocalAccess(); release.complete(Unit)
         assertTrue(pending.await() is MemberFailure.Superseded)
     }
+
+    // Vault `80` item 2: a presenter whose own read fails must not fail the union; it only
+    // marks the union incomplete, the same as iOS's MemberProposals.refresh().
+    @Test fun `listAll marks the union incomplete when one presenter cannot be read`() = runBlocking {
+        val twoPresenters = MemberSessionInfo("session", "detail-house", listOf("merchant-1", "merchant-2"), 2_000_000_000_000)
+        val twoPresenterBody = """{"id":"session","household":"detail-house","presenters":["merchant-1","merchant-2"],"expiresAt":2000000000000}"""
+        val goodBody = """{"offers":[{"id":"offer-1","household":"detail-house","presenter":"merchant-2","binding":"digital","state":"presented"}]}"""
+        val transport = OfferTransport(environment, ArrayDeque(listOf(
+            response("/auth/session", twoPresenterBody),
+            response("/offers", "not json"), // merchant-1, sorted first: fails to parse
+            response("/offers", goodBody), // merchant-2: reads fine
+        )))
+        val sessions = MemberSessionClient(environment, transport, OfferVault(StoredMemberSession(token, twoPresenters))) { 1_800_000_000_000 }
+        sessions.restore(twoPresenters.household)
+        val result = MemberOffers(sessions).listAll(twoPresenters)
+        assertTrue(result.incomplete)
+        assertEquals(listOf("offer-1"), result.offers.map { it.id })
+    }
+
+    @Test fun `listAll propagates an expired session instead of swallowing it as a partial failure`() = runBlocking {
+        val twoPresenters = MemberSessionInfo("session", "detail-house", listOf("merchant-1", "merchant-2"), 2_000_000_000_000)
+        val twoPresenterBody = """{"id":"session","household":"detail-house","presenters":["merchant-1","merchant-2"],"expiresAt":2000000000000}"""
+        val transport = OfferTransport(environment, ArrayDeque(listOf(
+            response("/auth/session", twoPresenterBody),
+            response("/offers", "{}", status = 401),
+            response("/offers", """{"offers":[]}"""),
+        )))
+        val sessions = MemberSessionClient(environment, transport, OfferVault(StoredMemberSession(token, twoPresenters))) { 1_800_000_000_000 }
+        sessions.restore(twoPresenters.household)
+        assertThrows(MemberFailure.Http::class.java) { runBlocking { MemberOffers(sessions).listAll(twoPresenters) } }
+        Unit
+    }
 }
