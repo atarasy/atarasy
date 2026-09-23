@@ -1,0 +1,218 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Atarasy</string>
+
+    <string name="tab_inbox">届いたもの</string>
+    <string name="tab_limits">見守り設定</string>
+    <string name="tab_account">アカウント</string>
+
+    <!-- Inbox -->
+    <string name="inbox_section_at_home_title">お手元の箱</string>
+    <string name="inbox_section_at_home_subtitle">ご自宅に届いている箱です。気になるものを使い、使った分だけお支払いください。</string>
+    <string name="inbox_section_proposals_title">ご提案</string>
+    <string name="inbox_section_proposals_subtitle">選んで署名しない限り、何も買いません。</string>
+    <string name="inbox_empty_at_home">お手元に箱はありません。</string>
+    <string name="inbox_empty_proposals">ご提案はありません。</string>
+    <string name="inbox_sources_incomplete">確認できなかったショップがあります。一覧がすべてではない可能性があります。</string>
+    <string name="inbox_no_sources">このアカウントにつながっているショップはまだありません。</string>
+    <string name="inbox_row_and_more">%1$s ほか %2$d 点</string>
+    <string name="inbox_row_box_generic">お届け箱</string>
+    <string name="inbox_row_proposal_generic">ご提案</string>
+    <string name="inbox_loading">ショップを確認しています</string>
+    <string name="inbox_refresh">更新</string>
+
+    <!-- Row status lines -->
+    <string name="status_next_swap">次の入れ替え %1$s</string>
+    <string name="status_at_home">お手元の箱</string>
+    <string name="status_statement_ready">明細を確認できます</string>
+    <string name="status_statement_ready_holds_next">明細を確認すると次の箱が届きます</string>
+    <string name="status_box_closed_settled">精算済み</string>
+    <string name="status_box_closed_not_settled">終了（お支払いなし）</string>
+    <string name="status_proposal_closes">%1$s に締め切り。何もしなければ何も買いません。</string>
+    <string name="status_proposal_waiting">選択を待っています</string>
+    <string name="status_proposal_decided">決定済み</string>
+    <string name="status_proposal_closed">締め切り済み</string>
+
+    <!-- Proposal / offer detail -->
+    <string name="label_sold_by">販売: %1$s</string>
+    <string name="label_made_by">メーカー・生産者: %1$s</string>
+    <string name="label_gift_from">%1$s からの贈り物</string>
+    <string name="action_keep">受け取る</string>
+    <string name="action_decline">見送る</string>
+    <string name="action_keeping">受け取ります</string>
+    <string name="action_declining">見送ります</string>
+    <string name="label_delivery">送料</string>
+    <string name="label_delivery_unknown">送料はまだわかりません。</string>
+    <string name="label_total">合計</string>
+    <string name="why_this_and_why_not">この品目を勧める理由と、選ばない理由</string>
+    <string name="label_new_to_you">はじめての品</string>
+    <string name="terms_from">%1$s の規約</string>
+    <string name="action_review">確認へ進む</string>
+    <string name="action_sign_with_passkey">パスキーで署名</string>
+    <string name="label_preparing">準備しています…</string>
+    <string name="label_signing">署名しています…</string>
+    <string name="notice_signing_cancelled">署名を取り消しました。何も送信していません。</string>
+    <string name="notice_no_credential">必要なパスキーが利用できません。</string>
+    <string name="notice_choices_not_sent">署名するまで、選んだ内容は送信されません。</string>
+    <string name="notice_decision_recorded">決定を記録しました</string>
+    <string name="notice_unresolved">結果を確認できませんでした。記録を確認し、もう一度送信しないでください。</string>
+
+    <!-- Box / statement -->
+    <string name="box_used">使ったもの</string>
+    <string name="box_missing">箱に見当たらなかったもの</string>
+    <string name="box_kept">手元に残したもの</string>
+    <string name="action_dispute">内容が違う</string>
+    <string name="action_disputed">内容が違うと報告済み</string>
+    <string name="notice_statement_recorded">明細を記録しました。</string>
+
+    <!-- Limits -->
+    <string name="limits_intro">あなたの代わりに買うときの範囲です。この範囲の外で何かを買うことはありません。ゆるめるには、ここで指定した人の同意が必要です。</string>
+    <string name="limits_daily_sentence">1 日 %1$s まで</string>
+    <string name="limits_out_of_network_sentence">登録外のお店では %1$s まで</string>
+    <string name="limits_cooling_sentence">%1$s 取り消せる</string>
+    <string name="limits_no_cooling">取り消せる期間なし</string>
+    <string name="limits_no_cosigners">ゆるめるときにほかの人の同意は不要</string>
+    <string name="limits_cosigners_sentence">ゆるめるには %1$d 人の同意が必要</string>
+    <string name="limits_ends_sentence">%1$s まで有効</string>
+    <string name="limits_edit_button">この設定を変える</string>
+    <string name="limits_pending_changes_title">署名待ちの変更</string>
+    <string name="limits_no_pending">保留中・過去の変更はありません。</string>
+    <string name="limits_no_limits">このアカウントの見守り設定はまだありません。</string>
+    <string name="limits_your_limits">見守り設定</string>
+    <string name="limits_signature_review">署名の確認</string>
+    <string name="limits_sign_proposal">確定した変更案に署名</string>
+
+    <!-- Account -->
+    <string name="account_signed_in_with_passkey">パスキーでサインイン中</string>
+    <string name="account_signed_in_until">%1$s まで</string>
+    <string name="account_my_records">記録</string>
+    <string name="account_sharing">情報の提供</string>
+    <string name="account_your_data">データ</string>
+    <string name="account_sign_out">サインアウト</string>
+    <string name="account_delete_account">アカウントを削除</string>
+    <string name="account_about_this_account">このアカウントについて</string>
+    <string name="account_reference_label">アカウント番号（サポート用）</string>
+    <string name="account_sign_in_with_passkey">パスキーでサインイン</string>
+    <string name="account_connect_device">この端末をつなぐ</string>
+    <string name="account_device_invitation">招待コード</string>
+    <string name="account_access_requests">アクセス依頼</string>
+    <string name="account_shared">共有している情報</string>
+    <string name="account_recovery">復旧</string>
+    <string name="account_move_host">別のホストへ移す</string>
+
+    <string name="signed_and_sent">署名して送信済み</string>
+    <string name="prepared_not_signed">準備のみ（署名していません）</string>
+
+    <!-- Box header and contents (ported from ios/AtarasyPrototype/MemberBoxScreen.swift at 34cde26) -->
+    <string name="box_offered_until">お届け期間は %1$s まででした。</string>
+    <string name="box_at_home_note">既にお手元にある商品です。気になるものを使ってください。お支払いは使った分だけで、残りは入れ替えのときに回収します。</string>
+    <string name="box_collected_note">使ったものと戻したものを、回収時に記録しました。</string>
+    <string name="box_in_the_box_title">箱の中身</string>
+    <string name="box_prices_note">価格はショップ自身のものです。使った分だけ請求されます。</string>
+    <string name="box_free">無料</string>
+    <string name="amount_not_charged">請求なし</string>
+
+    <!-- Line status words, digital and physical (MemberLineStatus, MemberOfferDetail.lostOutcome) -->
+    <string name="line_status_with_you">お手元にあります。</string>
+    <string name="line_status_with_you_not_collected">お手元にあります。まだ回収していません。</string>
+    <string name="line_status_went_back">入れ替えのときに回収しました。</string>
+    <string name="line_status_used">使用済み。</string>
+    <string name="line_status_kept">手元に残しました。</string>
+    <string name="line_status_defaulted">選ばれなかったため届いたものです。</string>
+    <string name="line_status_declined">見送りました。</string>
+    <string name="line_status_waiting">選択を待っています。</string>
+    <string name="lost_outcome_missing">回収時に箱に見当たりませんでした。この分を請求されることはありません。箱にあった場合は明細で申し出られます。</string>
+    <string name="lost_outcome_deadline">期限までに回収されませんでした。この分を請求されることはありません。</string>
+    <string name="lost_outcome_unknown">返却されていません（箱に見当たらなかったか、期限までに回収されなかったもの）。この分を請求されることはありません。</string>
+
+    <!-- Statement, grouped (MemberStatementLines) -->
+    <string name="statement_used_note">回収時に使用済みだったものです。贈り物を除き、ショップの価格でお支払いいただきます。</string>
+    <string name="statement_kept_note">手元に残すと決めたものです。</string>
+    <string name="statement_missing_note">この分を請求されることはありません。箱にあった場合はお知らせください。</string>
+    <string name="dispute_missing">箱に入っていた</string>
+    <string name="box_unsigned_hold">この明細にはまだ署名していません。署名するまで次の箱は届きません。</string>
+    <string name="box_review_and_sign">確認して署名</string>
+    <string name="label_goods">商品</string>
+    <string name="label_goods_and_delivery">商品と送料</string>
+    <string name="notice_disputed_lines_note">申し出た品目はここでは請求されません。その分の扱いは、ショップの規約に沿ってあなたとショップの間で決まります。</string>
+    <string name="statement_not_ready_note">送料がまだ記録されていないため、この明細にはまだ署名できません。</string>
+
+    <!-- Signing a statement (MemberStatementReviewScreen) -->
+    <string name="sign_this_statement_title">この明細に署名</string>
+    <string name="statement_signing_confirms">署名すると、申し出た品目を除いて回収の記録を確認したことになり、%1$s が下の商品代を請求できるようになります。</string>
+    <string name="marked_not_right_not_charged">申し出た分（ここでは請求なし）</string>
+    <string name="missing_attestation">署名は、回収時に見当たらなかった品目を知らされたことを示すものです。紛失を認めることや責任を負うことにはなりません。この分を請求されることはなく、箱にあった場合は申し出られます。</string>
+
+    <!-- Settled box (MemberSettledView) -->
+    <string name="settled_on">%1$s に精算</string>
+    <string name="settled_goods_charged">商品の請求額</string>
+    <string name="payment_status_unavailable">支払いの状況はここでは確認できません。</string>
+    <string name="nothing_left_to_sign_box">この箱で署名するものはもうありません。</string>
+    <string name="corrections_from_shop">ショップからの訂正</string>
+    <string name="corrections_added_note">ショップが精算の記録に追加したものです。署名の必要はありません。</string>
+    <string name="after_corrections">訂正後の金額</string>
+    <string name="marked_not_right_here_note">内容が違うと申し出ました。ここでは請求されません。</string>
+    <string name="said_in_box_note">箱に入っていたと申し出ました。</string>
+    <string name="refund_from">%1$s からの返金</string>
+    <string name="correction_from">%1$s からの訂正</string>
+
+    <!-- Per-merchant shop terms, collapsed while browsing, open on the signing screen -->
+    <string name="shop_terms_title">ショップの規約</string>
+    <string name="shop_terms_subtitle">各ショップが書いて署名したものを、そのまま表示しています。</string>
+    <string name="for_product_only">%1$s のみ</string>
+
+    <!-- Inbox: per-presenter partial failure -->
+    <string name="could_not_be_checked">確認できませんでした。</string>
+
+    <!-- My records (MemberRecordText, MemberRecordList) -->
+    <string name="a_box">お届け箱</string>
+    <string name="a_proposal">ご提案</string>
+    <string name="action_check_result">結果を確認</string>
+    <string name="label_checking">確認しています…</string>
+
+    <!-- Mandate editor (MemberMandateEditor) -->
+    <string name="mandate_daily_limit_label">1 日の上限</string>
+    <string name="mandate_daily_amount_label">1 日あたりの上限</string>
+    <string name="mandate_outside_amount_label">登録外のお店での上限</string>
+    <string name="mandate_time_to_undo_label">決定を取り消せる期間</string>
+    <string name="mandate_ends_on_label">有効期限</string>
+    <string name="mandate_new_limits_header">新しい設定</string>
+    <string name="mandate_amounts_in">金額の単位は %1$s です。</string>
+    <string name="mandate_cosigners_header">ゆるめるときに同意が必要な人</string>
+    <string name="mandate_cosigners_hint">1 行に 1 人</string>
+    <string name="mandate_cosigners_footer">それぞれの人から伝えられたアカウント番号を入力してください。</string>
+    <string name="mandate_review_change">この変更を確認</string>
+    <string name="mandate_change_note">上限を上げる、取り消せる期間を短くする、同意が必要な人を外す、といった変更には、現在の設定にある全員の署名が必要です。全員が署名するまで何も変わりません。</string>
+    <string name="mandate_now_header">現在</string>
+    <string name="mandate_after_change_header">変更後</string>
+    <string name="mandate_who_must_sign_header">署名が必要な人</string>
+    <string name="mandate_validation_message">1 つ以上の項目を変えてください。金額は整数、取り消せる期間は 30 日以内、同じ人は 1 回だけ入力できます。</string>
+    <string name="mandate_signatures_count">%2$d 人中 %1$d 人が署名</string>
+
+    <!-- Host move phases (MemberHostMoveView.phase) -->
+    <string name="host_move_phase_idle">未開始</string>
+    <string name="host_move_phase_signing_into_target">移動先でサインインしています</string>
+    <string name="host_move_phase_exporting">データを準備しています</string>
+    <string name="host_move_phase_importing">移動先に写しています</string>
+    <string name="host_move_phase_verifying">移動先を確認しています</string>
+    <string name="host_move_phase_ready_to_retire">いまの保管先を閉じられます</string>
+    <string name="host_move_phase_retiring">いまの保管先を閉じています</string>
+    <string name="host_move_phase_completed">移動が完了しました</string>
+    <string name="host_move_phase_source_retained">中断しました。いまの保管先は変わっていません</string>
+    <string name="host_move_phase_unresolved">確認できませんでした。両方の保管先を確認してください</string>
+
+    <!-- Deletion blockers (MemberLeaveSheet.blockerDescription) -->
+    <string name="leave_blocker_offer_in_progress">終わっていない箱や注文があります。先に終えるか、見送ってください。</string>
+    <string name="leave_blocker_statement_unsigned">ご利用明細が署名待ちです。</string>
+    <string name="leave_blocker_reservation_held">このアカウントで押さえている予約が残っています。</string>
+    <string name="leave_blocker_gift_in_flight">この世帯とのあいだで贈り物の手続きが進行中です。</string>
+    <string name="leave_blocker_permission_action_pending">情報提供の依頼が返答待ちです。</string>
+    <string name="leave_blocker_co_signer">ほかの世帯の見守り設定で同意が必要な人に指定されています。先に外れてください。</string>
+    <string name="leave_blocker_recoverer">ほかの世帯の復旧を手助けする人に指定されています。先に外れてください。</string>
+    <string name="leave_blocker_host_move_pending">保管先の移動が進行中です。</string>
+    <string name="leave_blocker_operation_pending">署名したものの結果がまだ出ていません。</string>
+    <string name="leave_blocker_mandate_change_pending">見守り設定の変更が署名待ちです。</string>
+    <string name="leave_blocker_recovery_request_pending">この世帯に関わる復旧の依頼が未処理です。</string>
+    <string name="leave_blocker_permission_request_pending">この世帯に関わる情報提供の依頼が未処理です。</string>
+    <string name="leave_blocker_default">処理中のものがあります。</string>
+</resources>
