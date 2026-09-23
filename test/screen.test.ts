@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { blocksFor, decidable, decisionGoodsTotal, decisionOutcome, disputable, disputeMovesMoney, statementTotal, undoDeadline, validateCorrections } from "../src/shared/screen.js";
+import { blocksFor, blocksForLines, decidable, decisionGoodsTotal, decisionOutcome, disputable, disputeMovesMoney, statementTotal, undoDeadline, validateCorrections } from "../src/shared/screen.js";
 import { REFUSALS, refusal } from "../src/shared/refusals.js";
 
 /**
@@ -435,5 +435,24 @@ describe("decisionGoodsTotal: what signing will buy, gifts excluded, carriage ap
       { candidate: "c-2", valence: "returned" },
     ];
     expect(decisionGoodsTotal(candidates, decisions)).toBe(1000);
+  });
+});
+
+describe("blocksForLines", () => {
+  const standing = { merchant: "maker-a", product: null, items: [{ label: "returns", value: "7 days" }] };
+  const forTea = { merchant: "maker-a", product: "tea-a", items: [{ label: "returns", value: "none" }] };
+  const other = { merchant: "maker-b", product: null, items: [{ label: "returns", value: "14 days" }] };
+  test("a shop's standing terms appear once however many of its lines are reviewed", () => {
+    const got = blocksForLines([standing, forTea, other], [
+      { merchant: "maker-a", product: null },
+      { merchant: "maker-a", product: "tea-a" },
+      { merchant: "maker-a", product: null },
+      { merchant: "maker-b", product: null },
+    ]);
+    expect(got.map((g) => g.block)).toEqual([standing, forTea, other]);
+    expect(got.map((g) => g.scope)).toEqual(["standing", "product", "standing"]);
+  });
+  test("no line, no block", () => {
+    expect(blocksForLines([standing], [])).toEqual([]);
   });
 });
