@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import { join } from "node:path";
+import { t } from "../src/client/copy.js";
 import { newMemberKey } from "../src/shared/encoding.js";
 
 /**
@@ -627,7 +628,7 @@ describe("the statement, as a member sees it", () => {
 
   test("disputing a line takes it out of the total", async () => {
     const app = await openStatement();
-    [...app.querySelectorAll("button")].find((b) => text(b) === "I did not use this")!.click();
+    [...app.querySelectorAll("button")].find((b) => text(b) === "This isn't right")!.click();
     expect(text(document.getElementById("app")!)).toContain("To be charged for the goods: ¥0");
   });
 
@@ -699,8 +700,8 @@ describe("a missing line, as a member sees it (question 46)", () => {
     [...document.querySelectorAll("button")].find((b) => text(b) === "It was in the box")!.click();
     const body = text(document.getElementById("app")!);
     expect(body).toContain("To be charged for the goods: ¥1,200");
-    expect(body).toContain("1 missing item disputed");
-    expect(body).not.toContain("disputed and not charged here");
+    expect(body).toContain("Disputed as missing: 1");
+    expect(body).not.toContain("Disputed and not charged here");
     // D-6, D-7: disputing is on the browsing screen; "Review and sign" opens
     // the step the signature and the open terms are on.
     [...document.querySelectorAll("button")].find((b) => text(b) === "Review and sign")!.click();
@@ -993,7 +994,7 @@ describe("leaving this host (§14.3), as a member sees it", () => {
     });
     const shown = text(app);
     expect(shown).toContain("A box or order is still open. Finish or decline it first.");
-    expect(shown).toContain("You co-sign another household's mandate. Step down first.");
+    expect(shown).toContain("You are named in another household's limits. Step down first.");
     expect(shown).toContain("a_future_kind_this_build_does_not_know");
     expect(shown).toContain("x-1");
     expect(buttons(app)).not.toContain("Delete account");
@@ -1026,7 +1027,7 @@ describe("leaving this host (§14.3), as a member sees it", () => {
     expect(typeof (sent!.body as { signature?: string }).signature).toBe("string");
     const shown = text(after);
     expect(shown).toContain("Account deleted");
-    expect(shown).toContain("4 records removed");
+    expect(shown).toContain("Records removed: 4");
     // §16.1's setup screen, the page's signed-out state.
     expect(buttons(after)).toContain("Create passkey");
     expect(localStorage.getItem("atarasy.member")).toBeNull();
@@ -1064,5 +1065,176 @@ describe("leaving this host (§14.3), as a member sees it", () => {
     // The session is kept: the member is still signed in, not returned to setup.
     expect(localStorage.getItem("atarasy.member")).not.toBeNull();
     expect(buttons(after)).not.toContain("Create passkey");
+  });
+});
+
+/**
+ * PR 43 left a run of clause-citing explanations English-only, on the
+ * reasoning that they had no iOS counterpart to copy from, and one of them
+ * named the mandate on the review step to a member who had never heard that
+ * word. This suite scans the rendered DOM of every screen, in both
+ * languages, for the protocol vocabulary a member never signed up to read:
+ * `mandate`, `presenter`, `valence`, a raw `household id` / `offer id`
+ * label, `Service state`, and a clause or section citation, checked in
+ * either language; and, only where the screen renders in Japanese, the raw
+ * English state words `offered` and `presented` leaking past the
+ * translation table (in English prose "was offered until" and "presented"
+ * are ordinary words, so they are not banned there). A hit here is the
+ * screen's own copy, never a business name: every merchant, maker and
+ * carrier below is named so that it shares no substring with any of these
+ * words, unlike `offerRow()`'s and `candidate()`'s own defaults
+ * ("presenter-a", "shop-x").
+ */
+describe("no protocol word reaches a member, in either language", () => {
+  const ALWAYS_BANNED: readonly RegExp[] = [
+    /\bmandate\b/i,
+    /\bpresenter\b/i,
+    /\bvalence\b/i,
+    /household id/i,
+    /offer id/i,
+    /service state/i,
+    /clause\s*\d/i,
+    /§\s*\d/,
+  ];
+  const JAPANESE_SCREEN_BANNED: readonly RegExp[] = [...ALWAYS_BANNED, /\boffered\b/i, /\bpresented\b/i];
+
+  function assertClean(node: Element, lang: string, where: string) {
+    const body = text(node);
+    for (const word of lang === "ja-JP" ? JAPANESE_SCREEN_BANNED : ALWAYS_BANNED) {
+      expect(body, `${where} (${lang}) matched ${word} in: ${body.slice(0, 400)}`).not.toMatch(word);
+    }
+  }
+
+  /** A button by its copy key, whichever language it rendered in. */
+  function findButton(container: ParentNode, key: string): HTMLButtonElement {
+    const en = t("en", key);
+    const ja = t("ja", key);
+    const found = [...container.querySelectorAll("button")].find((b) => text(b) === en || text(b) === ja);
+    if (!found) throw new Error(`no button for "${key}" (en="${en}" ja="${ja}")`);
+    return found as HTMLButtonElement;
+  }
+
+  /**
+   * `LANG` binds when the bundled script runs (`pickLanguage(navigator.language)`
+   * at module load), not when this file does, so `navigator.language` is set
+   * before each fresh `render()` re-evaluates it.
+   */
+  async function bothLanguages(build: () => Promise<Element>, label: string) {
+    for (const lang of ["en-US", "ja-JP"]) {
+      Object.defineProperty(globalThis.navigator, "language", { value: lang, configurable: true });
+      assertClean(await build(), lang, label);
+    }
+  }
+
+  // Fixture identifiers that share no substring with any banned word, unlike
+  // `offerRow()`'s and `candidate()`'s own defaults ("presenter-a", "shop-x").
+  const AGENT = "Aoyama Mercantile";
+  const MAKER = "Aoyama Workshop";
+  const CARRIER = "Local Courier";
+  const CO_SIGNER = "Family Co-signer";
+  const FULL_MANDATE = {
+    id: "clean-mandate-id",
+    household: MEMBER.household,
+    ceiling_out_of_network: 100_000,
+    ceiling_daily: 5_000,
+    cooling_seconds: 3_600,
+    co_signers: [CO_SIGNER],
+    lapses_at: 9_999_999_999_999,
+    version: 3,
+  };
+  const CLEAN_STANDING = { merchant: AGENT, product: null, version: "d-1", items: [{ label: "returns", value: "as published" }] };
+
+  test("setup", async () => {
+    await bothLanguages(() => render(() => ({ status: 404, body: {} }), null), "setup");
+  });
+
+  test("account, with About this account open", async () => {
+    await bothLanguages(async () => {
+      const app = await render((url) => (url === "/config" ? { status: 200, body: CONFIG } : url.startsWith("/api/offers?") ? { status: 200, body: { offers: [] } } : { status: 404, body: {} }));
+      findButton(app, "Account").click();
+      const account = await settled();
+      account.querySelector("details summary")?.dispatchEvent(new Event("click", { bubbles: true }));
+      return account;
+    }, "account");
+  });
+
+  test("the approval screen and its review step, with a price band, a reminder, an exploration tag, a gift and an excluded line", async () => {
+    const candidates = [
+      candidate({ id: "c-1", merchant: AGENT, maker: MAKER, ships: CARRIER, is_exploration: true }),
+      candidate({ id: "c-2", product: "miso-a", merchant: AGENT, maker: MAKER, ships: CARRIER, given_by: MAKER, disclosure: { merchant: AGENT, product: null } }),
+    ];
+    await bothLanguages(async () => {
+      const app = await render((url) => {
+        if (url === "/config") return { status: 200, body: CONFIG };
+        if (url.startsWith("/api/offers?")) return { status: 200, body: { offers: [offerRow({ presenter: AGENT, candidates: [rowCand({ id: "c-1" })] })] } };
+        if (url.includes("/_node/mandates/")) return { status: 200, body: FULL_MANDATE };
+        if (url.includes("/approval")) {
+          return {
+            status: 200,
+            body: {
+              offer: "o-1", presenter: AGENT, expires_at: 9_999_999_999_999, reminded: true,
+              price_band: { min: 500, max: 1500 },
+              mandate: { kind: "standing", scope: "groceries", lapses_at: 9_999_999_999_999 },
+              candidates, disclosures: [CLEAN_STANDING], carriage: 300,
+              excluded: [{ product: "coffee-a", reason: "outside_mandate" }],
+            },
+          };
+        }
+        return { status: 404, body: {} };
+      });
+      findButton(app, "Open").click();
+      const browsing = await settled();
+      assertClean(browsing, (navigator as { language: string }).language, "approval (browsing)");
+      findButton(document, "Keep").click();
+      findButton(document, "Review").click();
+      return settled();
+    }, "approval (review)");
+  });
+
+  test("protections (Limits), with co-signers named", async () => {
+    await bothLanguages(async () => {
+      const app = await render((url) => {
+        if (url === "/config") return { status: 200, body: CONFIG };
+        if (url.startsWith("/api/offers?")) return { status: 200, body: { offers: [] } };
+        if (url.includes("/_node/mandates/")) return { status: 200, body: FULL_MANDATE };
+        return { status: 404, body: {} };
+      });
+      findButton(app, "Limits").click();
+      return settled();
+    }, "protections");
+  });
+
+  test("the statement screen and its review step", async () => {
+    const LINE = { candidate: "c-1", product: "tea-a", merchant: AGENT, maker: MAKER, ships: CARRIER, given_by: null, valence: "consumed", quantity: 1, unit_price: 1200, amount: 1200, disclosure: { merchant: AGENT, product: null } };
+    await bothLanguages(async () => {
+      const app = await render((url) => {
+        if (url === "/config") return { status: 200, body: CONFIG };
+        if (url.startsWith("/api/offers?")) {
+          return { status: 200, body: { offers: [offerRow({ presenter: AGENT, binding: "physical", state: "decided", candidates: [rowCand({ id: "c-1", valence: "consumed" })] })] } };
+        }
+        if (url.includes("/statement")) return { status: 200, body: { offer: "o-1", household: MEMBER.household, expires_at: 9_999_999_999_999, lines: [LINE], disclosures: [CLEAN_STANDING], carriage: 500 } };
+        return { status: 404, body: {} };
+      });
+      findButton(app, "Open").click();
+      const browsing = await settled();
+      assertClean(browsing, (navigator as { language: string }).language, "statement (browsing)");
+      findButton(document, "Review and sign").click();
+      return settled();
+    }, "statement (review)");
+  });
+
+  test("leaving this host, with a co-signer blocker", async () => {
+    await bothLanguages(async () => {
+      const app = await render((url) => {
+        if (url === "/config") return { status: 200, body: CONFIG };
+        if (url.startsWith("/api/offers?")) return { status: 200, body: { offers: [] } };
+        if (url.includes("/leave")) return { status: 200, body: { household: MEMBER.household, blockers: [{ kind: "co_signer", id: "clean-blocker-id" }] } };
+        return { status: 404, body: {} };
+      });
+      findButton(app, "Account").click();
+      const account = await settled();
+      findButton(account, "Delete account").click();
+      return settled();
+    }, "leave");
   });
 });
