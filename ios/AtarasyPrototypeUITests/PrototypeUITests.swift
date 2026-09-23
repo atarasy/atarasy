@@ -62,7 +62,7 @@ final class PrototypeUITests: XCTestCase {
         let waiting = XCTAttachment(screenshot: app.screenshot()); waiting.name = "Mandate loosening waits for prior co-signer"; waiting.lifetime = .keepAlways; add(waiting)
         app.navigationBars.buttons.element(boundBy: 0).tap()
         let zero = app.descendants(matching: .any).matching(identifier: "editMandate-key:member-fixture.zero").firstMatch
-        for _ in 0..<10 { if zero.isHittable { break }; app.swipeDown() }
+        for _ in 0..<4 { app.swipeDown() }
         XCTAssertTrue(zero.isHittable); zero.tap()
         let ceiling = app.textFields["mandateOutsideCeiling"]; XCTAssertTrue(ceiling.waitForExistence(timeout: 5)); ceiling.tap(); ceiling.typeText("1")
         tap("reviewMandateChange", app); tap("signMandateChange", app)

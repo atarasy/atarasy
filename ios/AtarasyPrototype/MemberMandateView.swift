@@ -77,7 +77,7 @@ struct MemberMandateSentences: View {
         sentence("calendar", MemberLimitsText.daily(Mandate(mandate)), "Everything bought for you in one day, including what has already been settled today.")
         sentence("building.2", String(localized: "Up to \(MemberFormat.money(mandate.ceilingOutOfNetwork)) at a shop outside your network"), nil)
         sentence("arrow.uturn.backward", MemberLimitsText.cooling(Mandate(mandate)), "After you sign a decision, how long you have to undo it.")
-        sentence("person.2", mandate.coSigners.isEmpty ? String(localized: "Nobody else needs to agree to loosen these") : String(localized: "\(mandate.coSigners.count) people must agree to loosen these"), nil)
+        sentence("person.2", mandate.coSigners.isEmpty ? String(localized: "Nobody else needs to agree to loosen these") : String(localized: "Signatures needed to loosen these: \(mandate.coSigners.count + 1)"), nil)
         sentence("hourglass", String(localized: "Ends on \(MemberFormat.day(mandate.lapsesAt))"), "After this date nothing can be bought for you until you sign new limits.")
     }
     private func sentence(_ icon: String, _ text: String, _ note: LocalizedStringKey?) -> some View {
@@ -163,8 +163,8 @@ struct MemberMandateEditor: View {
             Section("Now") { MemberMandateSentences(mandate: before) }
             Section {
                 Toggle("Daily limit", isOn: $hasDaily)
-                if hasDaily { LabeledContent("Up to, per day") { TextField("Amount", text: $daily).keyboardType(.numberPad).multilineTextAlignment(.trailing) } }
-                LabeledContent("At a shop outside your network") { TextField("Amount", text: $outside).keyboardType(.numberPad).multilineTextAlignment(.trailing).accessibilityIdentifier("mandateOutsideCeiling") }
+                if hasDaily { HStack { Text("Up to, per day"); TextField("Amount", text: $daily).keyboardType(.numberPad).multilineTextAlignment(.trailing) } }
+                HStack { Text("At a shop outside your network"); TextField("Amount", text: $outside).keyboardType(.numberPad).multilineTextAlignment(.trailing).accessibilityIdentifier("mandateOutsideCeiling") }
                 Toggle("Time to undo a decision", isOn: $hasCooling)
                 if hasCooling { Stepper(value: $coolingHours, in: 0...720) { Text(coolingHours == 0 ? String(localized: "No time to undo") : MemberFormat.duration(seconds: Int64(coolingHours) * 3600)) } }
                 DatePicker("Ends on", selection: $lapse, displayedComponents: [.date])

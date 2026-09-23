@@ -3,7 +3,6 @@
 "%@ says it repaid this another way." = "%@ says it repaid this another way.";
 "%@ to undo" = "%@ to undo";
 "%lld of %lld signatures" = "%lld of %lld signatures";
-"%lld people must agree to loosen these" = "%lld people must agree to loosen these";
 "%lld × %@" = "%lld × %@";
 "A box" = "A box";
 "A box or order is still open. Finish or decline it first." = "A box or order is still open. Finish or decline it first.";
@@ -241,6 +240,7 @@
 "Sign with passkey" = "Sign with passkey";
 "Sign your limits" = "Sign your limits";
 "Sign-in unavailable" = "Sign-in unavailable";
+"Signatures needed to loosen these: %lld" = "Signatures needed to loosen these: %lld";
 "Signed" = "Signed";
 "Signed and sent" = "Signed and sent";
 "Signed for %@." = "Signed for %@.";

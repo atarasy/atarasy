@@ -3,7 +3,6 @@
 "%@ says it repaid this another way." = "%@ は別の方法で返金したと伝えています。";
 "%@ to undo" = "%@ 以内なら取り消せる";
 "%lld of %lld signatures" = "%2$lld 人中 %1$lld 人が署名";
-"%lld people must agree to loosen these" = "ゆるめるには %lld 人の同意が必要";
 "%lld × %@" = "%1$lld × %2$@";
 "A box" = "お届け箱";
 "A box or order is still open. Finish or decline it first." = "終わっていない箱や注文があります。先に終えるか、見送ってください。";
@@ -241,6 +240,7 @@
 "Sign with passkey" = "パスキーで署名";
 "Sign your limits" = "見守り設定に署名する";
 "Sign-in unavailable" = "サインインできません";
+"Signatures needed to loosen these: %lld" = "ゆるめるのに必要な署名: %lld 人";
 "Signed" = "署名済み";
 "Signed and sent" = "署名して送信済み";
 "Signed for %@." = "%@ 向けの署名です。";

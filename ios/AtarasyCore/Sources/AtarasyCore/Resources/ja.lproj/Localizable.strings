@@ -84,3 +84,11 @@
 "Your sign-in expired. Sign in again." = "サインインの有効期限が切れました。もう一度サインインしてください。";
 "Your signature was recorded. Signatures still needed: %lld" = "署名を記録しました。残りの必要な署名: %lld";
 "Your statement was signed and recorded. This is not a payment confirmation." = "明細に署名し、記録しました。支払いの確認ではありません。";
+"No saved sign-in was found for this account." = "このアカウントの保存済みのサインインは見つかりませんでした。";
+"Signed out." = "サインアウトしました。";
+"You were not signed in on this device." = "この端末ではサインインしていませんでした。";
+"Some shops could not be reached. This list may be incomplete." = "確認できなかったショップがあります。一覧がすべてではない可能性があります。";
+"The new host may hold a copy, and your current host is still active. Check the new host before closing the current one." = "移動先に写しがある可能性があり、いまの保管先もまだ使えます。いまの保管先を閉じる前に移動先を確認してください。";
+"Nothing was closed. Your current host is still active." = "何も閉じていません。いまの保管先はそのまま使えます。";
+"Your answer was recorded. The current status is below." = "回答を記録しました。現在の状態は下に表示しています。";
+"Request declined. Nothing was shared." = "依頼を断りました。何も提供していません。";

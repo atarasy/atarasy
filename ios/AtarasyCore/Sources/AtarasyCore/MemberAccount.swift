@@ -160,7 +160,7 @@ public enum MemberLeavePhase: String, Sendable { case idle, checkingStatus, bloc
             let started = generation
             let info = try await service.restore(household: household)
             guard started == generation else { return }
-            session = info; proposals.setSession(info); if let info { await openPrivateNode(info) }; notice = info == nil ? "No saved session was found for this household." : "Saved session verified."
+            session = info; proposals.setSession(info); if let info { await openPrivateNode(info) }; notice = info == nil ? L("No saved sign-in was found for this account.") : L("Signed in.")
         }
     }
     public func signOut() async {
@@ -170,7 +170,7 @@ public enum MemberLeavePhase: String, Sendable { case idle, checkingStatus, bloc
             let started = generation
             let result = try await service.logout()
             guard started == generation else { return }
-            notice = switch result { case .revoked: "Signed out."; case .noLocalSession: "No active session on this device." }
+            notice = switch result { case .revoked: L("Signed out."); case .noLocalSession: L("You were not signed in on this device.") }
         }
     }
     public func registerRefresh(token: Data, apnsEnvironment: MemberAPNSEnvironment) async {
@@ -189,7 +189,7 @@ public enum MemberLeavePhase: String, Sendable { case idle, checkingStatus, bloc
         proposals.markStale(); refreshNotice = L("Something new arrived. Checking your shops.")
         await proposals.refresh()
         guard session != nil else { refreshNotice = L("Access was refused while checking for updates. Sign in again."); return true }
-        refreshNotice = proposals.incomplete ? "Some sources could not be checked. Cached rows remain stale." : "Configured sources were refreshed."
+        refreshNotice = proposals.incomplete ? L("Some shops could not be reached. This list may be incomplete.") : ""
         return true
     }
     public func refreshMandates() async {
@@ -198,7 +198,7 @@ public enum MemberLeavePhase: String, Sendable { case idle, checkingStatus, bloc
             let started = generation; mandateReview = nil; mandates = []; mandateNotice = ""
             let values = try await service.unsignedMandates()
             guard started == generation, session != nil else { return }
-            mandates = values; mandateNotice = values.isEmpty ? "No unsigned mandates." : "Review each mandate before signing."
+            mandates = values; mandateNotice = ""
         }
     }
     public func reviewMandate(_ selected: MemberMandate) async {
@@ -239,7 +239,7 @@ public enum MemberLeavePhase: String, Sendable { case idle, checkingStatus, bloc
                 let (current, pending) = try await (effective, changes)
                 guard started == generation, session != nil else { return }
                 effectiveMandates = current; mandateChanges = pending; preparedMandateChange = nil
-                dialsNotice = current.isEmpty ? "No effective mandate is available." : "Effective protections are current."
+                dialsNotice = ""
             } catch { dialsNotice = dialsMessage(error); throw error }
         }
     }

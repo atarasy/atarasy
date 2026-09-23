@@ -84,3 +84,11 @@
 "Your sign-in expired. Sign in again." = "Your sign-in expired. Sign in again.";
 "Your signature was recorded. Signatures still needed: %lld" = "Your signature was recorded. Signatures still needed: %lld";
 "Your statement was signed and recorded. This is not a payment confirmation." = "Your statement was signed and recorded. This is not a payment confirmation.";
+"No saved sign-in was found for this account." = "No saved sign-in was found for this account.";
+"Signed out." = "Signed out.";
+"You were not signed in on this device." = "You were not signed in on this device.";
+"Some shops could not be reached. This list may be incomplete." = "Some shops could not be reached. This list may be incomplete.";
+"The new host may hold a copy, and your current host is still active. Check the new host before closing the current one." = "The new host may hold a copy, and your current host is still active. Check the new host before closing the current one.";
+"Nothing was closed. Your current host is still active." = "Nothing was closed. Your current host is still active.";
+"Your answer was recorded. The current status is below." = "Your answer was recorded. The current status is below.";
+"Request declined. Nothing was shared." = "Request declined. Nothing was shared.";

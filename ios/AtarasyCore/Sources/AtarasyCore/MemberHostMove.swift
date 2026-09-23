@@ -170,7 +170,7 @@ public enum MemberHostMovePhase: String, Sendable { case idle, signingIntoTarget
             coverage = "\(targetOffers.details.count) offers, \(targetPermissions.permissions.count) permissions and \(move.target.count) encrypted private records verified on \(targetEnvironment.origin.host ?? targetEnvironment.origin.absoluteString)."
             phase = .readyToRetire; notice = L("The new host has everything. Your current host stays active until you close it.")
         } catch is CancellationError { phase = imported ? .unresolved : .sourceRetained; notice = L("The move stopped. Your current host is unchanged.") }
-        catch { phase = imported ? .unresolved : .sourceRetained; notice = imported ? "The target may contain an imported copy, but source access remains active. Verify the target before retirement." : "Nothing was retired. Source access remains active." }
+        catch { phase = imported ? .unresolved : .sourceRetained; notice = imported ? L("The new host may hold a copy, and your current host is still active. Check the new host before closing the current one.") : L("Nothing was closed. Your current host is still active.") }
     }
     public func retireSource() async {
         guard phase == .readyToRetire, let exported, let attestation else { return }

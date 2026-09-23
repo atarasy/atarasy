@@ -94,7 +94,7 @@ extension MemberClient: MemberPermissionRequestService {}
         do {
             let result = try await service.decidePermissionRequest(review, grant: grant)
             guard current == generation, !Task.isCancelled, session.expiresAt > now() else { return }
-            self.review = result; notice = grant ? "Permission decision recorded. Check the current access status below." : "Request cancelled. No permission was granted."
+            self.review = result; notice = grant ? L("Your answer was recorded. The current status is below.") : L("Request declined. Nothing was shared.")
         } catch { if current == generation { notice = L("We could not confirm the result. Check this request again before doing anything else.") } }
     }
 }

@@ -78,7 +78,7 @@ extension MemberClient: MemberWithdrawalService {}
         } catch {
             guard current == generation else { return }
             if !dispatchStarted && (error as? NativePasskeyFailure == .cancelled || error is CancellationError) { notice = L("Signing cancelled. Nothing was sent.") }
-            else { review = nil; self.prepared = nil; if dispatchStarted { result = .unknown }; notice = L("We could not confirm the result. It may have arrived. Check the result before doing anything else.") }
+            else { review = nil; self.prepared = nil; if dispatchStarted { result = .unknown; self.handle = (try? store.load(id: handle.id)) ?? handle }; notice = L("We could not confirm the result. It may have arrived. Check the result before doing anything else.") }
             refreshSaved()
         }
     }
