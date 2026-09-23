@@ -53,6 +53,12 @@ targets:
           CODE_SIGNING_ALLOWED: YES
           CODE_SIGN_STYLE: Automatic
           TARGETED_DEVICE_FAMILY: '1'
+          # Gates the synthetic design-prototype inbox (App.swift) out of the
+          # submitted app; the Production root is the member account itself.
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: "ATARASY_RELEASE"
+          # The fixtures the prototype inbox reads do not ship in the
+          # Production bundle either.
+          EXCLUDED_SOURCE_FILE_NAMES: "fixtures.json"
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.atarasy.prototype
         GENERATE_INFOPLIST_FILE: YES

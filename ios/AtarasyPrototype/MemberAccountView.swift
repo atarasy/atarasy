@@ -40,6 +40,27 @@ private struct MemberWindowReader: UIViewRepresentable {
     func makeUIView(context: Context) -> Probe { let view = Probe(); view.reference = reference; return view }
     func updateUIView(_ uiView: Probe, context: Context) { uiView.reference = reference }
 }
+#if ATARASY_RELEASE
+/// The Production `WindowGroup` root. There is no sample inbox in this configuration
+/// (App.swift excludes it under `ATARASY_RELEASE`), so the member account is the app
+/// itself: a `NavigationStack`, not a sheet, with no "Done" that would dismiss into a
+/// screen that does not exist here.
+struct MemberProductionRootView: View {
+    @StateObject private var holder = MemberAccountHolder()
+    var body: some View {
+        NavigationStack {
+            if let environment = configuredMemberEnvironment() {
+                ConfiguredMemberAccount(environment: environment, holder: holder)
+            } else {
+                ContentUnavailableView("Member sign-in unavailable", systemImage: "person.crop.circle.badge.exclamationmark", description: Text("This app is not yet connected to a member host on this device."))
+                    .accessibilityIdentifier("memberUnconfigured")
+                    .navigationTitle("Member account")
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .atarasyAPNSToken)) { if let token = $0.object as? Data { holder.apnsToken = token } }
+    }
+}
+#endif
 struct MemberAccountSheet: View {
     @ObservedObject var holder: MemberAccountHolder
     @Environment(\.dismiss) private var dismiss
@@ -211,7 +232,11 @@ private struct MemberAccountForm: View {
         }
         .disabled(account.busy || action != nil)
         .interactiveDismissDisabled(account.busy || action != nil)
+        // In Production this form is the WindowGroup root, not a presented sheet: there is
+        // nothing to dismiss into, so no "Done" is offered there.
+        #if !ATARASY_RELEASE
         .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() }.disabled(account.busy || action != nil) } }
+        #endif
         .onReceive(clock) { date in account.clearExpired(now: Int64(date.timeIntervalSince1970 * 1000)) }
         .onDisappear { invitation = ""; household = ""; action?.cancel() }
         .sheet(isPresented: $showingLeaveSheet) { NavigationStack { MemberLeaveSheet(account: account) } }

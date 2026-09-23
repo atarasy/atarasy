@@ -34,6 +34,12 @@ xcodebuild -project ios/AtarasyPrototype.xcodeproj -scheme AtarasyProduction -co
 
 **The first archive was unsigned and its export had lost both capabilities.** The project turns signing off for simulator runs, the Production configuration inherited that, and exporting re-signed the app with only the base entitlements. `verify.py` refused it; the Production configuration now allows signing.
 
+## Production root, 2026-09-23
+
+The `Production` configuration now sets the `ATARASY_RELEASE` Swift compilation condition, and App.swift's `WindowGroup` picks its content on that condition: everywhere else it opens the synthetic design-prototype inbox (fixture merchants, a "Simulate incomplete list" toggle), and under `ATARASY_RELEASE` it opens `MemberProductionRootView` (MemberAccountView.swift) instead, a `NavigationStack` around the same authenticated member account the other configurations reach through the inbox's "Member account" sheet. The prototype inbox's types (`InboxView`, `OfferView`, the app-target `merchantName` helper) and its `../contracts/ios-first/fixtures.json` resource are excluded from the Production target under the same condition and `EXCLUDED_SOURCE_FILE_NAMES`, so App Review's install never contains or can reach the demo. This was needed because Production previously launched into that inbox, with the real member flow reachable only behind a "Member account" button, which reads as a demo app.
+
+`DemoFixtures`/`DemoOffer`/`DemoOperation` (the inbox's fixture and simulation types) live in the `AtarasyCore` Swift package alongside the package's own contract tests and are not excluded from Production at the library level; only the app-target code that instantiates and displays them is. They ship as unreachable library code, the same as any other unused symbol in a linked framework.
+
 ## Not done yet
 
 - `members.vox.delivery` must serve [apple-app-site-association](.well-known/apple-app-site-association) at `/.well-known/apple-app-site-association` over HTTPS, status 200, `application/json`, with no redirect and no authentication. Apple's CDN fetches it, not the device, within 24 hours of install. `domainAssociationVerified` stays `false` until it does.
