@@ -204,6 +204,12 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+/** Which message the locked screen shows beside `privateNodeState`, and whether a retry makes
+ * sense. Mirrors iOS `MemberAccount.privateNodeNotice` / `privateNodeKeyMismatch` (#41): a read
+ * that merely failed offers "Try again"; a key mismatch and recovery-required do not, since
+ * retrying a read cannot fix either. */
+private enum class PrivateNodeNotice { NONE, RECOVERY_REQUIRED, KEY_MISMATCH, TRANSIENT_FAILURE }
+
 @Composable
 fun AtarasyApp(
     onSignIn: suspend () -> MemberAuthenticationResult = { MemberAuthenticationResult.Failed(MemberFailure.Unavailable) },
@@ -261,15 +267,31 @@ fun AtarasyApp(
     var review by remember { mutableStateOf<MemberReview?>(null) }
     var reviewFailure by remember { mutableStateOf(false) }
     var refreshGeneration by remember { mutableStateOf(0L) }
+    var offerReloadGeneration by remember { mutableStateOf(0L) }
     var privateNodeState by remember { mutableStateOf(MemberPrivateNodeState.LOCKED) }
+    var privateNodeNotice by remember { mutableStateOf(PrivateNodeNotice.NONE) }
+    var privateNodeBusy by remember { mutableStateOf(false) }
     var refreshNotice by remember { mutableStateOf("") }
     var hintedRefresh by remember { mutableStateOf(false) }
     val accessSession = session?.takeIf { privateNodeState == MemberPrivateNodeState.READY }
+    val privateNodeScope = rememberCoroutineScope()
+    // The private node's own equivalent of iOS `MemberAccount.openPrivateNode`: distinguishes a
+    // key mismatch (#41, `MemberFailure.KeyMismatch`) from any other, retryable failure, and
+    // records which message the locked screen should show.
+    suspend fun openPrivateNodeAttempt(info: MemberSessionInfo): MemberPrivateNodeState = try {
+        val result = onOpenPrivateNode(info)
+        privateNodeNotice = if (result == MemberPrivateNodeState.RECOVERY_REQUIRED) PrivateNodeNotice.RECOVERY_REQUIRED else PrivateNodeNotice.NONE
+        result
+    } catch (failure: Exception) {
+        if (failure is CancellationException) throw failure
+        privateNodeNotice = if (failure is MemberFailure.KeyMismatch) PrivateNodeNotice.KEY_MISMATCH else PrivateNodeNotice.TRANSIENT_FAILURE
+        MemberPrivateNodeState.LOCKED
+    }
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_STOP) {
-                session = null; privateNodeState = MemberPrivateNodeState.LOCKED; offers = null; sourcesIncomplete = false; selectedOffer = null; detail = null; review = null
+                session = null; privateNodeState = MemberPrivateNodeState.LOCKED; privateNodeNotice = PrivateNodeNotice.NONE; offers = null; sourcesIncomplete = false; selectedOffer = null; detail = null; review = null
                 onSetHostMoveSession(null)
             }
         }
@@ -300,7 +322,10 @@ fun AtarasyApp(
             }
         }
     }
-    LaunchedEffect(selectedOffer, accessSession) {
+    // `offerReloadGeneration` is bumped by Done after a decision or statement is signed (#44):
+    // the offer itself stays selected, and its detail and review are read again so the now
+    // decided/settled state shows, without returning to the inbox list.
+    LaunchedEffect(selectedOffer, accessSession, offerReloadGeneration) {
         val selected = selectedOffer ?: run { detail = null; review = null; return@LaunchedEffect }
         if (accessSession == null) return@LaunchedEffect
         detail = null; detailFailure = false; review = null; reviewFailure = false
@@ -323,10 +348,29 @@ fun AtarasyApp(
                     Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineLarge, modifier = Modifier.semantics { heading() })
                     Text("Your household", style = MaterialTheme.typography.titleMedium)
                     if (session != null && privateNodeState != MemberPrivateNodeState.READY) {
+                        // The locked screen always keeps a way out (#41): a retry for a read that
+                        // merely failed, and Recovery / Sign out / Delete account / the account
+                        // reference, all reachable from the Account tab regardless of this state.
                         MemberCard(
                             if (privateNodeState == MemberPrivateNodeState.RECOVERY_REQUIRED) "Recovery required" else "Private records are locked",
-                            if (privateNodeState == MemberPrivateNodeState.RECOVERY_REQUIRED) "This installation has no key for the encrypted private records. Protected actions remain closed." else "Open the encrypted private records before using protected actions.",
-                        )
+                            when (privateNodeNotice) {
+                                PrivateNodeNotice.RECOVERY_REQUIRED -> stringResource(R.string.private_node_recovery_required_notice)
+                                PrivateNodeNotice.KEY_MISMATCH -> stringResource(R.string.private_node_key_mismatch_notice)
+                                else -> stringResource(R.string.private_node_generic_failure_notice)
+                            },
+                        ) {
+                            // A key mismatch or recovery-required cannot be fixed by trying the same
+                            // read again; only a transient failure (network, a dropped connection) can.
+                            if (privateNodeState == MemberPrivateNodeState.LOCKED && privateNodeNotice == PrivateNodeNotice.TRANSIENT_FAILURE) {
+                                TextButton(enabled = !privateNodeBusy, onClick = {
+                                    val current = session
+                                    if (current != null) {
+                                        privateNodeBusy = true
+                                        privateNodeScope.launch { privateNodeState = openPrivateNodeAttempt(current); privateNodeBusy = false }
+                                    }
+                                }) { Text(stringResource(R.string.private_node_try_again)) }
+                            }
+                        }
                     }
                     if (refreshNotice.isNotEmpty()) MemberCard("Updates", refreshNotice)
                     if (session != null) {
@@ -342,14 +386,17 @@ fun AtarasyApp(
                     }
                     Spacer(Modifier.height(8.dp))
                     if (selectedSection == "Limits") {
-                        MemberDialsCard(accessSession, onLoadEffectiveMandates, onLoadMandateChanges, onPrepareMandateChange, onPrepareMandateSignature, onApproveMandateChange, onCancelMandateChange)
+                        MemberDialsCard(
+                            accessSession, onLoadEffectiveMandates, onLoadMandateChanges, onPrepareMandateChange, onPrepareMandateSignature, onApproveMandateChange, onCancelMandateChange,
+                            onMandateSigned = { refreshGeneration++ },
+                        )
                     } else if (selectedSection == "Account") {
                         when {
                             session == null -> MemberAccountCard(
                                 onSignIn = onSignIn,
                                 onRegister = onRegister,
                                 onSignedIn = { info ->
-                                    session = info; privateNodeState = onOpenPrivateNode(info)
+                                    session = info; privateNodeState = openPrivateNodeAttempt(info)
                                     onSetHostMoveSession(info)
                                     refreshNotice = try {
                                         onRegisterRefresh(); "Private update notifications are enabled. Notifications contain no proposal details."
@@ -377,20 +424,24 @@ fun AtarasyApp(
                                     onRetire = {
                                         onRetireSourceHost().also {
                                             if (it.phase == MemberHostMovePhase.COMPLETED) {
-                                                session = null; privateNodeState = MemberPrivateNodeState.LOCKED; onSetHostMoveSession(null); accountSection = "Home"
+                                                session = null; privateNodeState = MemberPrivateNodeState.LOCKED; privateNodeNotice = PrivateNodeNotice.NONE; onSetHostMoveSession(null); accountSection = "Home"
                                             }
                                         }
                                     },
                                 )
                             }
                             accountSection == "Delete" -> MemberAccountSubScreen(title = stringResource(R.string.account_delete_account), onBack = { accountSection = "Home" }) {
+                                // Deletion never touches the private node except locking it on
+                                // success (`MemberLeaveFlow.deleteAccount`), so it stays reachable
+                                // while the node is locked or needs recovery (#41): the way out a
+                                // locked screen must keep.
                                 MemberLeaveCard(
-                                    accessSession,
+                                    session,
                                     onRefreshStatus = onRefreshLeaveStatus,
                                     onDeleteAccount = {
                                         onDeleteAccount().also {
                                             if (it.phase == MemberLeavePhase.DONE) {
-                                                session = null; privateNodeState = MemberPrivateNodeState.LOCKED; onSetHostMoveSession(null); accountSection = "Home"
+                                                session = null; privateNodeState = MemberPrivateNodeState.LOCKED; privateNodeNotice = PrivateNodeNotice.NONE; onSetHostMoveSession(null); accountSection = "Home"
                                             }
                                         }
                                     },
@@ -406,7 +457,7 @@ fun AtarasyApp(
                                 onOpenMoveHost = if (hostMoveAvailable) ({ accountSection = "MoveHost" }) else null,
                                 onOpenDelete = { accountSection = "Delete" },
                                 onSignOut = {
-                                    session = null; privateNodeState = MemberPrivateNodeState.LOCKED; onSetHostMoveSession(null); selectedSection = "Account"; accountSection = "Home"
+                                    session = null; privateNodeState = MemberPrivateNodeState.LOCKED; privateNodeNotice = PrivateNodeNotice.NONE; onSetHostMoveSession(null); selectedSection = "Account"; accountSection = "Home"
                                 },
                             )
                         }
@@ -424,7 +475,10 @@ fun AtarasyApp(
                             session = accessSession,
                             onPrepareDecision = onPrepareDecision,
                             onApproveDecision = onApproveDecision,
-                            onRecorded = { selectedOffer = null; offers = null; offerFailure = false; refreshGeneration++ },
+                            // Done (#44) stays on this offer and reloads its detail and review,
+                            // rather than returning to the inbox list (matches iOS's `reload` /
+                            // `loadReview`: it pops one screen back and rereads that offer).
+                            onDone = { offerReloadGeneration++ },
                             onPrepareStatement = onPrepareStatement,
                             onApproveStatement = onApproveStatement,
                             onSelect = { selectedOffer = it },
@@ -992,6 +1046,7 @@ private fun MemberDialsCard(
     onPrepareSignature: suspend (String) -> PreparedMemberMandateChange,
     onApprove: suspend (PreparedMemberMandateChange) -> MemberDialsActionResult,
     onCancelChange: suspend (String) -> MemberMandateChange,
+    onMandateSigned: () -> Unit = {},
 ) {
     var effective by remember(session) { mutableStateOf<List<Mandate>?>(null) }
     var changes by remember(session) { mutableStateOf<List<MemberMandateChange>?>(null) }
@@ -1137,7 +1192,10 @@ private fun MemberDialsCard(
                             Text(stringResource(R.string.mandate_who_must_sign_header) + ": " + fixed.change.requiredSigners.size)
                             Button(enabled = !busy, onClick = { busy = true; scope.launch {
                                 notice = when (val result = onApprove(fixed)) {
-                                    is MemberDialsActionResult.Recorded -> if (result.change.state == "effective") recordedText else "Signature recorded. Waiting for required signers."
+                                    // Signing an unsigned mandate version is what lets a presenter
+                                    // deliver, so the inbox is read again here rather than waiting
+                                    // for the member to pull (ios #44's onChange of the mandate list).
+                                    is MemberDialsActionResult.Recorded -> { onMandateSigned(); if (result.change.state == "effective") recordedText else "Signature recorded. Waiting for required signers." }
                                     MemberDialsActionResult.Cancelled -> cancelledText
                                     MemberDialsActionResult.NoCredential -> noCredentialText
                                     is MemberDialsActionResult.Failed -> "The submission result is unconfirmed. Refresh before signing a new version."
@@ -1315,7 +1373,7 @@ private fun MemberInboxCard(
     session: MemberSessionInfo?,
     onPrepareDecision: suspend (MemberSessionInfo, MemberOfferDetail, MemberApproval, Map<String, MemberDigitalChoice>) -> MemberDecisionReview,
     onApproveDecision: suspend (MemberDecisionReview) -> MemberDecisionActionResult,
-    onRecorded: () -> Unit,
+    onDone: () -> Unit,
     onPrepareStatement: suspend (MemberSessionInfo, MemberOfferDetail, MemberStatement, List<String>) -> MemberStatementReview,
     onApproveStatement: suspend (MemberStatementReview) -> MemberStatementActionResult,
     onSelect: (MemberOfferSummary?) -> Unit,
@@ -1327,7 +1385,7 @@ private fun MemberInboxCard(
         }
         failed -> MemberCard("Offers are unavailable", "Your private offer list could not be loaded. Sign in again to retry.")
         offers == null -> MemberCard(stringResource(R.string.inbox_loading), "")
-        selectedOffer != null -> MemberOfferDetailCard(detail, detailFailed, review, reviewFailed, session, onPrepareDecision, onApproveDecision, onPrepareStatement, onApproveStatement, onRecorded) { onSelect(null) }
+        selectedOffer != null -> MemberOfferDetailCard(detail, detailFailed, review, reviewFailed, session, onPrepareDecision, onApproveDecision, onPrepareStatement, onApproveStatement, onDone) { onSelect(null) }
         else -> Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
             // COPY-11: an empty section is never claimed as "nothing waiting" when every
             // source failed to answer at all (vault `80` §6.2 I).
@@ -1404,7 +1462,7 @@ private fun MemberOfferDetailCard(
     onApproveDecision: suspend (MemberDecisionReview) -> MemberDecisionActionResult,
     onPrepareStatement: suspend (MemberSessionInfo, MemberOfferDetail, MemberStatement, List<String>) -> MemberStatementReview,
     onApproveStatement: suspend (MemberStatementReview) -> MemberStatementActionResult,
-    onRecorded: () -> Unit,
+    onDone: () -> Unit,
     onBack: () -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
@@ -1413,8 +1471,8 @@ private fun MemberOfferDetailCard(
             when {
                 failed -> { Text("Offer unavailable", style = MaterialTheme.typography.titleLarge); Text("This offer could not be loaded.") }
                 detail == null -> { Text("Loading offer…", style = MaterialTheme.typography.titleLarge) }
-                detail.binding == "physical" -> MemberBoxDetail(detail, review, reviewFailed, session, onPrepareStatement, onApproveStatement, onRecorded)
-                else -> MemberProposalDetail(detail, review, reviewFailed, session, onPrepareDecision, onApproveDecision, onRecorded)
+                detail.binding == "physical" -> MemberBoxDetail(detail, review, reviewFailed, session, onPrepareStatement, onApproveStatement, onDone)
+                else -> MemberProposalDetail(detail, review, reviewFailed, session, onPrepareDecision, onApproveDecision, onDone)
             }
         }
     }
@@ -1429,7 +1487,7 @@ private fun MemberProposalDetail(
     session: MemberSessionInfo?,
     onPrepareDecision: suspend (MemberSessionInfo, MemberOfferDetail, MemberApproval, Map<String, MemberDigitalChoice>) -> MemberDecisionReview,
     onApproveDecision: suspend (MemberDecisionReview) -> MemberDecisionActionResult,
-    onRecorded: () -> Unit,
+    onDone: () -> Unit,
 ) {
     Text(MemberFormat.sellers(detail.candidates.map { it.merchant }), style = MaterialTheme.typography.titleLarge)
     detail.candidates.forEach { candidate ->
@@ -1456,7 +1514,7 @@ private fun MemberProposalDetail(
                 if (candidate.isExploration) Text(stringResource(R.string.label_new_to_you), style = MaterialTheme.typography.labelSmall, color = Color.Gray)
             }
             Text(review.value.carriage?.let { stringResource(R.string.label_delivery) + ": " + MemberFormat.money(it) } ?: stringResource(R.string.label_delivery_unknown))
-            if (session != null && detail.state == "presented") MemberDigitalDecisionControls(session, detail, review.value, onPrepareDecision, onApproveDecision, onRecorded)
+            if (session != null && detail.state == "presented") MemberDigitalDecisionControls(session, detail, review.value, onPrepareDecision, onApproveDecision, onDone)
         }
         else -> {}
     }
@@ -1476,7 +1534,7 @@ private fun MemberBoxDetail(
     session: MemberSessionInfo?,
     onPrepareStatement: suspend (MemberSessionInfo, MemberOfferDetail, MemberStatement, List<String>) -> MemberStatementReview,
     onApproveStatement: suspend (MemberStatementReview) -> MemberStatementActionResult,
-    onRecorded: () -> Unit,
+    onDone: () -> Unit,
 ) {
     Text(MemberFormat.sellers(detail.candidates.map { it.merchant }), style = MaterialTheme.typography.titleLarge)
     if (detail.state == "presented") {
@@ -1492,7 +1550,7 @@ private fun MemberBoxDetail(
         reviewFailed -> MemberBoxContents(detail)
         review == null -> Text("Loading…")
         review is MemberReview.Statement -> {
-            if (session != null) MemberBoxStatement(detail, review.value, session, onPrepareStatement, onApproveStatement, onRecorded)
+            if (session != null) MemberBoxStatement(detail, review.value, session, onPrepareStatement, onApproveStatement, onDone)
             else MemberBoxContents(detail)
         }
         review is MemberReview.Settlement -> MemberBoxSettled(review.value, review.corrections, review.disclosures)
@@ -1564,10 +1622,12 @@ private fun MemberBoxStatement(
     session: MemberSessionInfo,
     onPrepare: suspend (MemberSessionInfo, MemberOfferDetail, MemberStatement, List<String>) -> MemberStatementReview,
     onApprove: suspend (MemberStatementReview) -> MemberStatementActionResult,
-    onRecorded: () -> Unit,
+    onDone: () -> Unit,
 ) {
     var disputed by remember(detail.id) { mutableStateOf<Set<String>>(emptySet()) }
     var frozen by remember(detail.id) { mutableStateOf<MemberStatementReview?>(null) }
+    // What the passkey signed, kept for the result: `22` UX-07, ios #44.
+    var committed by remember(detail.id) { mutableStateOf(false) }
     var busy by remember(detail.id) { mutableStateOf(false) }
     var notice by remember(detail.id) { mutableStateOf("") }
     val scope = rememberCoroutineScope()
@@ -1627,6 +1687,12 @@ private fun MemberBoxStatement(
                 busy = false
             }
         }) { Text(if (busy) stringResource(R.string.label_preparing) else stringResource(R.string.box_review_and_sign)) }
+    } else if (committed) {
+        // `22` UX-07, ios #44: show what was signed, and a Done that returns to this offer and
+        // reloads it, rather than jumping back to the inbox with no confirmation of what happened.
+        MemberSignedStatement(frozen!!)
+        if (notice.isNotEmpty()) Text(notice)
+        Button(onClick = onDone) { Text(stringResource(R.string.action_done)) }
     } else {
         val value = frozen!!
         Text(stringResource(R.string.sign_this_statement_title), style = MaterialTheme.typography.titleMedium)
@@ -1648,7 +1714,7 @@ private fun MemberBoxStatement(
             busy = true; notice = ""; scope.launch {
                 when (val result = onApprove(value)) {
                     is MemberStatementActionResult.Outcome -> when (result.value) {
-                        is MemberStatementOutcome.Committed -> { notice = recordedText; onRecorded() }
+                        is MemberStatementOutcome.Committed -> { notice = recordedText; committed = true }
                         is MemberStatementOutcome.SettledElsewhere -> { frozen = null; notice = "This box was settled by another confirmation. Check your records." }
                         is MemberStatementOutcome.Pending -> { frozen = null; notice = checkRecordsText }
                         MemberStatementOutcome.Unresolved -> { frozen = null; notice = unresolvedText }
@@ -1662,6 +1728,19 @@ private fun MemberBoxStatement(
         }) { Text(if (busy) stringResource(R.string.label_signing) else stringResource(R.string.action_sign_with_passkey)) }
     }
     if (frozen == null && notice.isNotEmpty()) Text(notice)
+}
+
+/** What the member signed, under the result (`22` UX-07, ios #44): goods, delivery and any
+ * disputed amount, using the same frozen values the pre-signing preview showed. */
+@Composable
+private fun MemberSignedStatement(value: MemberStatementReview) {
+    MemberCard(stringResource(R.string.what_you_signed), "") {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            MemberAmountRow(stringResource(R.string.label_goods), MemberFormat.money(value.local.goodsCharged))
+            MemberAmountRow(stringResource(R.string.label_delivery), MemberFormat.money(value.local.carriage))
+            if (value.local.disputedGoods > 0) MemberAmountRow(stringResource(R.string.marked_not_right_not_charged), MemberFormat.money(value.local.disputedGoods))
+        }
+    }
 }
 
 @Composable
@@ -1866,10 +1945,12 @@ private fun MemberDigitalDecisionControls(
     approval: MemberApproval,
     onPrepare: suspend (MemberSessionInfo, MemberOfferDetail, MemberApproval, Map<String, MemberDigitalChoice>) -> MemberDecisionReview,
     onApprove: suspend (MemberDecisionReview) -> MemberDecisionActionResult,
-    onRecorded: () -> Unit,
+    onDone: () -> Unit,
 ) {
     var choices by remember(detail.id) { mutableStateOf<Map<String, MemberDigitalChoice>>(emptyMap()) }
     var frozen by remember(detail.id) { mutableStateOf<MemberDecisionReview?>(null) }
+    // What the passkey signed, kept for the result: `22` UX-07, ios #44.
+    var committed by remember(detail.id) { mutableStateOf(false) }
     var busy by remember(detail.id) { mutableStateOf(false) }
     var notice by remember(detail.id) { mutableStateOf("") }
     val scope = rememberCoroutineScope()
@@ -1905,6 +1986,13 @@ private fun MemberDigitalDecisionControls(
                 busy = false
             }
         }) { Text(if (busy) stringResource(R.string.label_preparing) else stringResource(R.string.action_review)) }
+    } else if (committed) {
+        // `22` UX-07, ios #44: the result said a decision was recorded but not what it was, and
+        // had no way forward but the back arrow. Show the kept lines and the total, and a Done
+        // that returns to this offer and reloads it, instead of jumping back to the inbox at once.
+        MemberSignedDecision(frozen!!.frozen)
+        if (notice.isNotEmpty()) Text(notice)
+        Button(onClick = onDone) { Text(stringResource(R.string.action_done)) }
     } else {
         val value = frozen!!
         Text(
@@ -1917,7 +2005,7 @@ private fun MemberDigitalDecisionControls(
             scope.launch {
                 when (val result = onApprove(value)) {
                     is MemberDecisionActionResult.Outcome -> when (result.value) {
-                        is MemberDecisionOutcome.Recorded -> { notice = recordedText; onRecorded() }
+                        is MemberDecisionOutcome.Recorded -> { notice = recordedText; committed = true }
                         is MemberDecisionOutcome.Pending -> { frozen = null; notice = checkRecordsText }
                         MemberDecisionOutcome.Unresolved -> { frozen = null; notice = unresolvedText }
                     }
@@ -1929,7 +2017,30 @@ private fun MemberDigitalDecisionControls(
             }
         }) { Text(if (busy) stringResource(R.string.label_signing) else stringResource(R.string.action_sign_with_passkey)) }
     }
-    if (notice.isNotEmpty()) Text(notice)
+    if (!committed && notice.isNotEmpty()) Text(notice)
+}
+
+/** What the member signed, under its result (`22` UX-07, ios #44): the goods kept, and the total.
+ * Ported from ios `MemberSignedDecision`. */
+@Composable
+private fun MemberSignedDecision(frozen: FrozenMemberDecision) {
+    val kept = frozen.decisions.filter { it.valence == "kept" }.map { it.candidate }.toSet()
+    val keptCandidates = frozen.approval.candidates.filter { it.id in kept }
+    MemberCard(stringResource(R.string.what_you_signed), "") {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            if (keptCandidates.isEmpty()) {
+                Text(stringResource(R.string.nothing_declined_every_item), color = Color.Gray)
+            } else {
+                keptCandidates.forEach { candidate ->
+                    Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                        Text(candidate.title)
+                        Text(if (candidate.givenBy == null) MemberFormat.money(MemberFormat.lineTotal(candidate.unitPrice, candidate.quantity)) else stringResource(R.string.box_free))
+                    }
+                }
+            }
+            MemberAmountRow(stringResource(R.string.label_total), MemberFormat.money(frozen.total), emphasised = true)
+        }
+    }
 }
 
 /** A row of label and amount, ported from iOS's `MemberAmountRow`. */

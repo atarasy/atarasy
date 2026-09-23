@@ -56,6 +56,11 @@
     <string name="notice_choices_not_sent">署名するまで、選んだ内容は送信されません。</string>
     <string name="notice_decision_recorded">決定を記録しました</string>
     <string name="notice_unresolved">結果を確認できませんでした。記録を確認し、もう一度送信しないでください。</string>
+    <!-- What was signed, under the result (ios #44, "22" UX-07) -->
+    <string name="what_you_signed">署名した内容</string>
+    <string name="nothing_declined_every_item">ありません。全て見送りました。</string>
+    <!-- No iOS Localizable.strings counterpart: iOS's Done button is a bare, unlocalized "Done" literal -->
+    <string name="action_done">完了</string>
 
     <!-- Box / statement -->
     <string name="box_used">使ったもの</string>
@@ -99,6 +104,12 @@
     <string name="account_shared">共有している情報</string>
     <string name="account_recovery">復旧</string>
     <string name="account_move_host">別のホストへ移す</string>
+
+    <!-- Private node locked screen (ios/AtarasyCore/Sources/AtarasyCore/Resources, #41) -->
+    <string name="private_node_recovery_required_notice">この端末では暗号化された記録を開けません。「復旧」から利用を再開してください。</string>
+    <string name="private_node_key_mismatch_notice">この端末の鍵が、暗号化された記録と合いません。別の端末で先に設定された可能性があります。「復旧」を使うか、このアカウントを削除して新しい招待で登録し直してください。</string>
+    <string name="private_node_generic_failure_notice">この端末で記録を開けませんでした。通信状態を確認して、もう一度お試しください。</string>
+    <string name="private_node_try_again">もう一度試す</string>
 
     <string name="signed_and_sent">署名して送信済み</string>
     <string name="prepared_not_signed">準備のみ（署名していません）</string>

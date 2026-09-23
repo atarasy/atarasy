@@ -62,6 +62,11 @@
     <string name="notice_choices_not_sent">Your choices are not sent until you sign.</string>
     <string name="notice_decision_recorded">Decision recorded</string>
     <string name="notice_unresolved">The result is unresolved. Check your records; do not submit again.</string>
+    <!-- What was signed, under the result (ios #44, "22" UX-07) -->
+    <string name="what_you_signed">What you signed</string>
+    <string name="nothing_declined_every_item">Nothing. You declined every item.</string>
+    <!-- No iOS Localizable.strings counterpart: iOS's Done button is a bare, unlocalized "Done" literal -->
+    <string name="action_done">Done</string>
 
     <!-- Box / statement -->
     <string name="box_used">Used</string>
@@ -105,6 +110,12 @@
     <string name="account_shared">What you have shared</string>
     <string name="account_recovery">Recovery</string>
     <string name="account_move_host">Move to another host</string>
+
+    <!-- Private node locked screen (ios/AtarasyCore/Sources/AtarasyCore/Resources, #41) -->
+    <string name="private_node_recovery_required_notice">This device cannot open your encrypted records. Use Recovery to restore access.</string>
+    <string name="private_node_key_mismatch_notice">This device\'s key does not match your encrypted records. They may have been set up on another device. Use Recovery, or delete this account and join again with a new invitation.</string>
+    <string name="private_node_generic_failure_notice">Your records could not be opened on this device. Check your connection and try again.</string>
+    <string name="private_node_try_again">Try again</string>
 
     <string name="signed_and_sent">Signed and sent</string>
     <string name="prepared_not_signed">Prepared, not signed</string>

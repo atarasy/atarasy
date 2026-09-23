@@ -82,9 +82,42 @@ class MemberPrivateNodeTest {
         val replacementDirectory = Files.createTempDirectory("atarasy-node-replacement-").toFile()
         val replacement = MemberPrivateNode(environment, MemberPrivateNodeRemote(replacementSessions), EncryptedFilePrivateNodeKeyVault(replacementDirectory, AesGcmEnvelopeCipher(key = { wrappingKey })))
         assertEquals(MemberPrivateNodeState.RECOVERY_REQUIRED, replacement.open(session))
-        assertThrows(MemberFailure.Storage::class.java) { runBlocking { replacement.installRecoveredKey(ByteArray(32) { 9 }, session) } }
+        // Installing a recovered key that does not decrypt the host's existing records is a key
+        // mismatch (§ verify), not a generic storage failure: the key itself was checked and found
+        // wrong, as opposed to the local vault failing to read or write.
+        assertThrows(MemberFailure.KeyMismatch::class.java) { runBlocking { replacement.installRecoveredKey(ByteArray(32) { 9 }, session) } }
         replacement.installRecoveredKey(recoveryKey, session); assertTrue(replacement.read(id).contentEquals(clear))
         firstDirectory.deleteRecursively(); replacementDirectory.deleteRecursively()
+        Unit
+    }
+
+    /** A device whose local key vault already holds a key for this scope (so no local key is
+     * ever missing, and `open` never enters `RECOVERY_REQUIRED`), but that key is not the one
+     * that sealed the host's existing records. Measured on iOS on 2026-09-23 with build 3 (#41):
+     * the host held a bootstrap record sealed by another device, this device held a key of its
+     * own for the same scope, and opening must be reported as a key mismatch rather than as a
+     * failed read, since the two need different ways out on the locked screen. */
+    private class ForeignPrivateNodeKeyVault(private val key: ByteArray = ByteArray(32) { 7 }) : MemberPrivateNodeKeyVault {
+        override fun load(scope: String): ByteArray = key
+        override fun create(scope: String): ByteArray = key
+        override fun install(scope: String, key: ByteArray) {}
+    }
+
+    @Test fun `a device whose key differs from the one that sealed the node gets a key mismatch not recovery required`() = runBlocking {
+        val session = MemberSessionInfo("private-session", "key:private-household", emptyList(), 9_000)
+        val transport = NodeTransport(environment, session)
+        fun sessions() = MemberSessionClient(environment, transport, DecisionVault(StoredMemberSession("amr1_" + "A".repeat(43), session))) { 1_000 }
+        val wrappingKey = SecretKeySpec(ByteArray(32) { it.toByte() }, "AES")
+        val firstDirectory = Files.createTempDirectory("atarasy-node-key-mismatch-").toFile()
+        val first = sessions(); first.restore(session.household)
+        val firstNode = MemberPrivateNode(environment, MemberPrivateNodeRemote(first), EncryptedFilePrivateNodeKeyVault(firstDirectory, AesGcmEnvelopeCipher(key = { wrappingKey })))
+        assertEquals(MemberPrivateNodeState.READY, firstNode.open(session))
+
+        val second = sessions(); second.restore(session.household)
+        val secondNode = MemberPrivateNode(environment, MemberPrivateNodeRemote(second), ForeignPrivateNodeKeyVault())
+        assertThrows(MemberFailure.KeyMismatch::class.java) { runBlocking { secondNode.open(session) } }
+        assertEquals(MemberPrivateNodeState.LOCKED, secondNode.state)
+        firstDirectory.deleteRecursively()
         Unit
     }
 }
